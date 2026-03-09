@@ -495,35 +495,6 @@
     margin-bottom: 8px;
     text-transform: uppercase;
   }
-
-  /* ── MOBILE ─────────────────────────────────────────── */
-  @media (max-width: 640px) {
-    .cover { padding: 44px 24px 36px; min-height: auto; }
-    .cover h1 { font-size: 48px; letter-spacing: -2px; }
-    .cover-sub { font-size: 14px; }
-    .cover-snowflake { width: 140px; height: 140px; right: 16px; opacity: 0.4; }
-    .cover-meta { flex-direction: column; gap: 6px; }
-    .page { padding: 0 20px 60px; }
-    .section { padding-top: 40px; margin-top: 40px; }
-    .section h2 { font-size: 22px; }
-    .stats-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-    .mock-table th, .mock-table td { font-size: 10px; padding: 6px 7px; }
-    .activity-name { width: 80px; font-size: 11px; }
-    .activity-pips .pip { width: 9px; height: 9px; }
-    .activity-label { display: none; }
-    .compare th, .compare td { font-size: 11px; padding: 7px 8px; }
-    .callout { padding: 18px 18px; }
-    .pullquote p { font-size: 16px; }
-    .voice-card { padding: 12px 14px; }
-    .checkin-row { flex-wrap: wrap; gap: 6px; }
-    .doc-footer { padding: 28px 24px; }
-  }
-  @media (max-width: 400px) {
-    .cover h1 { font-size: 38px; }
-    .stats-row { grid-template-columns: 1fr 1fr; }
-    .cover-snowflake { display: none; }
-  }
-
 </style>
 </head>
 <body>
@@ -929,16 +900,6 @@
 
 <div class="doc-footer">
   <strong>GROUNDWORK</strong>
-  March 2026 &middot; Confidential Draft<br><br>
+  March 2026 · Confidential Draft<br><br>
   To learn more or get in touch:<br>
-  Elizabeth McKenna &middot; <span id="contact-email" style="color:rgba(255,255,255,0.6);"></span>
-</div>
-<script>
-  // assembled to avoid scraper mangling
-  const u = 'elizabethmck';
-  const d = 'gmail.com';
-  const el = document.getElementById('contact-email');
-  el.innerHTML = '<a href="mailto:' + u + '@' + d + '" style="color:rgba(255,255,255,0.6);">' + u + '@' + d + '</a>';
-</script>
-</body>
-</html>
+  Elizabeth McKenna · <a href="/cdn-cgi/l/email-protection#73161f1a09121116071b1e101833141e121a1f5d101c1e" style="color:rgba(255,255,255,0.6);"><span 
