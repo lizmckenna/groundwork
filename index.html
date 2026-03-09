@@ -922,6 +922,108 @@
         }
 
         /* ===========================================
+           SLIDE 11: FEEDBACK FORM
+           =========================================== */
+        .feedback-slide {
+            padding: var(--slide-padding);
+        }
+
+        .feedback-form {
+            max-width: 560px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.75rem, 1.5vh, 1.25rem);
+        }
+
+        .feedback-form .form-row {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .feedback-form .form-row > * {
+            flex: 1;
+        }
+
+        .feedback-form label {
+            display: block;
+            font-size: var(--small-size);
+            color: var(--text-tertiary);
+            margin-bottom: 0.35rem;
+            font-weight: 500;
+        }
+
+        .feedback-form input,
+        .feedback-form textarea,
+        .feedback-form select {
+            width: 100%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.6rem 0.85rem;
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            font-size: var(--body-size);
+            transition: border-color 0.2s;
+        }
+
+        .feedback-form input:focus,
+        .feedback-form textarea:focus,
+        .feedback-form select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .feedback-form textarea {
+            resize: none;
+            height: clamp(60px, 10vh, 100px);
+        }
+
+        .feedback-form select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            padding-right: 2rem;
+        }
+
+        .feedback-form button {
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.65rem 2rem;
+            font-family: var(--font-body);
+            font-size: var(--body-size);
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            align-self: flex-start;
+        }
+
+        .feedback-form button:hover {
+            opacity: 0.85;
+        }
+
+        .feedback-form button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .feedback-form .form-success {
+            color: var(--success);
+            font-size: var(--body-size);
+            font-weight: 500;
+        }
+
+        @media (max-width: 600px) {
+            .feedback-form .form-row {
+                flex-direction: column;
+                gap: clamp(0.75rem, 1.5vh, 1.25rem);
+            }
+        }
+
+        /* ===========================================
            NAVIGATION
            =========================================== */
         .nav-dots {
@@ -1005,6 +1107,7 @@
         <a href="#s-data" class="section-nav-link" data-section="s-data">Data</a>
         <a href="#s-compare" class="section-nav-link" data-section="s-compare">Comparison</a>
         <a href="#s-contact" class="section-nav-link" data-section="s-contact">Contact</a>
+        <a href="#s-feedback" class="section-nav-link" data-section="s-feedback">Feedback</a>
     </nav>
 
     <!-- ==========================================
@@ -1843,6 +1946,48 @@
         </div>
     </section>
 
+    <!-- ==========================================
+         SLIDE 11: FEEDBACK FORM
+         ========================================== -->
+    <section class="slide feedback-slide" id="s-feedback">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: clamp(1rem, 2vh, 1.5rem);">
+            <div style="text-align: center;">
+                <h2 style="font-size: var(--h2-size); font-weight: 600; letter-spacing: -0.02em;">Share Your Feedback</h2>
+                <p style="font-size: var(--body-size); color: var(--text-secondary); margin-top: 0.5rem;">Help shape Groundwork. Your input matters.</p>
+            </div>
+            <form class="feedback-form" id="feedbackForm" onsubmit="submitFeedback(event)">
+                <div class="form-row">
+                    <div>
+                        <label for="fb-name">Your name</label>
+                        <input type="text" id="fb-name" name="name" required placeholder="First and last">
+                    </div>
+                    <div>
+                        <label for="fb-email">Email</label>
+                        <input type="email" id="fb-email" name="email" required placeholder="you@example.com">
+                    </div>
+                </div>
+                <div>
+                    <label for="fb-feedback">Feedback, ideas, or questions</label>
+                    <textarea id="fb-feedback" name="feedback" required placeholder="What resonated? What's missing? What would you change?"></textarea>
+                </div>
+                <div>
+                    <label for="fb-interest">How would you like to be involved?</label>
+                    <select id="fb-interest" name="interest">
+                        <option value="">Select one (optional)</option>
+                        <option value="feedback">Just sharing feedback</option>
+                        <option value="advise">Would advise on design</option>
+                        <option value="pilot">Would pilot with my org</option>
+                        <option value="fund">Would help fund development</option>
+                        <option value="build">Would help build it</option>
+                        <option value="connect">Can connect you to people</option>
+                    </select>
+                </div>
+                <button type="submit" id="fb-submit">Send Feedback</button>
+                <div id="fb-status"></div>
+            </form>
+        </div>
+    </section>
+
     <script>
         /* ===========================================
            SLIDE CONTROLLER
@@ -1897,7 +2042,7 @@
                         String(this.slides.length).padStart(2, '0');
                 }
                 // Update section nav active state
-                const sectionIds = ['s-overview', 's-features', 's-data', 's-compare', 's-contact'];
+                const sectionIds = ['s-overview', 's-features', 's-data', 's-compare', 's-contact', 's-feedback'];
                 const sectionSlides = sectionIds.map(id => {
                     const el = document.getElementById(id);
                     return el ? Array.from(this.slides).indexOf(el) : -1;
@@ -2092,6 +2237,44 @@
 
         // Initialize
         new SlidePresentation();
+
+        // Feedback form submission → Google Apps Script
+        // Replace SCRIPT_URL with your deployed Google Apps Script URL
+        const SCRIPT_URL = 'PASTE_YOUR_APPS_SCRIPT_URL_HERE';
+
+        async function submitFeedback(e) {
+            e.preventDefault();
+            const btn = document.getElementById('fb-submit');
+            const status = document.getElementById('fb-status');
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            status.textContent = '';
+
+            const data = {
+                name: document.getElementById('fb-name').value,
+                email: document.getElementById('fb-email').value,
+                feedback: document.getElementById('fb-feedback').value,
+                interest: document.getElementById('fb-interest').value,
+                timestamp: new Date().toISOString()
+            };
+
+            try {
+                await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                status.className = 'form-success';
+                status.textContent = 'Thank you! Your feedback has been recorded.';
+                document.getElementById('feedbackForm').reset();
+            } catch (err) {
+                status.style.color = 'var(--error)';
+                status.textContent = 'Something went wrong. Please email elizabethmck@gmail.com instead.';
+            }
+            btn.disabled = false;
+            btn.textContent = 'Send Feedback';
+        }
     </script>
 </body>
 </html>
