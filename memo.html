@@ -58,22 +58,31 @@
   }
   @media (max-width: 640px) {
     .cover {
-      padding: 48px 28px 36px;
+      padding: 40px 20px 32px;
       min-height: auto;
     }
     .cover-snowflake {
       position: static;
       transform: none;
-      width: 80px;
-      height: 80px;
-      margin-bottom: 16px;
+      width: 60px;
+      height: 60px;
+      margin-bottom: 12px;
     }
     .cover h1 {
-      font-size: 42px;
-      letter-spacing: -1.5px;
+      font-size: 36px;
+      letter-spacing: -1px;
+      word-break: break-word;
     }
     .cover-sub {
       font-size: 14px;
+      max-width: 100%;
+    }
+    .cover-meta {
+      flex-direction: column;
+      gap: 4px;
+    }
+    .toc {
+      padding: 20px;
     }
   }
   .cover-label {
@@ -514,8 +523,8 @@
   .toc-list {
     list-style: none;
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px 16px;
+    flex-direction: column;
+    gap: 5px;
   }
   .toc-list li a {
     font-size: 13px;
@@ -525,6 +534,27 @@
   }
   .toc-list li a:hover {
     text-decoration: underline;
+  }
+  .toc-sub {
+    list-style: none;
+    margin: 4px 0 0 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .toc-sub li a {
+    font-size: 12px;
+    font-weight: 400;
+    color: #5371ff;
+    text-decoration: none;
+  }
+  .toc-sub li a:hover {
+    text-decoration: underline;
+  }
+  .toc-sub li::before {
+    content: "–";
+    color: var(--border);
+    margin-right: 6px;
   }
 
   /* ── FOOTER ────────────────────────────────────────── */
@@ -568,14 +598,19 @@
   <ul class="toc-list">
     <li><a href="#problem">The Problem</a></li>
     <li><a href="#premise">The Premise</a></li>
-    <li><a href="#contacts">Contacts</a></li>
-    <li><a href="#map">Geospatial Map</a></li>
-    <li><a href="#leaderboards">Leaderboards</a></li>
-    <li><a href="#voice-notes">Voice Notes</a></li>
-    <li><a href="#commitments">Commitments</a></li>
-    <li><a href="#events">Events &amp; Check-in</a></li>
-    <li><a href="#reflection">Weekly Reflection</a></li>
+    <li><a href="#features">Core Features</a>
+      <ul class="toc-sub">
+        <li><a href="#contacts">Contacts &amp; Engagement</a></li>
+        <li><a href="#map">Geospatial Power Map</a></li>
+        <li><a href="#leaderboards">Leaderboards</a></li>
+        <li><a href="#voice-notes">Voice-First 1-on-1 Notes</a></li>
+        <li><a href="#commitments">Commitment Tracking</a></li>
+        <li><a href="#events">Events &amp; Check-in</a></li>
+        <li><a href="#reflection">Weekly Reflection</a></li>
+      </ul>
+    </li>
     <li><a href="#comparison">Why Groundwork</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#rollout">Rollout</a></li>
     <li><a href="#security">Security</a></li>
   </ul>
@@ -649,6 +684,7 @@
   </div>
 
   <!-- CONTACTS + ACTIVITY VIEW -->
+  <div id="features"></div>
   <div class="section" id="contacts">
     <div class="section-label">Core Feature</div>
     <h2>A contact database built for organizing data</h2>
@@ -1000,6 +1036,22 @@
         <tr><td>Cross-org learning</td><td class="ea">No</td><td class="gw"><span class="yes">Optional, opt-in data agreement</span></td></tr>
       </tbody>
     </table>
+  </div>
+
+  <!-- ROADMAP -->
+  <div class="section" id="roadmap">
+    <div class="section-label">Roadmap</div>
+    <h2>What we build next</h2>
+
+    <p>Future builds will include email integrations and payment processing for member dues and donations. These are capabilities that existing tools like EveryAction and Bonterra are optimized for today — and we will come for them. But our focus at launch is on the organizing practice layer: the features that are missing now and that no one else is building. Voice notes, commitment tracking, geospatial mapping, leaderboards, and the coaching loop. That is where the gap is widest and where the leverage is greatest.</p>
+
+    <div class="callout indigo">
+      <h4>Coming in future builds</h4>
+      <ul>
+        <li><strong>Email integrations.</strong> Bulk email, drip campaigns, and event reminders with delivery tracking — connected to the contact database and engagement history.</li>
+        <li><strong>Payment processing.</strong> Member dues collection, donation processing, and financial reporting — built into the platform so organizations don't need a separate tool.</li>
+      </ul>
+    </div>
   </div>
 
   <!-- ROLLOUT -->
