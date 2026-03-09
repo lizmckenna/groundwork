@@ -1007,12 +1007,27 @@
             accent-color: #5371ff;
         }
 
-        .feedback-form input:valid:not(:placeholder-shown) {
+        .feedback-form input:valid:not(:placeholder-shown),
+        .feedback-form textarea:valid:not(:placeholder-shown) {
             border-color: #5371ff;
+            outline: none;
+            box-shadow: 0 0 0 1px rgba(83, 113, 255, 0.2);
         }
 
-        .feedback-form input:invalid:not(:placeholder-shown):not(:focus) {
+        .feedback-form input:invalid:not(:placeholder-shown):not(:focus),
+        .feedback-form textarea:invalid:not(:placeholder-shown):not(:focus) {
             border-color: var(--error);
+            outline: none;
+        }
+
+        .feedback-form .other-input {
+            display: none;
+            margin-top: 0.35rem;
+            margin-left: 1.5rem;
+        }
+
+        .feedback-form .other-input.visible {
+            display: block;
         }
 
         .feedback-form button {
@@ -2013,7 +2028,9 @@
                         <label class="checkbox-label"><input type="checkbox" name="interest" value="fund"> Would help fund development</label>
                         <label class="checkbox-label"><input type="checkbox" name="interest" value="build"> Would help build it</label>
                         <label class="checkbox-label"><input type="checkbox" name="interest" value="connect"> Can connect you to people</label>
+                        <label class="checkbox-label"><input type="checkbox" name="interest" value="other" id="cb-other" onchange="document.getElementById('other-text').classList.toggle('visible', this.checked); if(this.checked) document.getElementById('other-text').focus();"> Other</label>
                     </div>
+                    <input type="text" id="other-text" class="other-input" placeholder="Tell us more...">
                 </div>
                 <button type="submit" id="fb-submit" style="align-self: center;">Send Feedback</button>
                 <div id="fb-status"></div>
@@ -2291,7 +2308,7 @@
                 name: document.getElementById('fb-name').value,
                 email: document.getElementById('fb-email').value,
                 feedback: document.getElementById('fb-feedback').value,
-                interest: Array.from(document.querySelectorAll('input[name="interest"]:checked')).map(cb => cb.value).join(', '),
+                interest: Array.from(document.querySelectorAll('input[name="interest"]:checked')).map(cb => cb.value === 'other' ? 'Other: ' + (document.getElementById('other-text').value || '(not specified)') : cb.value).join(', '),
                 timestamp: new Date().toISOString()
             };
 
