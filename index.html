@@ -1293,9 +1293,8 @@
                 </div>
 
                 <!-- Center: arrow/gap indicator -->
-                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 0 clamp(0.25rem, 0.5vw, 0.5rem);">
+                <div style="display: flex; align-items: center; justify-content: center; padding: 0 clamp(0.25rem, 0.5vw, 0.5rem);">
                     <div style="font-size: clamp(1.5rem, 3vw, 2.5rem); color: var(--text-tertiary);">&#8594;</div>
-                    <div style="font-size: var(--small-size); color: var(--error); font-weight: 700; letter-spacing: 0.05em;">GAP</div>
                 </div>
 
                 <!-- Right: what stayed FLAT -->
@@ -2044,9 +2043,9 @@
                     <label>How would you like to be involved? <span style="color: var(--text-tertiary); font-weight: 400;">(check all that apply)</span></label>
                     <div class="checkbox-grid">
                         <label class="checkbox-label"><input type="checkbox" name="interest" value="feedback"> Just sharing feedback</label>
-                        <label class="checkbox-label"><input type="checkbox" name="interest" value="advise"> Want to advise on design</label>
+                        <label class="checkbox-label"><input type="checkbox" name="interest" value="advise"> I want to advise on design</label>
                         <label class="checkbox-label"><input type="checkbox" name="interest" value="pilot"> I want to pilot with my org</label>
-                        <label class="checkbox-label"><input type="checkbox" name="interest" value="fund"> Want to help fund it</label>
+                        <label class="checkbox-label"><input type="checkbox" name="interest" value="fund"> I want to help fund it</label>
                         <label class="checkbox-label"><input type="checkbox" name="interest" value="build"> I want to help build it</label>
                         <label class="checkbox-label"><input type="checkbox" name="interest" value="connect"> I can connect you to people</label>
                         <label class="checkbox-label"><input type="checkbox" name="interest" value="other" id="cb-other" onchange="document.getElementById('other-text').classList.toggle('visible', this.checked); if(this.checked) document.getElementById('other-text').focus();"> Other</label>
