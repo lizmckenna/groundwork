@@ -971,7 +971,7 @@
         .feedback-form textarea:focus,
         .feedback-form select:focus {
             outline: none;
-            border-color: var(--accent);
+            border-color: #5371ff;
         }
 
         .feedback-form textarea {
@@ -987,8 +987,36 @@
             padding-right: 2rem;
         }
 
+        .feedback-form .checkbox-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.4rem 1.5rem;
+        }
+
+        .feedback-form .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: var(--body-size);
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .feedback-form .checkbox-label input[type="checkbox"] {
+            width: auto;
+            accent-color: #5371ff;
+        }
+
+        .feedback-form input:valid:not(:placeholder-shown) {
+            border-color: #5371ff;
+        }
+
+        .feedback-form input:invalid:not(:placeholder-shown):not(:focus) {
+            border-color: var(--error);
+        }
+
         .feedback-form button {
-            background: var(--accent);
+            background: #5371ff;
             color: white;
             border: none;
             border-radius: 8px;
@@ -1020,6 +1048,9 @@
             .feedback-form .form-row {
                 flex-direction: column;
                 gap: clamp(0.75rem, 1.5vh, 1.25rem);
+            }
+            .feedback-form .checkbox-grid {
+                grid-template-columns: 1fr;
             }
         }
 
@@ -1953,7 +1984,7 @@
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: clamp(1rem, 2vh, 1.5rem);">
             <div style="text-align: center;">
                 <h2 style="font-size: var(--h2-size); font-weight: 600; letter-spacing: -0.02em;">Share Your Feedback</h2>
-                <p style="font-size: var(--body-size); color: var(--text-secondary); margin-top: 0.5rem;">Help shape Groundwork. Your input matters.</p>
+                <p style="font-size: var(--body-size); color: var(--text-secondary); margin-top: 0.5rem;">Help shape Groundwork. What do you think?</p>
             </div>
             <form class="feedback-form" id="feedbackForm" onsubmit="submitFeedback(event)">
                 <div class="form-row">
@@ -1971,18 +2002,17 @@
                     <textarea id="fb-feedback" name="feedback" required placeholder="What resonated? What's missing? What would you change?"></textarea>
                 </div>
                 <div>
-                    <label for="fb-interest">How would you like to be involved?</label>
-                    <select id="fb-interest" name="interest">
-                        <option value="">Select one (optional)</option>
-                        <option value="feedback">Just sharing feedback</option>
-                        <option value="advise">Would advise on design</option>
-                        <option value="pilot">Would pilot with my org</option>
-                        <option value="fund">Would help fund development</option>
-                        <option value="build">Would help build it</option>
-                        <option value="connect">Can connect you to people</option>
-                    </select>
+                    <label>How would you like to be involved? <span style="color: var(--text-tertiary); font-weight: 400;">(check all that apply)</span></label>
+                    <div class="checkbox-grid">
+                        <label class="checkbox-label"><input type="checkbox" name="interest" value="feedback"> Just sharing feedback</label>
+                        <label class="checkbox-label"><input type="checkbox" name="interest" value="advise"> Would advise on design</label>
+                        <label class="checkbox-label"><input type="checkbox" name="interest" value="pilot"> Would pilot with my org</label>
+                        <label class="checkbox-label"><input type="checkbox" name="interest" value="fund"> Would help fund development</label>
+                        <label class="checkbox-label"><input type="checkbox" name="interest" value="build"> Would help build it</label>
+                        <label class="checkbox-label"><input type="checkbox" name="interest" value="connect"> Can connect you to people</label>
+                    </div>
                 </div>
-                <button type="submit" id="fb-submit">Send Feedback</button>
+                <button type="submit" id="fb-submit" style="align-self: center;">Send Feedback</button>
                 <div id="fb-status"></div>
             </form>
         </div>
@@ -2061,6 +2091,10 @@
 
             setupKeyboard() {
                 document.addEventListener('keydown', (e) => {
+                    // Don't capture keys when user is typing in form fields
+                    const tag = e.target.tagName;
+                    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
                     if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
                         e.preventDefault();
                         this.goToSlide(this.currentIndex + 1);
@@ -2254,7 +2288,7 @@
                 name: document.getElementById('fb-name').value,
                 email: document.getElementById('fb-email').value,
                 feedback: document.getElementById('fb-feedback').value,
-                interest: document.getElementById('fb-interest').value,
+                interest: Array.from(document.querySelectorAll('input[name="interest"]:checked')).map(cb => cb.value).join(', '),
                 timestamp: new Date().toISOString()
             };
 
