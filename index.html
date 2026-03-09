@@ -638,30 +638,31 @@
         }
 
         .network-node.cascade {
-            background: var(--accent);
-            box-shadow: 0 0 15px var(--accent-glow);
+            background: #a78bfa;
+            box-shadow: 0 0 12px rgba(167,139,250,0.3);
         }
 
         .network-node.terminal {
-            background: #c4b5fd;
+            background: #2b97c1;
         }
 
         .network-node.participant {
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            color: var(--text-tertiary);
+            background: #F5A623;
+            border: none;
+            color: #0a0a0b;
         }
 
         .network-edge {
             position: absolute;
-            height: 1px;
-            background: var(--border);
+            height: 2px;
+            background: rgba(255,255,255,0.15);
             transform-origin: left center;
         }
 
         .network-edge.cascade {
-            background: var(--accent);
-            opacity: 0.4;
+            background: #a78bfa;
+            opacity: 0.7;
+            height: 2px;
         }
 
         /* ===========================================
@@ -1044,16 +1045,108 @@
     </section>
 
     <!-- ==========================================
-         SLIDE 2: THE PROBLEM (Expanded)
+         SLIDE 2: THE PARTICIPATION-POWER GAP
          ========================================== -->
-    <section class="slide problem-slide problem-expanded">
-        <div class="problem-content" style="max-width: 900px; text-align: left;">
-            <h2 style="font-size: var(--h2-size); font-weight: 600; margin-bottom: 2rem; text-align: center;">The Participation-Power Gap</h2>
-            <div style="display: grid; gap: 1.25rem; font-size: var(--body-size); color: var(--text-secondary); line-height: 1.7;">
-                <p>Organizing groups in the U.S. have grown more numerous, received more philanthropic investment, and made real gains for their constituents over the past twenty years. The infrastructure around them has grown too: the conferences, the consultants, the technology vendors.</p>
-                <p>And yet the balance of power in American political life has not shifted commensurately. More organizations, more funding, more activity—yet a participation-power gap that remains stubbornly wide.</p>
-                <p style="color: var(--text-primary);">The technology is part of that story. Groups have spent those twenty years paying increasing fees to vendors whose incentive is <em>contract growth</em>, not <em>movement growth</em>. The dominant tools—now owned by private equity firms—have gotten more expensive, more oriented toward large institutional clients, and no better at the thing that actually matters: helping organizers capture their data and learn from it.</p>
-                <p>The data hasn't gotten better. The practice hasn't gotten more sophisticated. Yet the investors have done fine.</p>
+    <section class="slide" style="padding: var(--slide-padding);">
+        <div style="max-width: 960px; width: 100%; text-align: center;">
+            <h2 class="reveal" style="font-size: var(--h2-size); font-weight: 600; margin-bottom: clamp(1.5rem, 3vh, 2.5rem);">The Participation-Power Gap</h2>
+
+            <!-- Arrow diagram: things that grew vs what didn't -->
+            <div class="reveal" style="display: flex; align-items: stretch; gap: clamp(1rem, 2vw, 2rem); margin-bottom: clamp(1.5rem, 3vh, 2.5rem); justify-content: center; flex-wrap: wrap;">
+
+                <!-- Left: what went UP -->
+                <div style="flex: 1; min-width: 250px; max-width: 400px; background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.15); border-radius: 12px; padding: clamp(1rem, 2vh, 1.5rem); text-align: left;">
+                    <div style="font-size: var(--small-size); text-transform: uppercase; letter-spacing: 0.15em; color: #22c55e; font-weight: 700; margin-bottom: clamp(0.5rem, 1vh, 1rem);">
+                        <span style="margin-right: 6px;">&#9650;</span> 20 Years of Growth
+                    </div>
+                    <div style="display: grid; gap: clamp(0.4rem, 0.8vh, 0.75rem);">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: var(--small-size); color: var(--text-secondary); white-space: nowrap; min-width: 110px;">More orgs</span>
+                            <div style="flex: 1; height: 8px; background: linear-gradient(90deg, rgba(34,197,94,0.3), #22c55e); border-radius: 4px;"></div>
+                            <span style="color: #22c55e; font-size: 12px;">&#9650;</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: var(--small-size); color: var(--text-secondary); white-space: nowrap; min-width: 110px;">More funding</span>
+                            <div style="flex: 1; height: 8px; background: linear-gradient(90deg, rgba(34,197,94,0.3), #22c55e); border-radius: 4px;"></div>
+                            <span style="color: #22c55e; font-size: 12px;">&#9650;</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: var(--small-size); color: var(--text-secondary); white-space: nowrap; min-width: 110px;">More vendors</span>
+                            <div style="flex: 1; height: 8px; background: linear-gradient(90deg, rgba(34,197,94,0.3), #22c55e); border-radius: 4px;"></div>
+                            <span style="color: #22c55e; font-size: 12px;">&#9650;</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: var(--small-size); color: var(--text-secondary); white-space: nowrap; min-width: 110px;">More activity</span>
+                            <div style="flex: 1; height: 8px; background: linear-gradient(90deg, rgba(34,197,94,0.3), #22c55e); border-radius: 4px;"></div>
+                            <span style="color: #22c55e; font-size: 12px;">&#9650;</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: var(--small-size); color: var(--text-secondary); white-space: nowrap; min-width: 110px;">More protests</span>
+                            <div style="flex: 1; height: 8px; background: linear-gradient(90deg, rgba(34,197,94,0.3), #22c55e); border-radius: 4px;"></div>
+                            <span style="color: #22c55e; font-size: 12px;">&#9650;</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: var(--small-size); color: var(--text-secondary); white-space: nowrap; min-width: 110px;">More turnout</span>
+                            <div style="flex: 1; height: 8px; background: linear-gradient(90deg, rgba(34,197,94,0.3), #22c55e); border-radius: 4px;"></div>
+                            <span style="color: #22c55e; font-size: 12px;">&#9650;</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Center: arrow/gap indicator -->
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 0 clamp(0.25rem, 0.5vw, 0.5rem);">
+                    <div style="font-size: clamp(1.5rem, 3vw, 2.5rem); color: var(--text-tertiary);">&#8594;</div>
+                    <div style="font-size: var(--small-size); color: var(--error); font-weight: 700; letter-spacing: 0.05em;">GAP</div>
+                </div>
+
+                <!-- Right: what stayed FLAT -->
+                <div style="flex: 1; min-width: 250px; max-width: 400px; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.15); border-radius: 12px; padding: clamp(1rem, 2vh, 1.5rem); text-align: left;">
+                    <div style="font-size: var(--small-size); text-transform: uppercase; letter-spacing: 0.15em; color: var(--error); font-weight: 700; margin-bottom: clamp(0.5rem, 1vh, 1rem);">
+                        <span style="margin-right: 6px;">&#9654;</span> Power: Unchanged
+                    </div>
+                    <div style="display: grid; gap: clamp(0.4rem, 0.8vh, 0.75rem);">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: var(--small-size); color: var(--text-secondary); white-space: nowrap; min-width: 140px;">Civic power</span>
+                            <div style="flex: 1; height: 8px; background: var(--bg-elevated); border-radius: 4px; position: relative; overflow: hidden;"><div style="width: 100%; height: 100%; background: repeating-linear-gradient(90deg, rgba(245,158,11,0.3) 0px, rgba(245,158,11,0.3) 2px, transparent 2px, transparent 6px);"></div></div>
+                            <span style="color: var(--warning); font-size: 10px; font-weight: 700;">UNEVEN</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: var(--small-size); color: var(--text-secondary); white-space: nowrap; min-width: 140px;">Data quality</span>
+                            <div style="flex: 1; height: 8px; background: var(--bg-elevated); border-radius: 4px; position: relative; overflow: hidden;"><div style="width: 100%; height: 100%; background: repeating-linear-gradient(90deg, rgba(239,68,68,0.2) 0px, rgba(239,68,68,0.2) 2px, transparent 2px, transparent 6px);"></div></div>
+                            <span style="color: var(--error); font-size: 10px; font-weight: 700;">FLAT</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: var(--small-size); color: var(--text-secondary); white-space: nowrap; min-width: 140px;">Organizing practice</span>
+                            <div style="flex: 1; height: 8px; background: var(--bg-elevated); border-radius: 4px; position: relative; overflow: hidden;"><div style="width: 100%; height: 100%; background: repeating-linear-gradient(90deg, rgba(239,68,68,0.2) 0px, rgba(239,68,68,0.2) 2px, transparent 2px, transparent 6px);"></div></div>
+                            <span style="color: var(--error); font-size: 10px; font-weight: 700;">FLAT</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: var(--small-size); color: var(--text-secondary); white-space: nowrap; min-width: 140px;">Democratic trust</span>
+                            <div style="flex: 1; height: 8px; background: var(--bg-elevated); border-radius: 4px; position: relative; overflow: hidden;"><div style="width: 100%; height: 100%; background: repeating-linear-gradient(90deg, rgba(239,68,68,0.2) 0px, rgba(239,68,68,0.2) 2px, transparent 2px, transparent 6px);"></div></div>
+                            <span style="color: var(--error); font-size: 10px; font-weight: 700;">DOWN</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: var(--small-size); color: var(--text-secondary); white-space: nowrap; min-width: 140px;">Wealth inequality</span>
+                            <div style="flex: 1; height: 8px; background: var(--bg-elevated); border-radius: 4px; position: relative; overflow: hidden;"><div style="width: 100%; height: 100%; background: repeating-linear-gradient(90deg, rgba(239,68,68,0.2) 0px, rgba(239,68,68,0.2) 2px, transparent 2px, transparent 6px);"></div></div>
+                            <span style="color: var(--error); font-size: 10px; font-weight: 700;">WORSE</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: var(--small-size); color: var(--text-secondary); white-space: nowrap; min-width: 140px;">Policy responsiveness</span>
+                            <div style="flex: 1; height: 8px; background: var(--bg-elevated); border-radius: 4px; position: relative; overflow: hidden;"><div style="width: 100%; height: 100%; background: repeating-linear-gradient(90deg, rgba(239,68,68,0.2) 0px, rgba(239,68,68,0.2) 2px, transparent 2px, transparent 6px);"></div></div>
+                            <span style="color: var(--error); font-size: 10px; font-weight: 700;">FLAT</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Punchline -->
+            <div class="reveal" style="max-width: 760px; margin: 0 auto; display: grid; gap: clamp(0.5rem, 1vh, 0.75rem);">
+                <p style="font-size: var(--body-size); color: var(--text-primary); line-height: 1.6;">
+                    The tools are part of that story. Twenty years of rising vendor fees, private equity acquisitions, and platforms built for <strong>contract growth</strong>, not <strong>movement growth</strong>.
+                </p>
+                <p style="font-size: var(--small-size); color: var(--text-tertiary); line-height: 1.5;">
+                    The data hasn't gotten better. The practice hasn't gotten more sophisticated. The investors have done fine.
+                </p>
             </div>
         </div>
     </section>
@@ -1063,8 +1156,8 @@
          ========================================== -->
     <section class="slide problem-slide">
         <div class="section-header">
-            <h2>A Structural Problem</h2>
-            <p>When your tools are owned by people whose returns depend on your dependency, you get tools designed to retain you—not to develop your practice.</p>
+            <h2>The Political Economy of Organizing Infrastructure</h2>
+            <p>When your tools are owned by people whose returns depend on your dependency, you get tools designed to retain you, not to develop your practice.</p>
         </div>
         <div class="cards">
             <div class="card">
@@ -1126,8 +1219,9 @@
                 <div class="icon-wrapper">
                     <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                 </div>
-                <h3>Research Integration</h3>
-                <p>Direct connection to POLIS/COMP. <span class="highlight">No export loops</span> or vendor permission.</p>
+                <h3>Academic Research Integration</h3>
+                <p>Access to cross-org learning: what's working, where, and why. Built to connect to <a href="https://doi.org/10.7910/DVN/SCLKL7" style="color: var(--accent); text-decoration: underline;" target="_blank">POLIS</a> (Participation, Organizing, and Local Influence Study; McKenna, 2026, Harvard Dataverse, <a href="https://doi.org/10.7910/DVN/SCLKL7" style="color: var(--accent); text-decoration: underline;" target="_blank">doi:10.7910/DVN/SCLKL7</a>).</p>
+                <p style="margin-top: 0.75rem; font-size: var(--small-size); color: var(--text-tertiary);">DUA opt-in (data de-identified)</p>
             </div>
         </div>
     </section>
@@ -1148,7 +1242,7 @@
                         <th style="padding: 0.75rem 1rem; text-align: left; color: var(--text-tertiary); font-weight: 500;">Name</th>
                         <th style="padding: 0.75rem 1rem; text-align: left; color: var(--text-tertiary); font-weight: 500;">Team</th>
                         <th style="padding: 0.75rem 1rem; text-align: left; color: var(--text-tertiary); font-weight: 500;">Role</th>
-                        <th style="padding: 0.75rem 1rem; text-align: center; color: var(--text-tertiary); font-weight: 500;">Engagement</th>
+                        <th style="padding: 0.75rem 1rem; text-align: center; color: var(--text-tertiary); font-weight: 500;">Activity (12 wks)</th>
                         <th style="padding: 0.75rem 1rem; text-align: left; color: var(--text-tertiary); font-weight: 500;">Next Commitment</th>
                         <th style="padding: 0.75rem 1rem; text-align: center; color: var(--text-tertiary); font-weight: 500;">Status</th>
                     </tr>
@@ -1158,15 +1252,15 @@
                         <td style="padding: 0.75rem 1rem; color: var(--text-primary);">Maria Santos</td>
                         <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">Northside</td>
                         <td style="padding: 0.75rem 1rem;"><span style="background: rgba(83,113,255,0.15); color: var(--accent); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">Team Lead</span></td>
-                        <td style="padding: 0.75rem 1rem; text-align: center;"><div style="display: flex; gap: 2px; justify-content: center;"><span style="width: 8px; height: 16px; background: var(--accent); border-radius: 2px;"></span><span style="width: 8px; height: 14px; background: var(--accent); border-radius: 2px;"></span><span style="width: 8px; height: 12px; background: var(--accent); border-radius: 2px;"></span><span style="width: 8px; height: 16px; background: var(--accent); border-radius: 2px;"></span><span style="width: 8px; height: 10px; background: rgba(83,113,255,0.3); border-radius: 2px;"></span></div></td>
+                        <td style="padding: 0.75rem 1rem; text-align: center;"><div style="display: grid; grid-template-columns: repeat(12, 7px); gap: 2px; justify-content: center;"><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:0.9"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:1"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:0.6"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:1"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:0.8"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:1"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:0.4"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:0.9"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:1"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:0.7"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:1"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:0.5"></span></div></td>
                         <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">Bring 5 to training (Mar 15)</td>
                         <td style="padding: 0.75rem 1rem; text-align: center;"><span style="background: rgba(245,158,11,0.15); color: var(--warning); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">Pending</span></td>
                     </tr>
                     <tr style="border-bottom: 1px solid var(--border);">
                         <td style="padding: 0.75rem 1rem; color: var(--text-primary);">James Chen</td>
                         <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">Northside</td>
-                        <td style="padding: 0.75rem 1rem;"><span style="background: rgba(124,58,237,0.15); color: #a78bfa; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">Canvasser</span></td>
-                        <td style="padding: 0.75rem 1rem; text-align: center;"><div style="display: flex; gap: 2px; justify-content: center;"><span style="width: 8px; height: 10px; background: #7c3aed; border-radius: 2px;"></span><span style="width: 8px; height: 6px; background: #7c3aed; border-radius: 2px;"></span><span style="width: 8px; height: 4px; background: rgba(124,58,237,0.3); border-radius: 2px;"></span><span style="width: 8px; height: 4px; background: rgba(124,58,237,0.3); border-radius: 2px;"></span><span style="width: 8px; height: 4px; background: rgba(124,58,237,0.3); border-radius: 2px;"></span></div></td>
+                        <td style="padding: 0.75rem 1rem;"><span style="background: rgba(245,166,35,0.15); color: #F5A623; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">Canvasser</span></td>
+                        <td style="padding: 0.75rem 1rem; text-align: center;"><div style="display: grid; grid-template-columns: repeat(12, 7px); gap: 2px; justify-content: center;"><span style="width:7px;height:7px;background:#7c3aed;border-radius:1px;opacity:0.8"></span><span style="width:7px;height:7px;background:#7c3aed;border-radius:1px;opacity:0.6"></span><span style="width:7px;height:7px;background:#7c3aed;border-radius:1px;opacity:0.5"></span><span style="width:7px;height:7px;background:#7c3aed;border-radius:1px;opacity:0.3"></span><span style="width:7px;height:7px;background:#7c3aed;border-radius:1px;opacity:0.15"></span><span style="width:7px;height:7px;background:#7c3aed;border-radius:1px;opacity:0.15"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:#7c3aed;border-radius:1px;opacity:0.15"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span></div></td>
                         <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">Follow up with Rosa (Mar 10)</td>
                         <td style="padding: 0.75rem 1rem; text-align: center;"><span style="background: rgba(239,68,68,0.15); color: var(--error); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">Overdue</span></td>
                     </tr>
@@ -1174,23 +1268,23 @@
                         <td style="padding: 0.75rem 1rem; color: var(--text-primary);">Angela Torres</td>
                         <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">Westside</td>
                         <td style="padding: 0.75rem 1rem;"><span style="background: rgba(83,113,255,0.15); color: var(--accent); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">Team Lead</span></td>
-                        <td style="padding: 0.75rem 1rem; text-align: center;"><div style="display: flex; gap: 2px; justify-content: center;"><span style="width: 8px; height: 16px; background: var(--accent); border-radius: 2px;"></span><span style="width: 8px; height: 16px; background: var(--accent); border-radius: 2px;"></span><span style="width: 8px; height: 14px; background: var(--accent); border-radius: 2px;"></span><span style="width: 8px; height: 12px; background: var(--accent); border-radius: 2px;"></span><span style="width: 8px; height: 16px; background: var(--accent); border-radius: 2px;"></span></div></td>
+                        <td style="padding: 0.75rem 1rem; text-align: center;"><div style="display: grid; grid-template-columns: repeat(12, 7px); gap: 2px; justify-content: center;"><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:1"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:1"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:0.8"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:1"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:0.9"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:0.7"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:1"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:0.8"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:1"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:1"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:0.6"></span><span style="width:7px;height:7px;background:var(--accent);border-radius:1px;opacity:1"></span></div></td>
                         <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">Host house meeting (Mar 18)</td>
                         <td style="padding: 0.75rem 1rem; text-align: center;"><span style="background: rgba(34,197,94,0.15); color: var(--success); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">On Track</span></td>
                     </tr>
                     <tr style="border-bottom: 1px solid var(--border);">
                         <td style="padding: 0.75rem 1rem; color: var(--text-primary);">David Kim</td>
                         <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">Eastside</td>
-                        <td style="padding: 0.75rem 1rem;"><span style="background: rgba(96,165,250,0.15); color: #60a5fa; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">New Vol</span></td>
-                        <td style="padding: 0.75rem 1rem; text-align: center;"><div style="display: flex; gap: 2px; justify-content: center;"><span style="width: 8px; height: 8px; background: #60a5fa; border-radius: 2px;"></span><span style="width: 8px; height: 4px; background: rgba(96,165,250,0.3); border-radius: 2px;"></span><span style="width: 8px; height: 4px; background: rgba(96,165,250,0.3); border-radius: 2px;"></span><span style="width: 8px; height: 4px; background: rgba(96,165,250,0.3); border-radius: 2px;"></span><span style="width: 8px; height: 4px; background: rgba(96,165,250,0.3); border-radius: 2px;"></span></div></td>
+                        <td style="padding: 0.75rem 1rem;"><span style="background: rgba(43,151,193,0.15); color: #2b97c1; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">New Vol</span></td>
+                        <td style="padding: 0.75rem 1rem; text-align: center;"><div style="display: grid; grid-template-columns: repeat(12, 7px); gap: 2px; justify-content: center;"><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:#60a5fa;border-radius:1px;opacity:0.4"></span><span style="width:7px;height:7px;background:#60a5fa;border-radius:1px;opacity:0.6"></span><span style="width:7px;height:7px;background:#60a5fa;border-radius:1px;opacity:0.3"></span></div></td>
                         <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">Attend training (Mar 15)</td>
                         <td style="padding: 0.75rem 1rem; text-align: center;"><span style="background: rgba(245,158,11,0.15); color: var(--warning); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">Pending</span></td>
                     </tr>
                     <tr>
                         <td style="padding: 0.75rem 1rem; color: var(--text-primary);">Rosa Martinez</td>
                         <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">Northside</td>
-                        <td style="padding: 0.75rem 1rem;"><span style="background: rgba(96,165,250,0.15); color: #60a5fa; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">New Vol</span></td>
-                        <td style="padding: 0.75rem 1rem; text-align: center;"><div style="display: flex; gap: 2px; justify-content: center;"><span style="width: 8px; height: 6px; background: #60a5fa; border-radius: 2px;"></span><span style="width: 8px; height: 4px; background: rgba(96,165,250,0.3); border-radius: 2px;"></span><span style="width: 8px; height: 4px; background: rgba(96,165,250,0.3); border-radius: 2px;"></span><span style="width: 8px; height: 4px; background: rgba(96,165,250,0.3); border-radius: 2px;"></span><span style="width: 8px; height: 4px; background: rgba(96,165,250,0.3); border-radius: 2px;"></span></div></td>
+                        <td style="padding: 0.75rem 1rem;"><span style="background: rgba(43,151,193,0.15); color: #2b97c1; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">New Vol</span></td>
+                        <td style="padding: 0.75rem 1rem; text-align: center;"><div style="display: grid; grid-template-columns: repeat(12, 7px); gap: 2px; justify-content: center;"><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span><span style="width:7px;height:7px;background:#60a5fa;border-radius:1px;opacity:0.3"></span><span style="width:7px;height:7px;background:var(--border);border-radius:1px"></span></div></td>
                         <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">—</td>
                         <td style="padding: 0.75rem 1rem; text-align: center;"><span style="background: rgba(113,113,122,0.15); color: var(--text-tertiary); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">No Commit</span></td>
                     </tr>
@@ -1207,7 +1301,7 @@
         <div class="content-grid">
             <div class="text-content">
                 <h2>Voice-First 1-on-1 Notes</h2>
-                <p class="lead">Design target: 30 seconds from tap to saved. Fast enough to log between conversations, on a phone, in the field.</p>
+                <p class="lead">Organizers build power through relationships. Capturing what matters after a 1-on-1, on the spot, so nothing gets lost and every conversation builds on the last.</p>
                 <ul class="steps">
                     <li>
                         <span class="step-num">1</span>
@@ -1311,7 +1405,7 @@
                             <th style="padding: 0.5rem; text-align: left; color: var(--text-tertiary); font-weight: 500;">Organizer</th>
                             <th style="padding: 0.5rem; text-align: center; color: var(--text-tertiary); font-weight: 500;">Flake</th>
                             <th style="padding: 0.5rem; text-align: center; color: var(--text-tertiary); font-weight: 500;">Retention</th>
-                            <th style="padding: 0.5rem; text-align: center; color: var(--text-tertiary); font-weight: 500;">Leaders</th>
+                            <th style="padding: 0.5rem; text-align: center; color: var(--text-tertiary); font-weight: 500;">New Leaders</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1356,77 +1450,27 @@
 
             <!-- Network Visualization -->
             <div class="chart-card">
-                <h3>Recruitment Network</h3>
-                <p class="subtitle">Cascade vs. Terminal Recruiters</p>
+                <h3>Volunteer Network</h3>
+                <p class="subtitle">Core Leaders, Active Vols, Active Base</p>
                 <div class="network-viz" id="network"></div>
                 <div class="legend" style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
                     <div class="legend-item">
-                        <div class="legend-dot" style="background: #5371ff;"></div>
-                        <span class="legend-text">Cascade</span>
+                        <div class="legend-dot" style="background: #a78bfa;"></div>
+                        <span class="legend-text">Core Leader</span>
                     </div>
                     <div class="legend-item">
-                        <div class="legend-dot" style="background: #c4b5fd;"></div>
-                        <span class="legend-text">Terminal</span>
+                        <div class="legend-dot" style="background: #2b97c1;"></div>
+                        <span class="legend-text">Active Vol</span>
                     </div>
                     <div class="legend-item">
-                        <div class="legend-dot" style="background: var(--bg-elevated); border: 1px solid var(--border);"></div>
-                        <span class="legend-text">Participant</span>
+                        <div class="legend-dot" style="background: #F5A623;"></div>
+                        <span class="legend-text">Active Base</span>
                     </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- ==========================================
-         SLIDE 8: WEEKLY REFLECTION
-         ========================================== -->
-    <section class="slide reflect-slide feature-slide">
-        <div class="badge">Core Feature</div>
-        <div class="content-grid">
-            <div class="text-content">
-                <h2>Weekly Organizer Reflection</h2>
-                <p class="lead">A practice that makes organizers better (not a reporting burden). The tool pre-populates all one-to-ones and events held that week, leaving space for reflection.</p>
-                <ul class="fields">
-                    <li class="field-row">
-                        <span class="field-name">headline</span>
-                        <span class="field-desc">What was your headline this week?</span>
-                    </li>
-                    <li class="field-row">
-                        <span class="field-name">risks_taken</span>
-                        <span class="field-desc">What risks did you take?</span>
-                    </li>
-                    <li class="field-row">
-                        <span class="field-name">risks_avoided</span>
-                        <span class="field-desc">What did you back away from?</span>
-                    </li>
-                    <li class="field-row">
-                        <span class="field-name">learning</span>
-                        <span class="field-desc">What are you learning?</span>
-                    </li>
-                    <li class="field-row">
-                        <span class="field-name">invest_in</span>
-                        <span class="field-desc">One person to invest in next week</span>
-                    </li>
-                </ul>
-                <p style="margin-top: 1.5rem; font-size: var(--small-size); color: var(--text-tertiary);"><svg style="width: 14px; height: 14px; vertical-align: middle; margin-right: 0.25rem; stroke: var(--text-tertiary);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Supervisor receives push when submitted</p>
-            </div>
-            <div class="memo-card">
-                <div class="memo-header">weekly_reflection // 2026-03-07</div>
-                <div class="memo-headline">"Breakthrough with the Northside team"</div>
-                <p class="memo-body">Took a risk pushing Maria to co-lead the house meeting—she crushed it. Still avoiding the hard conversation with James about his follow-through...</p>
-                <div style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border);">
-                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-                        <div style="width: 24px; height: 24px; background: var(--accent-subtle); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                            <svg style="width: 12px; height: 12px; stroke: var(--accent);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                        </div>
-                        <span style="font-size: 0.75rem; color: var(--accent); font-weight: 500;">Joy Cushman (Supervisor)</span>
-                    </div>
-                    <p class="coach-note" style="border-top: none; margin-top: 0; padding-top: 0;">"You took a real risk with Maria and it paid off. What did you see in her that made you believe she was ready for that?"</p>
-                    <p class="coach-note" style="border-top: none; margin-top: 0.5rem; padding-top: 0;">"What is James getting out of letting himself off the hook?"</p>
-                </div>
-            </div>
-        </div>
-    </section>
 
     <!-- ==========================================
          SLIDE 8: FEATURES GRID
@@ -1512,12 +1556,105 @@
     </section>
 
     <!-- ==========================================
-         SLIDE 10: COACH/SUPERVISOR DASHBOARD
+         SLIDE 9: GEOSPATIAL MAP
+         ========================================== -->
+    <section class="slide" style="padding: var(--slide-padding);">
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: clamp(0.5rem, 1vh, 1rem);">
+            <div class="badge" style="margin: 0;">Core Feature</div>
+            <h2 style="font-size: var(--h3-size); font-weight: 600; margin: 0;">Geospatial Organizing Map</h2>
+            <span style="font-size: var(--small-size); color: var(--text-tertiary);">Team strength, leader density, and reach at a glance</span>
+        </div>
+        <div style="max-width: 1100px; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 4px 24px rgba(0,0,0,0.3); flex: 1; max-height: calc(100vh - 160px);">
+            <img src="mo-map.png" alt="Missouri Parent Organizing Network Map" style="width: 100%; height: 100%; object-fit: contain; display: block;">
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE: ORGANIZER LEADERBOARD
+         ========================================== -->
+    <section class="slide" style="padding: var(--slide-padding);">
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: clamp(0.5rem, 1vh, 1rem);">
+            <div class="badge" style="margin: 0;">Core Feature</div>
+            <h2 style="font-size: var(--h3-size); font-weight: 600; margin: 0;">Organizer Leaderboard</h2>
+            <span style="font-size: var(--small-size); color: var(--text-tertiary);">Team strength, core leaders developed, and active base</span>
+        </div>
+        <div style="max-width: 1100px; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 4px 24px rgba(0,0,0,0.3); flex: 1; max-height: calc(100vh - 160px);">
+            <img src="org-leaderboard.png" alt="Organizer Leaderboard" style="width: 100%; height: 100%; object-fit: cover; object-position: top; display: block;">
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE: VOLUNTEER LEADERBOARD
+         ========================================== -->
+    <section class="slide" style="padding: var(--slide-padding);">
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: clamp(0.5rem, 1vh, 1rem);">
+            <div class="badge" style="margin: 0;">Core Feature</div>
+            <h2 style="font-size: var(--h3-size); font-weight: 600; margin: 0;">Volunteer Leaderboard</h2>
+            <span style="font-size: var(--small-size); color: var(--text-tertiary);">House meetings, participants, and conversion rates</span>
+        </div>
+        <div style="max-width: 1100px; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 4px 24px rgba(0,0,0,0.3); flex: 1; max-height: calc(100vh - 160px);">
+            <img src="vol-leaderboard.png" alt="Volunteer Leaderboard" style="width: 100%; height: 100%; object-fit: cover; object-position: top; display: block;">
+        </div>
+    </section>
+
+    <!-- ==========================================
+         WEEKLY REFLECTION (Core Feature)
+         ========================================== -->
+    <section class="slide reflect-slide feature-slide">
+        <div class="badge">Core Feature</div>
+        <div class="content-grid">
+            <div class="text-content">
+                <h2>Weekly Organizer Reflection</h2>
+                <p class="lead">A practice that makes organizers better (not a reporting burden). The tool pre-populates all one-to-ones and events held that week, leaving space for reflection.</p>
+                <ul class="fields">
+                    <li class="field-row">
+                        <span class="field-name">headline</span>
+                        <span class="field-desc">What was your headline this week?</span>
+                    </li>
+                    <li class="field-row">
+                        <span class="field-name">risks_taken</span>
+                        <span class="field-desc">What risks did you take?</span>
+                    </li>
+                    <li class="field-row">
+                        <span class="field-name">risks_avoided</span>
+                        <span class="field-desc">What did you back away from?</span>
+                    </li>
+                    <li class="field-row">
+                        <span class="field-name">learning</span>
+                        <span class="field-desc">What are you learning?</span>
+                    </li>
+                    <li class="field-row">
+                        <span class="field-name">invest_in</span>
+                        <span class="field-desc">One person to invest in next week</span>
+                    </li>
+                </ul>
+                <p style="margin-top: 1.5rem; font-size: var(--small-size); color: var(--text-tertiary);"><svg style="width: 14px; height: 14px; vertical-align: middle; margin-right: 0.25rem; stroke: var(--text-tertiary);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Coach receives push when submitted</p>
+            </div>
+            <div class="memo-card">
+                <div class="memo-header">weekly_reflection // 2026-03-07</div>
+                <div class="memo-headline">"Breakthrough with the Northside team"</div>
+                <p class="memo-body">Took a risk pushing Maria to co-lead the house meeting, she crushed it. Still avoiding the hard conversation with James about his follow-through...</p>
+                <div style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border);">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <div style="width: 24px; height: 24px; background: var(--accent-subtle); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                            <svg style="width: 12px; height: 12px; stroke: var(--accent);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        </div>
+                        <span style="font-size: 0.75rem; color: var(--accent); font-weight: 500;">Joy Cushman (Coach)</span>
+                    </div>
+                    <p class="coach-note" style="border-top: none; margin-top: 0; padding-top: 0;">"You took a real risk with Maria and it paid off. What did you see in her that made you believe she was ready for that?"</p>
+                    <p class="coach-note" style="border-top: none; margin-top: 0.5rem; padding-top: 0;">"What is James getting out of letting himself off the hook?"</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         COACH DASHBOARD
          ========================================== -->
     <section class="slide coach-slide">
         <div class="badge">Core Feature</div>
         <div class="section-header">
-            <h2>Supervisor Dashboard</h2>
+            <h2>Coach Dashboard</h2>
             <p>See your whole team. Know who needs attention. Respond in seconds.</p>
         </div>
         <div style="max-width: 1000px; width: 100%; display: grid; grid-template-columns: 1fr 1.2fr; gap: 1.5rem;">
@@ -1679,15 +1816,18 @@
     <!-- ==========================================
          SLIDE 10: CTA
          ========================================== -->
-    <section class="slide cta-slide">
-        <div class="cta-content">
+    <section class="slide cta-slide" style="text-align: center;">
+        <div class="cta-content" style="display: flex; flex-direction: column; align-items: center; gap: clamp(1.5rem, 3vh, 2.5rem);">
+            <img id="cta-logo" src="data:image/png;base64,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" style="width: clamp(60px, 10vw, 100px); height: auto; object-fit: contain; opacity: 0.9;" alt="Groundwork">
             <h2>Let's Build This</h2>
-            <p class="lead">The organizing world has tried to build political power on rented infrastructure for 20 years. Groundwork is a chance to change that.</p>
-            <div class="steps-list">
-                <div class="step"><span class="step-num">01</span> Create Supabase project</div>
-                <div class="step"><span class="step-num">02</span> Clone starter repo</div>
-                <div class="step"><span class="step-num">03</span> Deploy to Vercel</div>
-                <div class="step"><span class="step-num">04</span> Start building with Claude Code</div>
+            <p class="lead" style="max-width: 600px;">The organizing world has tried to build political power on rented infrastructure for 20 years. Groundwork is a chance to change that.</p>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; margin-top: 1rem;">
+                <p style="font-size: var(--body-size); color: var(--text-secondary);">Interested? Have ideas? Want to pilot?</p>
+                <a href="mailto:elizabethmck@gmail.com" style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--accent); color: white; padding: 0.75rem 2rem; border-radius: 8px; text-decoration: none; font-size: var(--body-size); font-weight: 600; transition: opacity 0.2s;">
+                    <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    elizabethmck@gmail.com
+                </a>
+                <p style="font-size: var(--small-size); color: var(--text-tertiary); margin-top: 0.5rem;">Elizabeth McKenna</p>
             </div>
         </div>
     </section>
@@ -1773,57 +1913,118 @@
                 const width = container.offsetWidth;
                 const height = container.offsetHeight;
 
-                // Network nodes - Cascade vs Terminal recruiters
+                // Network nodes - Cascade recruiters (purple), Active vols (teal), Active base (amber)
                 const nodes = [
-                    // Cascade recruiters (recruit people who recruit others)
-                    { id: 1, x: 0.5, y: 0.35, size: 26, type: 'cascade', label: 'M' },
-                    { id: 2, x: 0.25, y: 0.45, size: 22, type: 'cascade', label: 'A' },
-                    { id: 3, x: 0.7, y: 0.4, size: 20, type: 'cascade', label: 'J' },
-                    // Terminal recruiters (recruit but their recruits don't recruit)
-                    { id: 4, x: 0.4, y: 0.55, size: 16, type: 'terminal', label: '' },
-                    { id: 5, x: 0.6, y: 0.6, size: 14, type: 'terminal', label: '' },
-                    { id: 6, x: 0.15, y: 0.55, size: 14, type: 'terminal', label: '' },
-                    { id: 7, x: 0.8, y: 0.55, size: 12, type: 'terminal', label: '' },
-                    { id: 8, x: 0.35, y: 0.25, size: 12, type: 'terminal', label: '' },
-                    // Participants (recruited but don't recruit)
-                    { id: 9, x: 0.5, y: 0.15, size: 8, type: 'participant', label: '' },
-                    { id: 10, x: 0.65, y: 0.2, size: 8, type: 'participant', label: '' },
-                    { id: 11, x: 0.85, y: 0.35, size: 8, type: 'participant', label: '' },
-                    { id: 12, x: 0.9, y: 0.55, size: 8, type: 'participant', label: '' },
-                    { id: 13, x: 0.85, y: 0.7, size: 8, type: 'participant', label: '' },
-                    { id: 14, x: 0.65, y: 0.8, size: 8, type: 'participant', label: '' },
-                    { id: 15, x: 0.45, y: 0.75, size: 8, type: 'participant', label: '' },
-                    { id: 16, x: 0.3, y: 0.7, size: 8, type: 'participant', label: '' },
-                    { id: 17, x: 0.1, y: 0.7, size: 8, type: 'participant', label: '' },
-                    { id: 18, x: 0.08, y: 0.4, size: 8, type: 'participant', label: '' },
-                    { id: 19, x: 0.2, y: 0.25, size: 8, type: 'participant', label: '' },
+                    // Cascade recruiters - purple (#a78bfa)
+                    { id: 1, x: 0.5, y: 0.32, size: 24, type: 'cascade', label: 'M' },
+                    { id: 2, x: 0.22, y: 0.4, size: 20, type: 'cascade', label: 'A' },
+                    { id: 3, x: 0.72, y: 0.38, size: 20, type: 'cascade', label: 'J' },
+                    { id: 4, x: 0.38, y: 0.18, size: 18, type: 'cascade', label: 'T' },
+                    { id: 5, x: 0.62, y: 0.58, size: 16, type: 'cascade', label: 'S' },
+                    // Active vols / house meeting hosts - teal (#2b97c1)
+                    { id: 10, x: 0.35, y: 0.52, size: 14, type: 'terminal', label: '' },
+                    { id: 11, x: 0.58, y: 0.22, size: 12, type: 'terminal', label: '' },
+                    { id: 12, x: 0.12, y: 0.52, size: 12, type: 'terminal', label: '' },
+                    { id: 13, x: 0.82, y: 0.48, size: 13, type: 'terminal', label: '' },
+                    { id: 14, x: 0.45, y: 0.68, size: 11, type: 'terminal', label: '' },
+                    { id: 15, x: 0.78, y: 0.25, size: 11, type: 'terminal', label: '' },
+                    { id: 16, x: 0.28, y: 0.28, size: 12, type: 'terminal', label: '' },
+                    { id: 17, x: 0.55, y: 0.45, size: 10, type: 'terminal', label: '' },
+                    { id: 18, x: 0.15, y: 0.68, size: 11, type: 'terminal', label: '' },
+                    { id: 19, x: 0.88, y: 0.35, size: 10, type: 'terminal', label: '' },
+                    { id: 20, x: 0.68, y: 0.72, size: 12, type: 'terminal', label: '' },
+                    // Active base - amber (#F5A623) - many small nodes
+                    { id: 30, x: 0.5, y: 0.12, size: 6, type: 'participant', label: '' },
+                    { id: 31, x: 0.42, y: 0.08, size: 5, type: 'participant', label: '' },
+                    { id: 32, x: 0.68, y: 0.14, size: 6, type: 'participant', label: '' },
+                    { id: 33, x: 0.85, y: 0.18, size: 5, type: 'participant', label: '' },
+                    { id: 34, x: 0.92, y: 0.28, size: 5, type: 'participant', label: '' },
+                    { id: 35, x: 0.95, y: 0.42, size: 6, type: 'participant', label: '' },
+                    { id: 36, x: 0.92, y: 0.58, size: 5, type: 'participant', label: '' },
+                    { id: 37, x: 0.88, y: 0.68, size: 5, type: 'participant', label: '' },
+                    { id: 38, x: 0.82, y: 0.78, size: 6, type: 'participant', label: '' },
+                    { id: 39, x: 0.72, y: 0.85, size: 5, type: 'participant', label: '' },
+                    { id: 40, x: 0.58, y: 0.88, size: 5, type: 'participant', label: '' },
+                    { id: 41, x: 0.45, y: 0.85, size: 6, type: 'participant', label: '' },
+                    { id: 42, x: 0.32, y: 0.82, size: 5, type: 'participant', label: '' },
+                    { id: 43, x: 0.2, y: 0.78, size: 5, type: 'participant', label: '' },
+                    { id: 44, x: 0.08, y: 0.62, size: 6, type: 'participant', label: '' },
+                    { id: 45, x: 0.05, y: 0.45, size: 5, type: 'participant', label: '' },
+                    { id: 46, x: 0.05, y: 0.32, size: 5, type: 'participant', label: '' },
+                    { id: 47, x: 0.1, y: 0.2, size: 6, type: 'participant', label: '' },
+                    { id: 48, x: 0.18, y: 0.12, size: 5, type: 'participant', label: '' },
+                    { id: 49, x: 0.3, y: 0.1, size: 5, type: 'participant', label: '' },
+                    { id: 50, x: 0.75, y: 0.08, size: 5, type: 'participant', label: '' },
+                    { id: 51, x: 0.38, y: 0.78, size: 5, type: 'participant', label: '' },
+                    { id: 52, x: 0.55, y: 0.78, size: 6, type: 'participant', label: '' },
+                    { id: 53, x: 0.25, y: 0.62, size: 5, type: 'participant', label: '' },
+                    { id: 54, x: 0.62, y: 0.68, size: 5, type: 'participant', label: '' },
+                    { id: 55, x: 0.48, y: 0.92, size: 5, type: 'participant', label: '' },
+                    { id: 56, x: 0.82, y: 0.62, size: 5, type: 'participant', label: '' },
+                    { id: 57, x: 0.15, y: 0.38, size: 5, type: 'participant', label: '' },
+                    { id: 58, x: 0.92, y: 0.48, size: 5, type: 'participant', label: '' },
+                    { id: 59, x: 0.35, y: 0.92, size: 5, type: 'participant', label: '' },
+                    { id: 60, x: 0.65, y: 0.92, size: 5, type: 'participant', label: '' },
                 ];
 
-                // Edges - cascade connections vs terminal
+                // Edges
                 const edges = [
-                    // Cascade recruiter 1 (M) - recruits other recruiters
+                    // Cascade-to-cascade (purple lines)
                     { from: 1, to: 2, cascade: true },
                     { from: 1, to: 3, cascade: true },
                     { from: 1, to: 4, cascade: true },
-                    { from: 1, to: 9, cascade: false },
-                    // Cascade recruiter 2 (A) - recruits recruiters
-                    { from: 2, to: 6, cascade: true },
-                    { from: 2, to: 8, cascade: true },
-                    { from: 2, to: 18, cascade: false },
-                    { from: 2, to: 19, cascade: false },
-                    // Cascade recruiter 3 (J)
+                    { from: 1, to: 5, cascade: true },
+                    { from: 2, to: 4, cascade: true },
                     { from: 3, to: 5, cascade: true },
-                    { from: 3, to: 7, cascade: true },
-                    { from: 3, to: 10, cascade: false },
-                    { from: 3, to: 11, cascade: false },
-                    // Terminal recruiters - only recruit participants
-                    { from: 4, to: 15, cascade: false },
+                    // Cascade to active vols
+                    { from: 1, to: 10, cascade: false },
+                    { from: 1, to: 11, cascade: false },
+                    { from: 1, to: 17, cascade: false },
+                    { from: 2, to: 12, cascade: false },
+                    { from: 2, to: 16, cascade: false },
+                    { from: 2, to: 18, cascade: false },
+                    { from: 3, to: 13, cascade: false },
+                    { from: 3, to: 15, cascade: false },
+                    { from: 3, to: 19, cascade: false },
+                    { from: 4, to: 11, cascade: false },
                     { from: 4, to: 16, cascade: false },
-                    { from: 5, to: 13, cascade: false },
                     { from: 5, to: 14, cascade: false },
-                    { from: 6, to: 17, cascade: false },
-                    { from: 7, to: 12, cascade: false },
-                    { from: 8, to: 9, cascade: false },
+                    { from: 5, to: 20, cascade: false },
+                    { from: 5, to: 17, cascade: false },
+                    // Active vols to active base (participants)
+                    { from: 10, to: 42, cascade: false },
+                    { from: 10, to: 51, cascade: false },
+                    { from: 10, to: 53, cascade: false },
+                    { from: 11, to: 30, cascade: false },
+                    { from: 11, to: 32, cascade: false },
+                    { from: 12, to: 44, cascade: false },
+                    { from: 12, to: 45, cascade: false },
+                    { from: 12, to: 57, cascade: false },
+                    { from: 13, to: 35, cascade: false },
+                    { from: 13, to: 36, cascade: false },
+                    { from: 13, to: 56, cascade: false },
+                    { from: 13, to: 58, cascade: false },
+                    { from: 14, to: 41, cascade: false },
+                    { from: 14, to: 52, cascade: false },
+                    { from: 14, to: 55, cascade: false },
+                    { from: 15, to: 33, cascade: false },
+                    { from: 15, to: 34, cascade: false },
+                    { from: 15, to: 50, cascade: false },
+                    { from: 16, to: 47, cascade: false },
+                    { from: 16, to: 48, cascade: false },
+                    { from: 16, to: 49, cascade: false },
+                    { from: 17, to: 31, cascade: false },
+                    { from: 18, to: 43, cascade: false },
+                    { from: 18, to: 53, cascade: false },
+                    { from: 19, to: 34, cascade: false },
+                    { from: 19, to: 37, cascade: false },
+                    { from: 20, to: 38, cascade: false },
+                    { from: 20, to: 39, cascade: false },
+                    { from: 20, to: 54, cascade: false },
+                    { from: 20, to: 60, cascade: false },
+                    { from: 14, to: 59, cascade: false },
+                    { from: 20, to: 40, cascade: false },
+                    { from: 18, to: 46, cascade: false },
                 ];
 
                 // Draw edges first
