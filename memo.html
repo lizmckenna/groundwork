@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Groundwork — Companion Memo</title>
+<style>
+  :root {
+    --black: #0A0A0A;
+    --dark: #1A1A1A;
+    --mid: #444444;
+    --gray: #6B7280;
+    --lgray: #F4F4F4;
+    --border: #D1D5DB;
+    --white: #ffffff;
+
+    /* Jewel tones for callouts */
+    --teal:       #0D7377;
+    --teal-light: #E0F4F4;
+    --emerald:    #065F46;
+    --emerald-lt: #D1FAE5;
+    --indigo:     #3730A3;
+    --indigo-lt:  #E0E7FF;
+    --amber:      #92400E;
+    --amber-lt:   #FEF3C7;
+    --plum:       #6B21A8;
+    --plum-lt:    #F3E8FF;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    color: var(--dark);
+    background: var(--white);
+    font-size: 16px;
+    line-height: 1.7;
+  }
+
+  /* ── COVER ─────────────────────────────────────────── */
+  .cover {
+    background: var(--black);
+    color: white;
+    padding: 72px 64px 64px;
+    position: relative;
+    overflow: hidden;
+    min-height: 320px;
+  }
+  .cover-snowflake {
+    position: absolute;
+    right: 40px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 220px;
+    height: 220px;
+    object-fit: contain;
+    border-radius: 8px;
+  }
+  .cover-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    opacity: 0.45;
+    margin-bottom: 20px;
+  }
+  .cover h1 {
+    font-size: 72px;
+    font-weight: 800;
+    letter-spacing: -3px;
+    line-height: 1;
+    margin-bottom: 18px;
+  }
+  .cover-sub {
+    font-size: 17px;
+    opacity: 0.65;
+    max-width: 480px;
+    line-height: 1.5;
+    margin-bottom: 44px;
+  }
+  .cover-meta {
+    font-size: 12px;
+    opacity: 0.4;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    padding-top: 20px;
+    display: flex;
+    gap: 28px;
+  }
+
+  /* ── PAGE LAYOUT ───────────────────────────────────── */
+  .page {
+    max-width: 740px;
+    margin: 0 auto;
+    padding: 0 40px 80px;
+  }
+
+  /* ── SECTIONS ──────────────────────────────────────── */
+  .section {
+    padding-top: 60px;
+    margin-top: 60px;
+    border-top: 1px solid var(--border);
+  }
+  .section:first-of-type {
+    border-top: none;
+    margin-top: 0;
+  }
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gray);
+    margin-bottom: 10px;
+  }
+  .section h2 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--black);
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+    margin-bottom: 20px;
+  }
+  .section p {
+    margin-bottom: 18px;
+    color: var(--mid);
+    max-width: 640px;
+    font-size: 15px;
+  }
+  .section p:last-child { margin-bottom: 0; }
+
+  /* ── PULL QUOTE ────────────────────────────────────── */
+  .pullquote {
+    border-left: 3px solid var(--black);
+    padding: 2px 0 2px 20px;
+    margin: 28px 0;
+  }
+  .pullquote p {
+    font-size: 19px;
+    font-weight: 500;
+    color: var(--black);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  /* ── EPIGRAPH ───────────────────────────────────────── */
+  .epigraph {
+    font-size: 14px;
+    font-style: italic;
+    color: var(--gray);
+    margin: 0 0 20px 0;
+    padding: 0;
+  }
+
+  /* ── CALLOUT BOX ───────────────────────────────────── */
+  .callout {
+    border-radius: 6px;
+    padding: 24px 28px;
+    margin: 24px 0;
+  }
+  .callout h4 {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .callout ul { list-style: none; padding: 0; }
+  .callout ul li {
+    padding: 5px 0 5px 18px;
+    position: relative;
+    font-size: 14px;
+    color: var(--dark);
+    line-height: 1.55;
+  }
+  .callout ul li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    font-weight: 700;
+  }
+  .callout.teal   { background: var(--teal-light);   }
+  .callout.teal h4, .callout.teal li::before   { color: var(--teal); }
+  .callout.emerald { background: var(--emerald-lt); }
+  .callout.emerald h4, .callout.emerald li::before { color: var(--emerald); }
+  .callout.indigo { background: var(--indigo-lt);   }
+  .callout.indigo h4, .callout.indigo li::before   { color: var(--indigo); }
+  .callout.amber  { background: var(--amber-lt);    }
+  .callout.amber h4, .callout.amber li::before     { color: var(--amber); }
+  .callout.plum   { background: var(--plum-lt);     }
+  .callout.plum h4, .callout.plum li::before       { color: var(--plum); }
+  .callout.dark   { background: var(--lgray);       }
+  .callout.dark h4 { color: var(--dark); }
+  .callout.dark li::before { color: var(--mid); }
+
+  /* ── MOCK SCREEN ───────────────────────────────────── */
+  .screen-wrap { margin: 28px 0; }
+  .screen-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--gray);
+    margin-bottom: 8px;
+  }
+  .screen {
+    background: #F8F8F8;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+  }
+  .screen-bar {
+    background: var(--black);
+    padding: 9px 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .screen-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.25);
+  }
+  .screen-title {
+    font-size: 11px;
+    color: rgba(255,255,255,0.55);
+    margin-left: 6px;
+    font-weight: 500;
+  }
+  .screen-body { padding: 18px 22px; }
+
+  /* ── ACTIVITY GRID (replaces "temp" badges) ─────────── */
+  .activity-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .activity-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--mid);
+  }
+  .activity-name { width: 110px; flex-shrink: 0; color: var(--dark); }
+  .activity-pips { display: flex; gap: 3px; }
+  .pip {
+    width: 12px; height: 12px;
+    border-radius: 2px;
+  }
+  .pip-5 { background: #5371ff; }
+  .pip-4 { background: #7B8FFF; }
+  .pip-3 { background: #9DAAFF; }
+  .pip-2 { background: #BFC7FF; }
+  .pip-1 { background: #DDE1FF; }
+  .pip-0 { background: #F3F4F6; border: 1px solid #E5E7EB; }
+  .activity-label { font-size: 11px; color: var(--gray); }
+
+  /* ── CONTACT TABLE ─────────────────────────────────── */
+  .mock-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .mock-table th {
+    text-align: left;
+    padding: 7px 10px;
+    background: var(--black);
+    color: white;
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .mock-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--mid);
+    font-size: 12px;
+  }
+  .mock-table tr:last-child td { border-bottom: none; }
+  .mock-table tr:nth-child(even) td { background: #FAFAFA; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .badge-core    { background: var(--plum-lt);    color: var(--plum); }
+  .badge-leader  { background: var(--indigo-lt);  color: var(--indigo); }
+  .badge-member  { background: var(--lgray);      color: var(--mid); }
+
+  /* ── VOICE NOTE ────────────────────────────────────── */
+  .voice-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+  }
+  .voice-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .voice-name { font-weight: 700; font-size: 13px; color: var(--dark); }
+  .voice-date { font-size: 10px; color: var(--gray); }
+  .voice-transcript {
+    font-size: 12px;
+    color: var(--mid);
+    font-style: italic;
+    line-height: 1.6;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    background: var(--lgray);
+    border-radius: 4px;
+    border-left: 3px solid var(--teal);
+  }
+  .voice-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+  .voice-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .tag-commitment { background: var(--emerald-lt); color: var(--emerald); }
+  .tag-followup   { background: var(--amber-lt);   color: var(--amber); }
+  .tag-issue      { background: var(--plum-lt);     color: var(--plum); }
+  .mic-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--black);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 18px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+
+  /* ── COMMITMENT ROWS ───────────────────────────────── */
+  .commit-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .commit-row:last-child { border-bottom: none; }
+  .commit-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-kept    { background: #059669; }
+  .dot-broken  { background: #DC2626; }
+  .dot-pending { background: #D97706; }
+  .commit-text { flex: 1; color: var(--mid); }
+  .commit-status { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .s-kept    { color: #059669; }
+  .s-broken  { color: #DC2626; }
+  .s-pending { color: #D97706; }
+
+  /* ── CHECKIN ROWS ──────────────────────────────────── */
+  .checkin-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .checkin-row:last-child { border-bottom: none; }
+  .checkin-name { font-weight: 600; color: var(--dark); }
+  .checkin-sub  { font-size: 11px; color: var(--gray); }
+  .checkin-btn {
+    padding: 5px 14px;
+    border-radius: 16px;
+    border: none;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .btn-checked   { background: var(--emerald-lt); color: var(--emerald); }
+  .btn-unchecked { background: var(--black);       color: white; }
+
+  /* ── REFLECTION ────────────────────────────────────── */
+  .reflection-field { margin-bottom: 14px; }
+  .reflection-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gray);
+    margin-bottom: 4px;
+  }
+  .reflection-value {
+    font-size: 12px;
+    color: var(--mid);
+    line-height: 1.6;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+  }
+  .energy-bar { display: flex; gap: 4px; margin-top: 5px; }
+  .e-pip { width: 24px; height: 7px; border-radius: 3px; }
+  .e-on  { background: var(--teal); }
+  .e-off { background: var(--border); }
+  .coach-comment {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: var(--lgray);
+    border-radius: 4px;
+    border-left: 3px solid var(--teal);
+    font-size: 12px;
+    color: var(--mid);
+  }
+  .coach-comment strong { color: var(--dark); display: block; margin-bottom: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
+
+  /* ── STATS ─────────────────────────────────────────── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin: 24px 0;
+  }
+  .stat-card {
+    background: var(--lgray);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 18px;
+    text-align: center;
+  }
+  .stat-number {
+    font-size: 34px;
+    font-weight: 800;
+    color: var(--black);
+    line-height: 1;
+    margin-bottom: 6px;
+    letter-spacing: -1px;
+  }
+  .stat-label { font-size: 11px; color: var(--gray); }
+
+  /* ── COMPARE TABLE ─────────────────────────────────── */
+  .compare {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin: 20px 0;
+  }
+  .compare th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .compare th:first-child { color: var(--gray); }
+  .compare th.ea { background: var(--lgray); color: var(--mid); }
+  .compare th.gw { background: var(--black); color: white; }
+  .compare td { padding: 9px 14px; border-bottom: 1px solid var(--border); }
+  .compare td:first-child { color: var(--gray); font-size: 12px; }
+  .compare td.ea { background: #FAFAFA; color: var(--mid); }
+  .compare td.gw { background: #F4F4F4; color: var(--dark); font-weight: 600; }
+  .yes { color: var(--emerald); font-weight: 700; }
+  .no  { color: #DC2626; }
+
+  /* ── FOOTER ────────────────────────────────────────── */
+  .doc-footer {
+    background: var(--black);
+    color: rgba(255,255,255,0.4);
+    text-align: center;
+    padding: 36px 40px;
+    font-size: 11px;
+    margin-top: 80px;
+    letter-spacing: 0.05em;
+  }
+  .doc-footer strong {
+    color: white;
+    display: block;
+    font-size: 16px;
+    letter-spacing: 0.15em;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <!-- Snowflake SVG (geometric, matches deck aesthetic) -->
+  <img class="cover-snowflake" src="data:image/png;base64,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" alt="Groundwork logo" />
+
+  <div class="cover-label">Groundwork — Companion Memo</div>
+  <h1>Groundwork</h1>
+  <div class="cover-sub">Organizing technology built by organizers, owned by organizers. A companion to the Groundwork pitch deck.</div>
+  <div class="cover-meta">
+    <span>March 2026</span>
+    <span>Confidential Draft</span>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- THE PROBLEM -->
+  <div class="section">
+    <div class="section-label">The Problem</div>
+    <h2>Twenty years of growth. A stubbornly wide power gap.</h2>
+
+    <p>Organizing groups in the U.S. have grown more numerous, received more philanthropic investment, and made some real gains for their constituents over the past twenty years. The infrastructure around them has grown too: the conferences, the consultants, the technology vendors.</p>
+
+    <p>And yet the balance of power in American political life has not shifted commensurately. There are more organizations, more funding, and more activity, yet a participation-power gap that remains stubbornly wide.</p>
+
+    <div class="pullquote">
+      <p>"The technology is part of that story. Groups have spent twenty years paying increasing fees to vendors whose incentive is contract growth, not movement growth."</p>
+    </div>
+
+    <p>The dominant tools, now owned by private equity firms, have gotten more expensive, more oriented toward large institutional clients, and no better at the thing that actually matters: helping organizers capture their data and learn from it. The data has not gotten better. The practice has not gotten more sophisticated. The investors have done fine.</p>
+
+    <p>This is not a technology failure. It is a structural one. When your tools are owned by people whose returns depend on your dependency, you get tools designed to retain you, not to develop your practice.</p>
+
+    <div class="callout amber">
+      <h4>The structural problem</h4>
+      <ul>
+        <li>EveryAction acquired by Apax Partners, an $80B private equity fund. Significant price increases post-acquisition.</li>
+        <li>Feature development oriented toward large institutional clients, not grassroots organizing practice.</li>
+        <li>Your members' data, relational networks, and organizing history live on infrastructure optimized for investor returns.</li>
+        <li>Organizations cannot build the features they need. Switching costs are designed to be prohibitive.</li>
+      </ul>
+    </div>
+
+    <p>Groundwork is built on a different premise: that the organizations doing this work should own the infrastructure, own the data, and build the features that good organizing practice actually requires.</p>
+  </div>
+
+  <!-- THE PREMISE -->
+  <div class="section">
+    <div class="section-label">The Premise</div>
+    <h2>Infrastructure owned by organizers, built for organizing practice</h2>
+
+    <p>Modern tooling makes a production-quality custom build feasible in weeks, not years. The infrastructure cost is $50 to $200 per month. The engineering cost, with AI-assisted development, is primarily time. Data ownership is complete. Feature control is complete.</p>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-number">$50–200</div>
+        <div class="stat-label">per month infrastructure cost</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">100%</div>
+        <div class="stat-label">data ownership, your database</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">0</div>
+        <div class="stat-label">days to switch away if needed</div>
+      </div>
+    </div>
+
+    <p>Groundwork runs as a platform operated by Groundwork's team. Member organizations get a subdomain, admin credentials, and an onboarding guide. A forward-deployed engineer supports onboarding and configuration. No organization needs to manage servers or write code.</p>
+
+    <div class="callout emerald">
+      <h4>What changes with Groundwork</h4>
+      <ul>
+        <li>Organizations own their data and can export it at any time, no vendor permission required.</li>
+        <li>Features are built for what organizing practice actually requires, not what renews the contract.</li>
+        <li>A forward-deployed engineer helps each organization get set up, configure their fields, and migrate existing data.</li>
+        <li>Optionally: organizations that choose to participate in a shared data agreement can access cross-org learning and field-wide benchmarks. Fully opt-in, governed by a clear data use agreement, and completely separate from core platform use.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- CONTACTS + ACTIVITY VIEW -->
+  <div class="section">
+    <div class="section-label">Core Feature</div>
+    <h2>A contact database built for organizing data</h2>
+
+    <p>Every person in the organizing ecosystem has a rich, searchable record with fields that reflect organizing practice: school, school district, legislative district, team assignments, leadership level, recruitment history, and relational connections.</p>
+
+    <p>Instead of a "temperature" label, Groundwork tracks engagement as an activity history: how many events, how recently, how deep. The view below shows participation density per person in a format borrowed from GitHub's contribution graph. Darker means more recent and more frequent engagement.</p>
+
+    <div class="screen-wrap">
+      <div class="screen-label">Contacts — engagement activity view</div>
+      <div class="screen">
+        <div class="screen-bar">
+          <div class="screen-dot"></div><div class="screen-dot"></div><div class="screen-dot"></div>
+          <div class="screen-title">Groundwork · Contacts · Northside Team</div>
+        </div>
+        <div class="screen-body">
+          <div style="font-size:10px;color:var(--gray);margin-bottom:14px;letter-spacing:0.08em;text-transform:uppercase;display:flex;justify-content:space-between;">
+            <span>12 weeks of activity</span>
+            <span style="display:flex;align-items:center;gap:6px;">Less <span style="display:flex;gap:2px;"><span style="width:10px;height:10px;border-radius:2px;background:#F3F4F6;border:1px solid #E5E7EB;display:inline-block;"></span><span style="width:10px;height:10px;border-radius:2px;background:#DDE1FF;display:inline-block;"></span><span style="width:10px;height:10px;border-radius:2px;background:#9DAAFF;display:inline-block;"></span><span style="width:10px;height:10px;border-radius:2px;background:#7B8FFF;display:inline-block;"></span><span style="width:10px;height:10px;border-radius:2px;background:#5371ff;display:inline-block;"></span></span> More</span>
+          </div>
+          <div class="activity-grid">
+            <div class="activity-row">
+              <div class="activity-name"><strong>Maria Flores</strong><br><span style="font-size:10px;font-weight:400;color:var(--plum);">Core Leader</span></div>
+              <div class="activity-pips">
+                <div class="pip pip-4"></div><div class="pip pip-5"></div><div class="pip pip-4"></div><div class="pip pip-5"></div><div class="pip pip-3"></div><div class="pip pip-5"></div><div class="pip pip-4"></div><div class="pip pip-5"></div><div class="pip pip-4"></div><div class="pip pip-5"></div><div class="pip pip-4"></div><div class="pip pip-5"></div>
+              </div>
+              <div class="activity-label">12 events · 8 1-on-1s</div>
+            </div>
+            <div class="activity-row">
+              <div class="activity-name"><strong>Bianca Edwards</strong><br><span style="font-size:10px;font-weight:400;color:var(--indigo);">Leader</span></div>
+              <div class="activity-pips">
+                <div class="pip pip-2"></div><div class="pip pip-3"></div><div class="pip pip-4"></div><div class="pip pip-3"></div><div class="pip pip-5"></div><div class="pip pip-4"></div><div class="pip pip-3"></div><div class="pip pip-4"></div><div class="pip pip-5"></div><div class="pip pip-4"></div><div class="pip pip-3"></div><div class="pip pip-4"></div>
+              </div>
+              <div class="activity-label">10 events · 5 1-on-1s</div>
+            </div>
+            <div class="activity-row">
+              <div class="activity-name"><strong>James Okafor</strong><br><span style="font-size:10px;font-weight:400;color:var(--indigo);">Leader</span></div>
+              <div class="activity-pips">
+                <div class="pip pip-3"></div><div class="pip pip-2"></div><div class="pip pip-1"></div><div class="pip pip-3"></div><div class="pip pip-2"></div><div class="pip pip-1"></div><div class="pip pip-0"></div><div class="pip pip-2"></div><div class="pip pip-3"></div><div class="pip pip-2"></div><div class="pip pip-1"></div><div class="pip pip-2"></div>
+              </div>
+              <div class="activity-label">7 events · 3 1-on-1s</div>
+            </div>
+            <div class="activity-row">
+              <div class="activity-name"><strong>David Lapp</strong><br><span style="font-size:10px;font-weight:400;color:var(--gray);">Member</span></div>
+              <div class="activity-pips">
+                <div class="pip pip-2"></div><div class="pip pip-1"></div><div class="pip pip-0"></div><div class="pip pip-0"></div><div class="pip pip-1"></div><div class="pip pip-0"></div><div class="pip pip-0"></div><div class="pip pip-0"></div><div class="pip pip-1"></div><div class="pip pip-0"></div><div class="pip pip-0"></div><div class="pip pip-1"></div>
+              </div>
+              <div class="activity-label">3 events · 1 1-on-1</div>
+            </div>
+            <div class="activity-row">
+              <div class="activity-name"><strong>Shaina Horner</strong><br><span style="font-size:10px;font-weight:400;color:var(--gray);">Member</span></div>
+              <div class="activity-pips">
+                <div class="pip pip-0"></div><div class="pip pip-0"></div><div class="pip pip-0"></div><div class="pip pip-0"></div><div class="pip pip-0"></div><div class="pip pip-1"></div><div class="pip pip-0"></div><div class="pip pip-0"></div><div class="pip pip-0"></div><div class="pip pip-0"></div><div class="pip pip-0"></div><div class="pip pip-0"></div>
+              </div>
+              <div class="activity-label">1 event · 0 1-on-1s <span style="color:#DC2626;font-weight:700;">· needs outreach</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VOICE NOTES -->
+  <div class="section">
+    <div class="section-label">Core Feature</div>
+    <h2>Voice-first 1-on-1 notes</h2>
+
+    <p>Groundwork allows organizers and leaders to log a note from their phone, between conversations, in the field. Tap the microphone, speak naturally, and Groundwork transcribes using the browser's built-in speech recognition with OpenAI Whisper as a fallback for accuracy. AI extracts structured data from the transcript and proposes each field for one-tap confirmation.</p>
+
+    <div class="screen-wrap">
+      <div class="screen-label">1-on-1 note — Maria Flores</div>
+      <div class="screen">
+        <div class="screen-bar">
+          <div class="screen-dot"></div><div class="screen-dot"></div><div class="screen-dot"></div>
+          <div class="screen-title">Note · Maria Flores · Today</div>
+        </div>
+        <div class="screen-body">
+          <div class="voice-card">
+            <div class="voice-header">
+              <span class="voice-name">Maria Flores</span>
+              <span class="voice-date">March 7, 2026 · In person · 25 min</span>
+            </div>
+            <div class="voice-transcript">
+              "Met with Maria outside the church. She's fired up about the school board race and wants to co-lead the house meeting next week. She committed to bringing five people to the training. Following up with her Wednesday."
+            </div>
+            <div class="voice-tags">
+              <span class="voice-tag tag-commitment">Commitment: bring 5 people · due 3/14</span>
+              <span class="voice-tag tag-followup">Follow up: Wed 3/11</span>
+              <span class="voice-tag tag-issue">Issue: school board</span>
+            </div>
+            <div style="margin-top:10px;font-size:11px;color:var(--gray);">
+              Relationship depth: ●●●●○ &nbsp;·&nbsp; AI extracted 3 fields &nbsp;·&nbsp; <span style="color:var(--teal);font-weight:600;">Review and confirm</span>
+            </div>
+          </div>
+          <button class="mic-btn">🎤 Add note</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMMITMENTS -->
+  <div class="section">
+    <div class="section-label">Core Feature</div>
+    <h2>Commitment Tracking</h2>
+
+    <p class="epigraph">"90 percent of organizing is follow-up." — Fred Ross, <em>Axioms for Organizers</em></p>
+
+    <p>Every 1-on-1 note can (and should) include a structured commitment. Commitments surface in the organizer's follow-up queue with due dates. If someone committed to attend an event and did not show, Groundwork flags it automatically, on their contact record and in the organizer's queue. Over time, commitment history builds a real picture of reliability, depth of engagement, and readiness for leadership.</p>
+
+    <div class="screen-wrap">
+      <div class="screen-label">Commitment history — Maria Flores</div>
+      <div class="screen">
+        <div class="screen-bar">
+          <div class="screen-dot"></div><div class="screen-dot"></div><div class="screen-dot"></div>
+          <div class="screen-title">Commitments · Maria Flores</div>
+        </div>
+        <div class="screen-body">
+          <div class="commit-row">
+            <div class="commit-dot dot-kept"></div>
+            <div class="commit-text">Bring 5 people to March 14 training</div>
+            <div class="commit-status s-kept">Kept · 3/14</div>
+          </div>
+          <div class="commit-row">
+            <div class="commit-dot dot-kept"></div>
+            <div class="commit-text">Co-lead February house meeting</div>
+            <div class="commit-status s-kept">Kept · 2/22</div>
+          </div>
+          <div class="commit-row">
+            <div class="commit-dot dot-pending"></div>
+            <div class="commit-text">Recruit two members from St. James congregation</div>
+            <div class="commit-status s-pending">Due 3/21</div>
+          </div>
+          <div class="commit-row">
+            <div class="commit-dot dot-broken"></div>
+            <div class="commit-text">Attend January action planning session</div>
+            <div class="commit-status s-broken">Broken · needs follow-up</div>
+          </div>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;display:flex;gap:18px;">
+            <span style="color:#059669;font-weight:700;">2 kept</span>
+            <span style="color:#D97706;font-weight:700;">1 pending</span>
+            <span style="color:#DC2626;font-weight:700;">1 broken</span>
+            <span style="color:var(--gray);">67% completion</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EVENTS + QR -->
+  <div class="section">
+    <div class="section-label">Core Feature</div>
+    <h2>Event check-in: QR self-check and iPad roster mode</h2>
+
+    <p>Each event gets a unique QR code, printable or displayed at the door. Attendees scan, see their name pre-filled if registered, and tap once to confirm. Walk-ins type their name and email; Groundwork creates a new contact record automatically, flagged for follow-up, with the event as their first activity on record.</p>
+
+    <p>For organizers managing the door, iPad roster mode shows large-text attendee names with a single tap to check in. It works offline and syncs when connection is restored.</p>
+
+    <div class="screen-wrap">
+      <div class="screen-label">Event roster — iPad mode</div>
+      <div class="screen">
+        <div class="screen-bar">
+          <div class="screen-dot"></div><div class="screen-dot"></div><div class="screen-dot"></div>
+          <div class="screen-title">March Training · Check-in · 34 registered</div>
+        </div>
+        <div class="screen-body">
+          <div style="font-size:11px;color:var(--gray);margin-bottom:12px;display:flex;justify-content:space-between;">
+            <span>18 checked in · 16 remaining</span>
+            <span style="color:var(--teal);font-weight:600;">+ Add walk-in</span>
+          </div>
+          <div class="checkin-row">
+            <div><div class="checkin-name">Maria Flores</div><div class="checkin-sub">Northside · Core Leader</div></div>
+            <button class="checkin-btn btn-checked">Checked in 6:04pm</button>
+          </div>
+          <div class="checkin-row">
+            <div><div class="checkin-name">Bianca Edwards</div><div class="checkin-sub">Northside · Leader</div></div>
+            <button class="checkin-btn btn-checked">Checked in 6:11pm</button>
+          </div>
+          <div class="checkin-row">
+            <div><div class="checkin-name">James Okafor</div><div class="checkin-sub">Eastside · Leader</div></div>
+            <button class="checkin-btn btn-unchecked">Check in</button>
+          </div>
+          <div class="checkin-row">
+            <div><div class="checkin-name">David Lapp</div><div class="checkin-sub">Southwest · Member</div></div>
+            <button class="checkin-btn btn-unchecked">Check in</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WEEKLY REFLECTION -->
+  <div class="section">
+    <div class="section-label">Core Feature</div>
+    <h2>Weekly organizer reflection: a practice, not a report</h2>
+
+    <p>The weekly reflection is where organizing learning lives. It is where someone notices that a team imploded because of a relationship gap, or that a leader is ready for more, or that they have been avoiding a hard conversation. That learning currently evaporates or sits in a Google Doc no one revisits.</p>
+
+    <p>Groundwork's weekly reflection arrives Friday afternoon as a push notification. It pre-populates the week's activity automatically: events run, 1-on-1s logged, commitments followed up, new contacts added. The organizer fills in the human parts. All fields are voice-enabled.</p>
+
+    <div class="screen-wrap">
+      <div class="screen-label">Weekly reflection — submitted memo</div>
+      <div class="screen">
+        <div class="screen-bar">
+          <div class="screen-dot"></div><div class="screen-dot"></div><div class="screen-dot"></div>
+          <div class="screen-title">Weekly Reflection · Troy Jackson · March 7, 2026</div>
+        </div>
+        <div class="screen-body">
+          <div class="reflection-field">
+            <div class="reflection-label">Headline</div>
+            <div class="reflection-value">Breakthrough with the Northside team. Maria co-led the house meeting and crushed it.</div>
+          </div>
+          <div class="reflection-field">
+            <div class="reflection-label">Risks taken</div>
+            <div class="reflection-value">Pushed Maria to co-lead before I felt certain she was ready. She was.</div>
+          </div>
+          <div class="reflection-field">
+            <div class="reflection-label">Risks not taken</div>
+            <div class="reflection-value">Still avoiding the hard conversation with James about his follow-through on commitments.</div>
+          </div>
+          <div class="reflection-field">
+            <div class="reflection-label">What I'm learning</div>
+            <div class="reflection-value">The leaders who are ready for more will tell you, if you're listening for it.</div>
+          </div>
+          <div class="reflection-field">
+            <div class="reflection-label">Reading / Listening</div>
+            <div class="reflection-value">The Great American City (Sampson). Thinking about neighborhood effects and our district work.</div>
+          </div>
+          <div class="reflection-field">
+            <div class="reflection-label">Energy this week</div>
+            <div class="energy-bar">
+              <div class="e-pip e-on"></div><div class="e-pip e-on"></div><div class="e-pip e-on"></div><div class="e-pip e-on"></div><div class="e-pip e-off"></div>
+            </div>
+          </div>
+          <div class="coach-comment">
+            <strong>Supervisor/Coach — Joy</strong>
+            "You took a real risk with Maria and it paid off. What did you see in her that made you believe she was ready? And: what is James getting out of letting himself off the hook?"
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p>On submission, Groundwork auto-formats the inputs into a readable weekly memo and pushes it to the supervisor or coach. They leave a brief comment; the organizer receives it as a notification. A lightweight coaching loop that currently requires significant manual discipline to maintain.</p>
+  </div>
+
+  <!-- COMPARISON -->
+  <div class="section">
+    <div class="section-label">Why Groundwork</div>
+    <h2>What changes</h2>
+
+    <table class="compare">
+      <thead>
+        <tr>
+          <th></th>
+          <th class="ea">EveryAction / Bonterra</th>
+          <th class="gw">Groundwork</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Monthly cost</td><td class="ea">$500–2,000+</td><td class="gw">$50–200</td></tr>
+        <tr><td>Data ownership</td><td class="ea">Vendor (PE-owned)</td><td class="gw"><span class="yes">100% yours</span></td></tr>
+        <tr><td>Voice 1-on-1 notes</td><td class="ea"><span class="no">No</span></td><td class="gw"><span class="yes">Yes, with AI extraction</span></td></tr>
+        <tr><td>Commitment tracking</td><td class="ea"><span class="no">No</span></td><td class="gw"><span class="yes">Yes, with auto-flag</span></td></tr>
+        <tr><td>Weekly reflection</td><td class="ea"><span class="no">No</span></td><td class="gw"><span class="yes">Yes, with coaching loop</span></td></tr>
+        <tr><td>QR event check-in</td><td class="ea">Limited</td><td class="gw"><span class="yes">Yes, self-check and iPad roster</span></td></tr>
+        <tr><td>Engagement activity view</td><td class="ea"><span class="no">No</span></td><td class="gw"><span class="yes">Yes, contribution-graph style</span></td></tr>
+        <tr><td>Feature roadmap control</td><td class="ea">Vendor decides</td><td class="gw"><span class="yes">You decide</span></td></tr>
+        <tr><td>Onboarding support</td><td class="ea">Variable</td><td class="gw"><span class="yes">Forward-deployed engineer</span></td></tr>
+        <tr><td>Cross-org learning</td><td class="ea">No</td><td class="gw"><span class="yes">Optional, opt-in data agreement</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ROLLOUT -->
+  <div class="section">
+    <div class="section-label">Rollout</div>
+    <h2>How organizations get access</h2>
+
+    <p>Groundwork operates as a shared platform. Organizations receive a subdomain, admin credentials, and onboarding support from a forward-deployed engineer who helps configure fields, map existing data, and train staff. No organization needs to manage servers or write code.</p>
+
+    <div class="callout teal">
+      <h4>Rollout sequence</h4>
+      <ul>
+        <li><strong>Alpha (Months 1–2):</strong> 1–2 partner organizations. Real data, honest feedback, fix what breaks.</li>
+        <li><strong>Beta (Months 3–4):</strong> 5–10 organizations. Shared support channel. Learn what confuses people.</li>
+        <li><strong>Field launch (Month 6+):</strong> Open to partner organizations in the network. Onboarding with engineer support.</li>
+        <li><strong>Optional shared data agreement (fully opt-in):</strong> Organizations that choose to participate in a deidentified data use agreement gain access to field-wide benchmarks and cross-org insights. This supports independent academic research and field-wide learning. It is entirely optional, requires a signed agreement, involves only deidentified data, and has no bearing on access to the platform itself.</li>
+      </ul>
+    </div>
+
+    <p>Organizations that opt into the shared data agreement gain access to participation benchmarks, retention patterns, and leadership density comparisons across the field — something no individual organization can generate alone. Participation is entirely voluntary, governed by a signed data use agreement, and involves only deidentified data shared for independent academic research. It is separate from the platform and has no effect on any organization's access to Groundwork.</p>
+  </div>
+
+  <!-- SECURITY -->
+  <div class="section">
+    <div class="section-label">Non-Negotiable</div>
+    <h2>Security</h2>
+
+    <p>Organizing contact databases are high-value targets. They contain home addresses, political affiliations, participation records, and in some cases immigration status or other sensitive personal information. A breach harms real people and damages organizational trust for years. Security in Groundwork is not a feature. It is a foundation.</p>
+
+    <div class="callout indigo">
+      <h4>Security architecture</h4>
+      <ul>
+        <li><strong>Row-level security enforced at the database layer.</strong> Supabase enforces that users can only access records their role permits, at the Postgres level, not just in the application. Even if the app layer has a bug, the database will not return unauthorized data.</li>
+        <li><strong>Multi-factor authentication required for all staff accounts.</strong> Magic link login plus MFA is the default. Passwords alone are not permitted for staff-level access.</li>
+        <li><strong>Role-based access control.</strong> Admin, Staff, Volunteer Leader, and View-Only roles with field-level permissions. Volunteers can see contact names but not notes or leadership scores.</li>
+        <li><strong>All data encrypted at rest and in transit.</strong> AES-256 at rest, TLS 1.3 in transit. Automated daily backups with point-in-time recovery.</li>
+        <li><strong>Full audit log.</strong> Every data modification is logged with user ID, timestamp, and before/after values. Bulk exports are logged and restricted to admin roles.</li>
+        <li><strong>Offboarding protocol.</strong> When staff leave, accounts are deactivated immediately. Access is not dependent on individuals remembering to act.</li>
+        <li><strong>Organizational isolation.</strong> Each organization's data is fully isolated from every other organization's data at the database level. Multi-tenant architecture enforces this automatically.</li>
+      </ul>
+    </div>
+
+    <p>Groundwork is designed so that organizers can trust it with the most sensitive information they hold about the people with whom they work.</p>
+  </div>
+
+</div>
+
+<div class="doc-footer">
+  <strong>GROUNDWORK</strong>
+  March 2026 · Confidential Draft<br><br>
+  To learn more or get in touch:<br>
+  Elizabeth McKenna · <a href="/cdn-cgi/l/email-protection#73161f1a09121116071b1e101833141e121a1f5d101c1e" style="color:rgba(255,255,255,0.6);"><span 
