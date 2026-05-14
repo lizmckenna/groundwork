@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Groundwork — MOI Pilot · Missouri</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg-primary: #0a0a0b;
+    --bg-secondary: #111113;
+    --bg-elevated: #18181b;
+    --bg-hover: #1f1f23;
+    --accent: #5371ff;
+    --accent-muted: #4361ee;
+    --accent-glow: rgba(83, 113, 255, 0.15);
+    --accent-subtle: rgba(83, 113, 255, 0.08);
+    --text-primary: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-tertiary: #71717a;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --error: #ef4444;
+    --prospect: #71717a;
+    --supporter: #5371ff;
+    --leader: #f59e0b;
+    --core-leader: #ef4444;
+    --border: rgba(255, 255, 255, 0.06);
+    --border-hover: rgba(255, 255, 255, 0.1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  a { color: inherit; text-decoration: none; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); }
+  .container { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
+
+  /* Header */
+  header.site {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(10,10,11,0.85);
+    backdrop-filter: blur(10px);
+  }
+  .site-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand svg { flex-shrink: 0; }
+  .brand-name { font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
+  .brand-sub { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 2px; }
+  header nav a {
+    font-size: 13px; color: var(--text-secondary);
+    margin-left: 28px; transition: color 0.15s;
+  }
+  header nav a:hover { color: var(--text-primary); }
+
+  /* Hero */
+  .hero { padding: 80px 0 56px; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--accent); margin-bottom: 20px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .eyebrow::before { content:''; width: 24px; height: 1px; background: var(--accent); }
+  h1 { font-size: clamp(40px, 5vw, 64px); font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; margin-bottom: 20px; }
+  h1 em { font-style: italic; color: var(--accent); font-weight: 400; }
+  .lede { font-size: 18px; color: var(--text-secondary); max-width: 640px; line-height: 1.55; }
+
+  /* Stats strip */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    margin: 56px 0 0;
+  }
+  .stat {
+    padding: 24px 20px;
+    border-right: 1px solid var(--border);
+  }
+  .stat:last-child { border-right: none; }
+  .stat-n { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); }
+  .stat-l { display: block; margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-tertiary); }
+  .stat .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 2px; }
+
+  /* Primary CTA card */
+  section.cta {
+    margin: 56px 0;
+    padding: 48px;
+    background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg-secondary) 100%);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 48px;
+    align-items: center;
+  }
+  section.cta h2 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 12px; line-height: 1.15; }
+  section.cta p { color: var(--text-secondary); font-size: 15px; max-width: 480px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 14px 24px;
+    background: var(--accent);
+    color: white;
+    border-radius: 10px;
+    font-weight: 500;
+    font-size: 15px;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
+    box-shadow: 0 0 0 1px var(--accent-muted), 0 8px 24px -8px var(--accent-glow);
+  }
+  .btn:hover { background: var(--accent-muted); }
+  .btn:active { transform: translateY(1px); }
+  .btn svg { width: 16px; height: 16px; }
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-hover);
+    box-shadow: none;
+  }
+  .btn-secondary:hover { background: var(--bg-hover); }
+  .cta-actions { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+  .cta-actions .btn { width: 100%; max-width: 320px; justify-content: center; }
+
+  /* Section heads */
+  .section-head {
+    margin: 72px 0 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .section-head h3 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+
+  /* Ladder cards */
+  .ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .ladder-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 20px;
+    transition: border-color 0.15s, transform 0.05s;
+  }
+  .ladder-card:hover { border-color: var(--border-hover); }
+  .ladder-card .dot { width: 10px; height: 10px; border-radius: 50%; margin-bottom: 14px; }
+  .ladder-card .nm { font-size: 14px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 8px; }
+  .ladder-card .desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 14px; }
+  .ladder-card .cnt { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.08em; }
+  .ladder-card .cnt b { color: var(--text-primary); font-weight: 600; }
+
+  /* Views grid */
+  .views { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .view-link {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .view-link:hover { background: var(--bg-hover); border-color: var(--border-hover); }
+  .view-link .vn { font-size: 14px; font-weight: 500; }
+  .view-link .vd { display: block; margin-top: 3px; font-size: 12px; color: var(--text-tertiary); font-weight: 400; }
+  .view-link svg { width: 16px; height: 16px; color: var(--text-tertiary); flex-shrink: 0; margin-left: 12px; }
+
+  /* Onboarding section */
+  .onboard {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+  }
+  .onboard h4 { font-size: 16px; font-weight: 600; margin-bottom: 18px; letter-spacing: -0.005em; }
+  .onboard ol { list-style: none; counter-reset: step; padding: 0; }
+  .onboard ol li {
+    counter-increment: step;
+    padding: 14px 0 14px 44px;
+    position: relative;
+    border-top: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+  .onboard ol li:first-child { border-top: none; padding-top: 4px; }
+  .onboard ol li::before {
+    content: counter(step, decimal-leading-zero);
+    position: absolute; left: 0; top: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    font-weight: 500;
+  }
+  .onboard ol li:first-child::before { top: 4px; }
+  .onboard ol li b { color: var(--text-primary); font-weight: 500; }
+
+  /* Footer */
+  footer {
+    margin-top: 96px;
+    padding: 40px 0 56px;
+    border-top: 1px solid var(--border);
+    color: var(--text-tertiary);
+    font-size: 13px;
+  }
+  footer .container { display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; }
+  footer a { color: var(--text-secondary); }
+  footer a:hover { color: var(--text-primary); }
+
+  /* Pilot note banner */
+  .pilot-banner {
+    background: var(--accent-subtle);
+    border: 1px solid var(--accent-muted);
+    border-radius: 10px;
+    padding: 14px 20px;
+    margin: 40px 0 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .pilot-banner b { color: var(--accent); font-weight: 600; }
+
+  @media (max-width: 768px) {
+    .container { padding: 0 20px; }
+    .hero { padding: 48px 0 32px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .stat:nth-child(2) { border-right: none; }
+    .stat:nth-child(odd) { border-right: 1px solid var(--border); }
+    section.cta { grid-template-columns: 1fr; padding: 32px; gap: 24px; }
+    .ladder { grid-template-columns: repeat(2, 1fr); }
+    .views { grid-template-columns: 1fr; }
+    header nav { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="container site-inner">
+    <a class="brand" href="/groundwork/">
+      <svg viewBox="0 0 100 100" width="32" height="32" aria-hidden="true">
+        <circle cx="50" cy="50" r="6" fill="#5371ff"/>
+        <circle cx="50" cy="25" r="4" fill="#5371ff"/>
+        <circle cx="71.65" cy="37.5" r="4" fill="#5371ff"/>
+        <circle cx="71.65" cy="62.5" r="4" fill="#5371ff"/>
+        <circle cx="50" cy="75" r="4" fill="#5371ff"/>
+        <circle cx="28.35" cy="62.5" r="4" fill="#5371ff"/>
+        <circle cx="28.35" cy="37.5" r="4" fill="#5371ff"/>
+        <line x1="50" y1="50" x2="50" y2="25" stroke="#5371ff" stroke-width="1.5"/>
+        <line x1="50" y1="50" x2="71.65" y2="37.5" stroke="#5371ff" stroke-width="1.5"/>
+        <line x1="50" y1="50" x2="71.65" y2="62.5" stroke="#5371ff" stroke-width="1.5"/>
+        <line x1="50" y1="50" x2="50" y2="75" stroke="#5371ff" stroke-width="1.5"/>
+        <line x1="50" y1="50" x2="28.35" y2="62.5" stroke="#5371ff" stroke-width="1.5"/>
+        <line x1="50" y1="50" x2="28.35" y2="37.5" stroke="#5371ff" stroke-width="1.5"/>
+        <circle cx="50" cy="10" r="2.5" fill="#5371ff" opacity="0.6"/>
+        <circle cx="85" cy="30" r="2.5" fill="#5371ff" opacity="0.6"/>
+        <circle cx="85" cy="70" r="2.5" fill="#5371ff" opacity="0.6"/>
+        <circle cx="50" cy="90" r="2.5" fill="#5371ff" opacity="0.6"/>
+        <circle cx="15" cy="70" r="2.5" fill="#5371ff" opacity="0.6"/>
+        <circle cx="15" cy="30" r="2.5" fill="#5371ff" opacity="0.6"/>
+      </svg>
+      <div>
+        <span class="brand-name">Groundwork</span>
+        <small class="brand-sub">MOI Pilot · Statewide Missouri</small>
+      </div>
+    </a>
+    <nav>
+      <a href="#dashboard">Dashboard</a>
+      <a href="#ladder">Leader ladder</a>
+      <a href="#views">Views</a>
+      <a href="#onboard">How to use</a>
+    </nav>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="hero">
+    <div class="eyebrow">Pilot dashboard · Missouri</div>
+    <h1>Organizing technology<br>built <em>by</em> and <em>for</em> organizers.</h1>
+    <p class="lede">The working dashboard for the MOI pilot — statewide Missouri base list, seeded from KCPS Parent Power sign-ups. One contact list, one organizer view, real outreach tracking. Replaces the 40-tab spreadsheet.</p>
+
+    <div class="pilot-banner">
+      <b>Pilot phase</b>
+      <span>Data layer runs on Airtable while we build out Groundwork's native interface. Everything tracked here transfers cleanly when we cut over.</span>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-n">1,386</div><span class="stat-l">Contacts</span></div>
+      <div class="stat"><div class="stat-n">2,253</div><span class="stat-l">Recorded touches</span></div>
+      <div class="stat"><div class="stat-n">38</div><span class="stat-l">Events captured</span></div>
+      <div class="stat"><div class="stat-n">32</div><span class="stat-l">Initial leaders</span></div>
+      <div class="stat"><div class="stat-n">711</div><span class="stat-l">Supporters</span></div>
+    </div>
+  </section>
+
+  <section class="cta" id="dashboard">
+    <div>
+      <h2>Open your dashboard</h2>
+      <p>Your default view shows every contact assigned to you, sorted by engagement, with last conversation date and your planned next step on each row. Calls and texts get logged from the contact's record.</p>
+    </div>
+    <div class="cta-actions">
+      <a class="btn" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
+        Open Airtable dashboard
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17l10-10M7 7h10v10"/></svg>
+      </a>
+      <a class="btn btn-secondary" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
+        Add a new contact
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      </a>
+    </div>
+  </section>
+
+  <div class="section-head" id="ladder">
+    <h3>Leader ladder</h3>
+    <span class="mono">Drag people up as they grow</span>
+  </div>
+  <div class="ladder">
+    <div class="ladder-card">
+      <div class="dot" style="background: var(--prospect);"></div>
+      <div class="nm">Prospect</div>
+      <div class="desc">Signed something, attended one event in the past year.</div>
+      <div class="cnt"><b>643</b> · current</div>
+    </div>
+    <div class="ladder-card">
+      <div class="dot" style="background: var(--supporter);"></div>
+      <div class="nm">Supporter</div>
+      <div class="desc">Attends regularly — more than once a year.</div>
+      <div class="cnt"><b>711</b> · current</div>
+    </div>
+    <div class="ladder-card">
+      <div class="dot" style="background: var(--leader);"></div>
+      <div class="nm">Leader</div>
+      <div class="desc">Carries tasks, has built a following.</div>
+      <div class="cnt"><b>32</b> · current</div>
+    </div>
+    <div class="ladder-card">
+      <div class="dot" style="background: var(--core-leader);"></div>
+      <div class="nm">Core Leader</div>
+      <div class="desc">Develops other leaders, builds teams.</div>
+      <div class="cnt"><b>0</b> · designate manually</div>
+    </div>
+  </div>
+
+  <div class="section-head" id="views">
+    <h3>Quick views</h3>
+    <span class="mono">Saved filters in your base</span>
+  </div>
+  <div class="views">
+    <a class="view-link" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
+      <div>
+        <span class="vn">Unattempted</span>
+        <span class="vd">Fresh names you haven't reached yet</span>
+      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    </a>
+    <a class="view-link" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
+      <div>
+        <span class="vn">Attempted, no conversation</span>
+        <span class="vd">Left voicemail or no answer — try again</span>
+      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    </a>
+    <a class="view-link" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
+      <div>
+        <span class="vn">Had conversation</span>
+        <span class="vd">Spoken to — pending an ask</span>
+      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    </a>
+    <a class="view-link" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
+      <div>
+        <span class="vn">Committed</span>
+        <span class="vd">Yes-es on the books</span>
+      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    </a>
+    <a class="view-link" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
+      <div>
+        <span class="vn">By leader ladder</span>
+        <span class="vd">Kanban — drag people between tiers</span>
+      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    </a>
+    <a class="view-link" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
+      <div>
+        <span class="vn">Next-step queue</span>
+        <span class="vd">Where you left off, oldest first</span>
+      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    </a>
+  </div>
+
+  <div class="section-head" id="onboard">
+    <h3>How to use it</h3>
+    <span class="mono">20-minute walkthrough</span>
+  </div>
+  <div class="onboard">
+    <h4>The everyday flow</h4>
+    <ol>
+      <li><b>Open Unattempted.</b> Pick three names. Don't agonize — these are people who already raised their hand.</li>
+      <li><b>Call or text.</b> Use your phone. When you're done with each one, find them in Airtable and tap "+ Touches" on their record.</li>
+      <li><b>Log what happened.</b> Method (call/text), Result (no answer, voicemail, conversation, committed), one line of Notes if the call had texture. Takes 20 seconds.</li>
+      <li><b>If you made an ask</b> — separate from logging the call — open "+ Asks" on the same record. Type the ask. Mark outcome: Pending, Committed, Declined.</li>
+      <li><b>Set the next step.</b> One sentence in the Next Step field. Future-you will thank past-you.</li>
+      <li><b>Move people on the ladder</b> as you go. Talked to a Prospect who's coming to two more events? Bump them to Supporter. Talked to a Supporter who's recruiting friends? Bump them to Leader.</li>
+      <li><b>End of week,</b> open By Leader Ladder. Look at the shape. Where is the pipeline thin? Where are people stuck?</li>
+    </ol>
+  </div>
+
+</main>
+
+<footer>
+  <div class="container">
+    <div>Groundwork — Missouri pilot · launched May 2026 · seeded with KCPS Parent Power list</div>
+    <div><a href="mailto:emckenna@hks.harvard.edu">emckenna@hks.harvard.edu</a></div>
+  </div>
+</footer>
+
+</body>
+</html>
