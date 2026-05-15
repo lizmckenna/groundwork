@@ -622,6 +622,7 @@ function renderQueue() {
   queue.forEach((c, i) => {
     const row = document.createElement('div');
     row.className = 'queue-row';
+    if (savedIds.has(c.id)) row.classList.add('row-complete');
     row.dataset.idx = i;
     row.dataset.contactId = c.id;
     row.innerHTML = `
@@ -776,7 +777,28 @@ async function submitRow(row) {
   }
 }
 
-fetchNextBatch();
+// Load today's saved actions BEFORE first batch, so reload preserves the view
+loadTodayStats().then(() => fetchNextBatch());
+
+async function loadTodayStats() {
+  try {
+    const res = await fetch(`${WORKER}/today-stats`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const dots = document.querySelectorAll('#grid .dot');
+    for (const action of (data.actions || [])) {
+      const gridIdx = nextGridIdx;
+      nextGridIdx++;
+      sessionActions.push({ ...action, gridIdx });
+      savedIds.add(action.contact_id);
+      const state = action.outcome || 'attempted';
+      if (dots[gridIdx]) dots[gridIdx].dataset.s = state;
+    }
+    recomputeMetrics();
+  } catch (e) {
+    console.error('Failed to load today stats', e);
+  }
+}
 
 // Batch nav wiring
 document.getElementById('batch-prev').addEventListener('click', () => {
