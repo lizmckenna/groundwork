@@ -15,7 +15,7 @@
     --bg-elevated: #f4f4f5;
     --bg-hover: #ececef;
     --gw-purple: #5371ff;
-    --gw-purple-light: #6d28d9;
+    --gw-purple-light: #5371ff;
     --gw-purple-dim: rgba(83,113,255,0.12);
     --gw-purple-soft: rgba(83,113,255,0.08);
     --gw-green: #16a34a;
@@ -25,7 +25,7 @@
     --t-prospect: #71717a;
     --t-supporter: #d97706;
     --t-leader: #db2777;
-    --t-core: #6331ae;
+    --t-core: #5371ff;
     --dot-empty-border: #d4d4d8;
     --dot-grey: #a1a1aa;
     --dot-light-purple: #a78bfa;
@@ -940,14 +940,12 @@ async function undoSave(row) {
     savedIds.delete(row.dataset.contactId);
     status.textContent = '';
     status.style.color = 'var(--text-tertiary)';
-    // Pull this action out of sessionActions, clear its grid square
-    const idx = sessionActions.findIndex(a => a.contact_id === row.dataset.contactId);
-    if (idx !== -1) {
-      const action = sessionActions[idx];
-      sessionActions.splice(idx, 1);
-      const dots = document.querySelectorAll('#grid .dot');
-      if (dots[action.gridIdx]) dots[action.gridIdx].removeAttribute('data-s');
-    }
+    // Full resync from server: clear local state, reload today's truth
+    sessionActions.length = 0;
+    nextGridIdx = 0;
+    savedIds.clear();
+    document.querySelectorAll('#grid .dot').forEach(d => d.removeAttribute('data-s'));
+    await loadTodayStats();
     recomputeMetrics();
     updateBatchNav();
   } catch (e) {
