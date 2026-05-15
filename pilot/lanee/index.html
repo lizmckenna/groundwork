@@ -487,14 +487,14 @@
   }
 })();
 
-// === Real hot prospects pulled from Airtable (placeholder zero state) ===
-const queue = [
-  { name: 'Kaitlyn Crotty',     meta: 'Parent · KCPS',     signal: '2 events attended',  phone: '(816) 273-7111', email: 'katemcrotty@gmail.com' },
-  { name: 'Andrea Brown',       meta: 'Educator · KCPS',   signal: '2 events attended',  phone: '(816) 328-4824', email: 'abrown3@kcpublicschools.org' },
-  { name: 'Kelley Coquillette', meta: 'Parent',            signal: '2 events attended',  phone: '(913) 219-1628', email: 'kelleycoq@gmail.com' },
-  { name: 'Kelly Anthony',      meta: 'Parent',            signal: '2 events attended',  phone: '(816) 812-0952', email: 'kanthony1108@hotmail.com' },
-  { name: 'Benjamin Roesler',   meta: 'Garfield/Pendleton', signal: 'recruited by network', phone: '(804) 909-1511', email: 'benjamin_roesler@yahoo.com' },
-];
+// === Live Airtable wiring via Cloudflare Worker ===
+const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
+let queue = [];
+
+function phoneToTel(p) {
+  const d = (p || '').replace(/\D/g, '');
+  return d.length >= 10 ? `+1${d.slice(-10)}` : '';
+}
 
 // Next-step options conditional on outcome (key matches outcome combo)
 const NEXT_STEP_OPTIONS = {
@@ -527,41 +527,153 @@ const NEXT_STEP_OPTIONS = {
 };
 
 const qhost = document.getElementById('queue');
-queue.forEach((c, i) => {
-  const row = document.createElement('div');
-  row.className = 'queue-row';
-  row.dataset.idx = i;
-  row.innerHTML = `
-    <div class="qmain">
-      <span class="qnum">${String(i+1).padStart(2,'0')}</span>
-      <div class="qperson">
-        <div class="qname">${c.name}</div>
-        <div class="qmeta">${c.meta}</div>
-        <span class="qsignal">${c.signal}</span>
+
+function metaLine(c) {
+  const parts = [];
+  if (c.school) parts.push(c.school);
+  if (c.district) parts.push(c.district);
+  return parts.join(' · ') || '—';
+}
+function signalLine(c) {
+  if (c.recruited_by_count > 0) return 'in network · recruited';
+  if (c.log_count > 1) return `${c.log_count} prior events`;
+  return 'hot lead';
+}
+function contactLinks(c) {
+  const tel = phoneToTel(c.phone);
+  const phoneHtml = c.phone
+    ? (tel
+        ? `<div><a href="tel:${tel}" style="color:var(--gw-purple-light)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--gw-purple-light)">text</a></div>`
+        : `<div>${c.phone}</div>`)
+    : '';
+  const emailHtml = c.email
+    ? `<div><a href="mailto:${c.email}" style="color:var(--gw-purple-light)">${c.email}</a></div>`
+    : '';
+  return phoneHtml + emailHtml || '<div style="color:var(--text-tertiary)">no contact info</div>';
+}
+
+function renderQueue() {
+  qhost.innerHTML = '';
+  if (queue.length === 0) {
+    qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">No hot prospects available right now.</div>`;
+    return;
+  }
+  queue.forEach((c, i) => {
+    const row = document.createElement('div');
+    row.className = 'queue-row';
+    row.dataset.idx = i;
+    row.dataset.contactId = c.id;
+    row.innerHTML = `
+      <div class="qmain">
+        <span class="qnum">${String(i+1).padStart(2,'0')}</span>
+        <div class="qperson">
+          <div class="qname">${c.name || '(no name)'}</div>
+          <div class="qmeta">${metaLine(c)}</div>
+          <span class="qsignal">${signalLine(c)}</span>
+        </div>
+        <div class="qcontact">${contactLinks(c)}</div>
+        <div class="qchecks">
+          <label class="qcheck grey"><input type="checkbox" data-outcome="called"> Called</label>
+          <label class="qcheck grey"><input type="checkbox" data-outcome="texted"> Texted</label>
+          <label class="qcheck grey"><input type="checkbox" data-outcome="emailed"> Emailed</label>
+          <label class="qcheck light-purple"><input type="checkbox" data-outcome="connected"> Connected</label>
+          <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up"> Signed up</label>
+          <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
+        </div>
       </div>
-      <div class="qcontact"><div>${c.phone}</div><div>${c.email}</div></div>
-      <div class="qchecks">
-        <label class="qcheck grey"><input type="checkbox" data-outcome="call"> Called</label>
-        <label class="qcheck grey"><input type="checkbox" data-outcome="text"> Texted</label>
-        <label class="qcheck grey"><input type="checkbox" data-outcome="email"> Emailed</label>
-        <label class="qcheck light-purple"><input type="checkbox" data-outcome="connected"> Connected</label>
-        <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up"> Signed up</label>
-        <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
+      <div class="qnextstep">
+        <span class="qnext-label">Next step</span>
+        <div>
+          <select class="qnext-select">
+            <option value="">Choose a next step...</option>
+          </select>
+          <input type="text" class="qfree" placeholder="Type your own next step...">
+          <div class="qmissing-flag">⚐ A next step is required when you connect</div>
+          <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
+            <button class="qsave-btn" style="padding:8px 16px;border-radius:6px;background:var(--gw-purple);color:white;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">Save outcome</button>
+            <span class="qsave-status" style="font-size:12px;color:var(--text-tertiary);"></span>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="qnextstep">
-      <span class="qnext-label">Next step</span>
-      <div>
-        <select class="qnext-select">
-          <option value="">Choose a next step...</option>
-        </select>
-        <input type="text" class="qfree" placeholder="Type your own next step...">
-        <div class="qmissing-flag">⚐ A next step is required when you connect</div>
-      </div>
-    </div>
-  `;
-  qhost.appendChild(row);
-});
+    `;
+    qhost.appendChild(row);
+    // Wire events for this row
+    row.querySelectorAll('.qcheck input').forEach(input => {
+      input.addEventListener('change', () => updateRow(row));
+    });
+    const select = row.querySelector('.qnext-select');
+    const freebox = row.querySelector('.qfree');
+    select?.addEventListener('change', () => updateRow(row));
+    freebox?.addEventListener('input', () => updateRow(row));
+    row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row));
+  });
+}
+
+async function fetchQueue() {
+  try {
+    qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading prospects…</div>`;
+    const res = await fetch(`${WORKER}/prospects?n=5`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    queue = await res.json();
+    renderQueue();
+  } catch (e) {
+    qhost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load prospects: ${e.message}</div>`;
+  }
+}
+
+async function submitRow(row) {
+  const checks = {};
+  row.querySelectorAll('.qcheck input').forEach(i => { checks[i.dataset.outcome] = i.checked; });
+  const methods = ['called','texted','emailed'].filter(m => checks[m]);
+  let outcome = null;
+  if (checks.oneonone) outcome = 'oneonone';
+  else if (checks['signed-up']) outcome = 'signed-up';
+  else if (checks.connected) outcome = 'connected';
+  // next_step
+  const select = row.querySelector('.qnext-select');
+  const freebox = row.querySelector('.qfree');
+  const next_step = (select.value && !select.value.startsWith('Other'))
+    ? select.value
+    : (freebox.value || '').trim();
+  if (methods.length === 0) {
+    row.querySelector('.qsave-status').textContent = '✕ Check at least one Called/Texted/Emailed';
+    row.querySelector('.qsave-status').style.color = 'var(--gw-red)';
+    return;
+  }
+  if ((outcome === 'connected' || outcome === 'signed-up' || outcome === 'oneonone') && !next_step) {
+    row.querySelector('.qsave-status').textContent = '✕ Next step required for conversations';
+    row.querySelector('.qsave-status').style.color = 'var(--gw-red)';
+    return;
+  }
+  const body = {
+    contact_id: row.dataset.contactId,
+    methods, outcome, next_step,
+  };
+  const btn = row.querySelector('.qsave-btn');
+  const status = row.querySelector('.qsave-status');
+  btn.disabled = true;
+  status.textContent = 'Saving…';
+  status.style.color = 'var(--text-tertiary)';
+  try {
+    const res = await fetch(`${WORKER}/log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    status.textContent = `✓ Saved (${data.created_count} touch${data.created_count===1?'':'es'} logged)`;
+    status.style.color = 'var(--gw-green)';
+    btn.textContent = 'Saved';
+    setTimeout(() => fetchQueue(), 1500);
+  } catch (e) {
+    status.textContent = `✕ Save failed: ${e.message}`;
+    status.style.color = 'var(--gw-red)';
+    btn.disabled = false;
+  }
+}
+
+fetchQueue();
 
 // === Interaction logic ===
 function rankOutcome(checks) {
@@ -569,7 +681,7 @@ function rankOutcome(checks) {
   if (checks.oneonone) return 'oneonone';
   if (checks['signed-up']) return 'signed-up';
   if (checks.connected) return 'connected';
-  if (checks.call || checks.text || checks.email) return 'attempted';
+  if (checks.called || checks.texted || checks.emailed) return 'attempted';
   return null;
 }
 
@@ -626,7 +738,7 @@ function recomputeMetrics() {
   document.querySelectorAll('.queue-row').forEach(row => {
     const checks = {};
     row.querySelectorAll('.qcheck input').forEach(i => { checks[i.dataset.outcome] = i.checked; });
-    if (checks.call || checks.text || checks.email || checks.connected || checks['signed-up'] || checks.oneonone) attempts++;
+    if (checks.called || checks.texted || checks.emailed || checks.connected || checks['signed-up'] || checks.oneonone) attempts++;
     if (checks.connected || checks['signed-up'] || checks.oneonone) convos++;
     if (checks['signed-up']) signups++;
     if (checks.oneonone) oneones++;
@@ -650,17 +762,6 @@ function recomputeMetrics() {
   document.getElementById('flag-count').textContent = flagged;
   fc.classList.toggle('alert', flagged > 0);
 }
-
-// Wire up listeners
-document.querySelectorAll('.queue-row').forEach(row => {
-  row.querySelectorAll('.qcheck input').forEach(input => {
-    input.addEventListener('change', () => updateRow(row));
-  });
-  const select = row.querySelector('.qnext-select');
-  const freebox = row.querySelector('.qfree');
-  select?.addEventListener('change', () => updateRow(row));
-  freebox?.addEventListener('input', () => updateRow(row));
-});
 
 // Tabs
 document.querySelectorAll('.tab-nav a').forEach(a => {
