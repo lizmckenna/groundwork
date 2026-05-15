@@ -434,7 +434,7 @@
     <section class="hero">
       <div class="eyebrow">Confirmation calls · 5/26 Orientation</div>
       <h1>Lock in who's coming.</h1>
-      <p class="lede">Anyone who signed up for the 5/26 Orientation. Contact them 1-2 days before to confirm. The point isn't to re-pitch — it's to make sure they remember and feel expected.</p>
+      <p class="lede">Anyone who signed up for the 5/26 Orientation. Contact them 1-2 days before to confirm. Make sure they remember, answer last-minute questions, and feel expected.</p>
     </section>
 
     <div class="section-head">
@@ -497,17 +497,22 @@
     <div class="howto">
       <h3>The flow</h3>
       <ol>
-        <li><b>Two big cards = your scoreboard.</b> 5/26 sign-ups and 1-1s booked. Those are the only numbers that matter this week.</li>
-        <li><b>Outreach grid.</b> Empty squares = attempts you haven't made yet. Each call/text/email fills a square. Colors track the outcome.</li>
-        <li><b>Pick from "Up next."</b> Five hot prospects at a time — folks who already attended something or were recruited by someone in your network. They're easier wins.</li>
-        <li><b>Log outcomes by checking boxes.</b> You can check multiple. If they signed up AND booked a 1-1, check both. The grid square shows the strongest outcome (green wins).
-          <br>· <b>Attempted</b> — voicemail, no answer, wrong number
-          <br>· <b>Connected</b> — had a real conversation
-          <br>· <b>Signed up</b> — committed to 5/26 Orientation
-          <br>· <b>1-1 booked</b> — scheduled a 1-1</li>
-        <li><b>If you check Connected, Signed up, or 1-1 booked,</b> a next-step prompt appears. Pick from the dropdown or type your own. Required — this is the guard rail.</li>
-        <li><b>Flag counter at the bottom</b> goes red if you connected with someone but didn't log a next step. Fix those before new outreach.</li>
-        <li><b>Queue refreshes</b> with the next 5. Daily goal is 10 attempts.</li>
+        <li><b>Two big cards at the top are your scoreboard.</b> 5/26 sign-ups and 1-1s booked. Those are the only numbers that matter right now.</li>
+        <li><b>Outreach grid = today's attempts.</b> Empty squares are attempts you haven't made yet. Daily goal: 50. Each call/text/email fills a square. The color of the square tracks the outcome.</li>
+        <li><b>Pick from "Up next."</b> Five hot prospects at a time. They've either attended something before or been recruited by someone in your network — these are warmer leads.</li>
+        <li><b>Phone numbers and emails are clickable</b> — tap them on your laptop to dial via your phone (FaceTime/Phone Link) or open Messages/Mail.</li>
+        <li><b>Log outcomes with checkboxes.</b> You can check multiple. The grid square fills with the strongest outcome (green > dark purple > light purple > grey).
+          <br>· <b>Called / Texted / Emailed</b> — how you reached out. Multiple = a sequence (e.g. called, no answer, then texted)
+          <br>· <b>Connected</b> — you actually had a conversation
+          <br>· <b>Signed up</b> — they committed to the 5/26 Orientation
+          <br>· <b>1-1 booked</b> — you scheduled a 1-1 with them</li>
+        <li><b>If you check Connected, Signed up, or 1-1 booked,</b> a next-step prompt appears. Pick from the dropdown or type your own. Required when there's a conversation — this is the guard rail.</li>
+        <li><b>Hit "Save."</b> The row greys out, the grid fills, the metrics tick up.</li>
+        <li><b>Made a mistake or someone called you back?</b> Click a greyed-out row to reopen it.</li>
+        <li><b>Flag counter at the bottom</b> goes red if you connected but didn't log a next step. Fix those before new outreach.</li>
+        <li><b>When all 5 are done</b>, click <b>"Next 5 →"</b> for the next batch. The button enables once everyone in this batch has a save.</li>
+        <li><b>"← Previous 5"</b> appears once you've done a batch, so you can go back and adjust if needed.</li>
+        <li><b>5/26 confirmation calls</b> — once people start signing up, the "Confirm 5/26" tab fills up. Work that list 1-2 days before the event.</li>
       </ol>
     </div>
   </div>
@@ -692,6 +697,8 @@ function updateBatchNav() {
   const next = document.getElementById('batch-next');
   const info = document.getElementById('batch-info');
   if (!prev || !next || !info) return;
+  // Hide Previous on the first batch entirely
+  prev.style.display = currentBatchIdx > 0 ? 'inline-flex' : 'none';
   prev.disabled = currentBatchIdx <= 0;
   // Enable "Next 5" once all rows in the current batch are saved
   const current = batches[currentBatchIdx];
