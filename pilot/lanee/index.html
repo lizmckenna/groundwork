@@ -847,7 +847,40 @@ function optionsKey(checks) {
   return rankOutcome(checks);
 }
 
+async function undoSave(row) {
+  const status = row.querySelector('.qsave-status');
+  const saveBtn = row.querySelector('.qsave-btn');
+  status.textContent = 'Undoing…';
+  status.style.color = 'var(--text-tertiary)';
+  try {
+    const res = await fetch(`${WORKER}/undo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact_id: row.dataset.contactId }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.error || `HTTP ${res.status}`);
+    }
+    row.classList.remove('row-complete');
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save';
+    savedIds.delete(row.dataset.contactId);
+    status.textContent = '';
+    status.style.color = 'var(--text-tertiary)';
+    updateBatchNav();
+  } catch (e) {
+    status.textContent = `✕ Undo failed: ${e.message}`;
+    status.style.color = 'var(--gw-red)';
+  }
+}
+
 function updateRow(row) {
+  // If a saved row had a checkbox change, treat it as undo
+  if (row.classList.contains('row-complete')) {
+    undoSave(row);
+    return;
+  }
   const checks = {};
   row.querySelectorAll('.qcheck input').forEach(input => {
     checks[input.dataset.outcome] = input.checked;
