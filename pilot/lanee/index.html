@@ -204,6 +204,8 @@
   .qnextstep .qfree.show { display: block; }
   .qmissing-flag { display: none; }
   .queue-row.warn-no-next { border-left: 3px solid var(--gw-red); }
+  .queue-row.row-complete { opacity: 0.5; }
+  .queue-row.row-complete::before { content: '✓'; color: var(--gw-green); font-weight: bold; }
   .queue-row.warn-no-next .qmissing-flag {
     display: inline-flex; align-items: center; gap: 6px;
     font-size: 11px; color: var(--gw-red); margin-top: 8px;
@@ -683,11 +685,17 @@ async function submitRow(row, quickNoAnswer = false) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    status.textContent = quickNoAnswer ? '✓ Logged · next' : '✓ Saved';
+    status.textContent = quickNoAnswer ? '✓ Logged' : '✓ Saved';
     status.style.color = 'var(--gw-green)';
     saveBtn.textContent = 'Saved';
     savedIds.add(row.dataset.contactId);
-    setTimeout(() => fetchQueue(), quickNoAnswer ? 600 : 1500);
+    row.classList.add('row-complete');
+    // Only refresh queue once ALL 5 (or however many) are logged
+    const allRows = document.querySelectorAll('#queue .queue-row[data-contact-id]');
+    const allSaved = Array.from(allRows).every(r => savedIds.has(r.dataset.contactId));
+    if (allSaved) {
+      setTimeout(() => fetchQueue(), 1200);
+    }
   } catch (e) {
     status.textContent = `✕ Save failed: ${e.message}`;
     status.style.color = 'var(--gw-red)';
