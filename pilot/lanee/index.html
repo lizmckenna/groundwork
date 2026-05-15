@@ -919,16 +919,8 @@ async function undoSave(row) {
 }
 
 function updateRow(row) {
-  // If a saved row had a checkbox change, confirm before deleting the record
-  if (row.classList.contains('row-complete')) {
-    const ok = confirm("Unsave this entry? This will delete the record from Airtable. (Use this only to fix a mistake.)");
-    if (!ok) {
-      // Restore the checkbox they just unchecked by re-running render. Simpler: just don't undo.
-      return;
-    }
-    undoSave(row);
-    return;
-  }
+  // If a saved row, ignore checkbox changes — use the explicit Undo button instead
+  if (row.classList.contains('row-complete')) return;
   const checks = {};
   row.querySelectorAll('.qcheck input').forEach(input => {
     checks[input.dataset.outcome] = input.checked;
