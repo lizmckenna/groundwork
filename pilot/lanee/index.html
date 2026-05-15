@@ -743,10 +743,9 @@ function updateBatchNav() {
   // Hide Previous on the first batch entirely
   prev.style.display = currentBatchIdx > 0 ? 'inline-flex' : 'none';
   prev.disabled = currentBatchIdx <= 0;
-  // Enable "Next 5" once all rows in the current batch are saved
   const current = batches[currentBatchIdx];
-  const allDone = current && current.contacts.every(c => savedIds.has(c.id));
-  next.disabled = !allDone;
+  // Allow paging forward at any time, even if not all saved
+  next.disabled = false;
   next.textContent = (currentBatchIdx < batches.length - 1) ? 'Forward →' : 'Next 5 →';
   const doneCount = current ? current.contacts.filter(c => savedIds.has(c.id)).length : 0;
   const total = current ? current.contacts.length : 0;
