@@ -204,8 +204,29 @@
   .qnextstep .qfree.show { display: block; }
   .qmissing-flag { display: none; }
   .queue-row.warn-no-next { border-left: 3px solid var(--gw-red); }
-  .queue-row.row-complete { opacity: 0.5; }
-  .queue-row.row-complete::before { content: '✓'; color: var(--gw-green); font-weight: bold; }
+  .queue-row.row-complete {
+    opacity: 0.5;
+    background: rgba(34,197,94,0.04);
+    border-left: 3px solid var(--gw-green);
+    cursor: pointer;
+  }
+  .queue-row.row-complete:hover { opacity: 0.8; }
+  .queue-row.row-complete .qname { text-decoration: line-through; }
+  .queue-row.row-complete .qname::after { content: ' · DONE'; font-size: 10px; color: var(--gw-green); font-weight: 600; letter-spacing: 0.08em; text-decoration: none; vertical-align: 1px; }
+
+  /* Batch nav */
+  .batch-nav {
+    display: flex; gap: 12px; justify-content: space-between; align-items: center;
+    margin-top: 16px; padding: 16px 0; border-top: 1px solid var(--border);
+  }
+  .batch-nav button {
+    padding: 10px 18px; border-radius: 8px;
+    background: var(--gw-purple); color: white; border: none;
+    font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;
+  }
+  .batch-nav button:disabled { background: var(--bg-elevated); color: var(--text-tertiary); cursor: not-allowed; }
+  .batch-nav button.secondary { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-hover); }
+  .batch-nav .batch-info { font-size: 12px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; }
   .queue-row.warn-no-next .qmissing-flag {
     display: inline-flex; align-items: center; gap: 6px;
     font-size: 11px; color: var(--gw-red); margin-top: 8px;
@@ -386,6 +407,12 @@
     </div>
     <div class="queue-wrap" id="queue"></div>
 
+    <div class="batch-nav">
+      <button id="batch-prev" class="secondary" disabled>← Previous 5</button>
+      <span class="batch-info" id="batch-info">Batch 1 · 0 of 5 done</span>
+      <button id="batch-next" disabled>Next 5 →</button>
+    </div>
+
     <div class="flag-counter" id="flag-counter">
       <div class="fl-left">
         <div class="fl-icon">⚐</div>
@@ -510,6 +537,8 @@
 const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
 let queue = [];
 const savedIds = new Set();  // contacts logged in this session, don't re-show
+const batches = [];           // history of batches she's worked through
+let currentBatchIdx = -1;     // which batch she's currently viewing
 
 function phoneToTel(p) {
   const d = (p || '').replace(/\D/g, '');
@@ -629,18 +658,45 @@ function renderQueue() {
   });
 }
 
-async function fetchQueue() {
+async function fetchNextBatch() {
   try {
-    qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading prospects…</div>`;
-    // Pull extra in case some need to be filtered out
+    qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
     const res = await fetch(`${WORKER}/prospects?n=${5 + savedIds.size}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const all = await res.json();
-    queue = all.filter(c => !savedIds.has(c.id)).slice(0, 5);
+    const fresh = all.filter(c => !savedIds.has(c.id)).slice(0, 5);
+    batches.push({ contacts: fresh, completed: new Set() });
+    currentBatchIdx = batches.length - 1;
+    queue = fresh;
     renderQueue();
+    updateBatchNav();
   } catch (e) {
-    qhost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load prospects: ${e.message}</div>`;
+    qhost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load: ${e.message}</div>`;
   }
+}
+
+function showBatch(idx) {
+  if (idx < 0 || idx >= batches.length) return;
+  currentBatchIdx = idx;
+  queue = batches[idx].contacts;
+  renderQueue();
+  updateBatchNav();
+}
+
+function updateBatchNav() {
+  const prev = document.getElementById('batch-prev');
+  const next = document.getElementById('batch-next');
+  const info = document.getElementById('batch-info');
+  if (!prev || !next || !info) return;
+  prev.disabled = currentBatchIdx <= 0;
+  // Enable "Next 5" once all rows in the current batch are saved
+  const current = batches[currentBatchIdx];
+  const allDone = current && current.contacts.every(c => savedIds.has(c.id));
+  next.disabled = !allDone;
+  next.textContent = (currentBatchIdx < batches.length - 1) ? 'Forward →' : 'Next 5 →';
+  const doneCount = current ? current.contacts.filter(c => savedIds.has(c.id)).length : 0;
+  const total = current ? current.contacts.length : 0;
+  info.textContent = `Batch ${currentBatchIdx + 1} · ${doneCount} of ${total} done`;
 }
 
 async function submitRow(row) {
@@ -685,9 +741,7 @@ async function submitRow(row) {
     saveBtn.textContent = 'Saved';
     savedIds.add(row.dataset.contactId);
     row.classList.add('row-complete');
-    const allRows = document.querySelectorAll('#queue .queue-row[data-contact-id]');
-    const allSaved = Array.from(allRows).every(r => savedIds.has(r.dataset.contactId));
-    if (allSaved) setTimeout(() => fetchQueue(), 1200);
+    updateBatchNav();
   } catch (e) {
     status.textContent = `✕ Save failed: ${e.message}`;
     status.style.color = 'var(--gw-red)';
@@ -695,7 +749,31 @@ async function submitRow(row) {
   }
 }
 
-fetchQueue();
+fetchNextBatch();
+
+// Batch nav wiring
+document.getElementById('batch-prev').addEventListener('click', () => {
+  if (currentBatchIdx > 0) showBatch(currentBatchIdx - 1);
+});
+document.getElementById('batch-next').addEventListener('click', () => {
+  if (currentBatchIdx < batches.length - 1) showBatch(currentBatchIdx + 1);
+  else fetchNextBatch();
+});
+
+// Click a row-complete row to reopen for editing (re-enable buttons)
+qhost.addEventListener('click', (e) => {
+  const row = e.target.closest('.queue-row.row-complete');
+  if (!row) return;
+  // Ignore clicks on existing links/inputs/buttons
+  if (e.target.closest('a, input, button, select, .qcheck')) return;
+  row.classList.remove('row-complete');
+  const saveBtn = row.querySelector('.qsave-btn');
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+  const status = row.querySelector('.qsave-status');
+  if (status) { status.textContent = 'Reopened — make changes and save again'; status.style.color = 'var(--text-tertiary)'; }
+  savedIds.delete(row.dataset.contactId);
+  updateBatchNav();
+});
 
 // === Confirm 5/26 tab ===
 const chost = document.getElementById('confirms-queue');
