@@ -492,6 +492,7 @@
 // === Live Airtable wiring via Cloudflare Worker ===
 const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
 let queue = [];
+const savedIds = new Set();  // contacts logged in this session, don't re-show
 
 function phoneToTel(p) {
   const d = (p || '').replace(/\D/g, '');
@@ -614,9 +615,11 @@ function renderQueue() {
 async function fetchQueue() {
   try {
     qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading prospects…</div>`;
-    const res = await fetch(`${WORKER}/prospects?n=5`);
+    // Pull extra in case some need to be filtered out
+    const res = await fetch(`${WORKER}/prospects?n=${5 + savedIds.size}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    queue = await res.json();
+    const all = await res.json();
+    queue = all.filter(c => !savedIds.has(c.id)).slice(0, 5);
     renderQueue();
   } catch (e) {
     qhost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load prospects: ${e.message}</div>`;
@@ -664,9 +667,10 @@ async function submitRow(row) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    status.textContent = `✓ Saved (${data.created_count} touch${data.created_count===1?'':'es'} logged)`;
+    status.textContent = `✓ Saved (${data.created_count} attempt${data.created_count===1?'':'s'} logged)`;
     status.style.color = 'var(--gw-green)';
     btn.textContent = 'Saved';
+    savedIds.add(row.dataset.contactId);
     setTimeout(() => fetchQueue(), 1500);
   } catch (e) {
     status.textContent = `✕ Save failed: ${e.message}`;
