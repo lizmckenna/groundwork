@@ -662,8 +662,8 @@ async function submitRow(row) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     status.textContent = `✓ Saved (${data.created_count} touch${data.created_count===1?'':'es'} logged)`;
     status.style.color = 'var(--gw-green)';
     btn.textContent = 'Saved';
