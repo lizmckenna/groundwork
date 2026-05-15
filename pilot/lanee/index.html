@@ -407,7 +407,7 @@
     <section class="hero">
       <div class="eyebrow">Confirmation calls · 5/26 Orientation</div>
       <h1>Lock in who's coming.</h1>
-      <p class="lede">Anyone who signed up for the 5/26 Orientation. Hit them 1-2 days before to confirm. The point isn't to re-pitch — it's to make sure they remember and feel expected.</p>
+      <p class="lede">Anyone who signed up for the 5/26 Orientation. Contact them 1-2 days before to confirm. The point isn't to re-pitch — it's to make sure they remember and feel expected.</p>
     </section>
 
     <div class="section-head">
@@ -610,8 +610,7 @@ function renderQueue() {
           <input type="text" class="qfree" placeholder="Type your own next step...">
           <div class="qmissing-flag">⚐ A next step is required when you connect</div>
           <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <button class="qquick-btn" style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--text-secondary);border:1px solid var(--border-hover);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">Tried, no answer → next</button>
-            <button class="qsave-btn" style="padding:8px 16px;border-radius:6px;background:var(--gw-purple);color:white;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">Save outcome</button>
+            <button class="qsave-btn" style="padding:8px 16px;border-radius:6px;background:var(--gw-purple);color:white;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">Save</button>
             <span class="qsave-status" style="font-size:12px;color:var(--text-tertiary);"></span>
           </div>
         </div>
@@ -626,8 +625,7 @@ function renderQueue() {
     const freebox = row.querySelector('.qfree');
     select?.addEventListener('change', () => updateRow(row));
     freebox?.addEventListener('input', () => updateRow(row));
-    row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row, false));
-    row.querySelector('.qquick-btn').addEventListener('click', () => submitRow(row, true));
+    row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row));
   });
 }
 
@@ -645,36 +643,33 @@ async function fetchQueue() {
   }
 }
 
-async function submitRow(row, quickNoAnswer = false) {
+async function submitRow(row) {
   const checks = {};
   row.querySelectorAll('.qcheck input').forEach(i => { checks[i.dataset.outcome] = i.checked; });
   const methods = ['called','texted','emailed'].filter(m => checks[m]);
   let outcome = null;
-  if (!quickNoAnswer) {
-    if (checks.oneonone) outcome = 'oneonone';
-    else if (checks['signed-up']) outcome = 'signed-up';
-    else if (checks.connected) outcome = 'connected';
-  }
+  if (checks.oneonone) outcome = 'oneonone';
+  else if (checks['signed-up']) outcome = 'signed-up';
+  else if (checks.connected) outcome = 'connected';
   const select = row.querySelector('.qnext-select');
   const freebox = row.querySelector('.qfree');
   const next_step = (select.value && !select.value.startsWith('Other'))
     ? select.value
     : (freebox.value || '').trim();
+  const status = row.querySelector('.qsave-status');
   if (methods.length === 0) {
-    row.querySelector('.qsave-status').textContent = '✕ Check at least one Called/Texted/Emailed';
-    row.querySelector('.qsave-status').style.color = 'var(--gw-red)';
+    status.textContent = '✕ Check at least one Called/Texted/Emailed';
+    status.style.color = 'var(--gw-red)';
     return;
   }
-  if (!quickNoAnswer && (outcome === 'connected' || outcome === 'signed-up' || outcome === 'oneonone') && !next_step) {
-    row.querySelector('.qsave-status').textContent = '✕ Next step required for conversations';
-    row.querySelector('.qsave-status').style.color = 'var(--gw-red)';
+  if ((outcome === 'connected' || outcome === 'signed-up' || outcome === 'oneonone') && !next_step) {
+    status.textContent = '✕ Next step required for conversations';
+    status.style.color = 'var(--gw-red)';
     return;
   }
   const body = { contact_id: row.dataset.contactId, methods, outcome, next_step };
   const saveBtn = row.querySelector('.qsave-btn');
-  const quickBtn = row.querySelector('.qquick-btn');
-  const status = row.querySelector('.qsave-status');
-  saveBtn.disabled = true; quickBtn.disabled = true;
+  saveBtn.disabled = true;
   status.textContent = 'Saving…';
   status.style.color = 'var(--text-tertiary)';
   try {
@@ -685,22 +680,18 @@ async function submitRow(row, quickNoAnswer = false) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    status.textContent = quickNoAnswer ? '✓ Logged' : '✓ Saved';
+    status.textContent = '✓ Saved';
     status.style.color = 'var(--gw-green)';
     saveBtn.textContent = 'Saved';
     savedIds.add(row.dataset.contactId);
     row.classList.add('row-complete');
-    // Only refresh queue once ALL 5 (or however many) are logged
     const allRows = document.querySelectorAll('#queue .queue-row[data-contact-id]');
     const allSaved = Array.from(allRows).every(r => savedIds.has(r.dataset.contactId));
-    if (allSaved) {
-      setTimeout(() => fetchQueue(), 1200);
-    }
+    if (allSaved) setTimeout(() => fetchQueue(), 1200);
   } catch (e) {
     status.textContent = `✕ Save failed: ${e.message}`;
     status.style.color = 'var(--gw-red)';
     saveBtn.disabled = false;
-    quickBtn.disabled = false;
   }
 }
 
@@ -735,7 +726,7 @@ async function fetchConfirmees() {
           </div>
           <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
           <div class="qchecks">
-            <span style="font-size:12px;color:var(--text-tertiary);">Hit them 1–2 days before 5/26. The goal is to confirm, not re-pitch.</span>
+            <span style="font-size:12px;color:var(--text-tertiary);">Contact them 1–2 days before 5/26. The goal is to confirm, not re-pitch.</span>
           </div>
         </div>`;
       chost.appendChild(row);
