@@ -152,7 +152,47 @@
   .ladder-card .cnt { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.08em; }
   .ladder-card .cnt b { color: var(--text-primary); font-weight: 600; }
 
-  /* Views grid */
+  /* PTG (progress to goal) cards */
+  .ptg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 24px; }
+  .ptg-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 20px;
+    display: flex; flex-direction: column; gap: 12px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .ptg-card:hover { background: var(--bg-hover); border-color: var(--border-hover); }
+  .ptg-card .ptg-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-tertiary); }
+  .ptg-card .ptg-target { font-size: 32px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; }
+  .ptg-card .ptg-target em { font-style: normal; font-size: 13px; color: var(--text-tertiary); font-weight: 400; margin-left: 6px; letter-spacing: 0; }
+  .ptg-card .ptg-bar { height: 4px; background: var(--bg-elevated); border-radius: 2px; overflow: hidden; }
+  .ptg-card .ptg-bar > div { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+  .ptg-card .ptg-link { font-size: 12px; color: var(--accent); display: inline-flex; align-items: center; gap: 4px; }
+  .ptg-card .ptg-link:hover { text-decoration: underline; }
+  .ptg-card.locked { opacity: 0.5; }
+  .ptg-card.locked .ptg-target em { color: var(--text-tertiary); }
+
+  /* Queue cards (morning queue) */
+  .queue { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
+  .queue-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 20px;
+    transition: background 0.15s, border-color 0.15s;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .queue-card:hover { background: var(--bg-hover); border-color: var(--border-hover); }
+  .queue-card .qrank { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--accent); letter-spacing: 0.12em; }
+  .queue-card .qname { font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
+  .queue-card .qdesc { font-size: 13px; color: var(--text-secondary); line-height: 1.45; }
+  .queue-card .qarrow { color: var(--accent); font-size: 14px; margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; }
+  .queue-card.guardrail { border-color: rgba(239, 68, 68, 0.3); }
+  .queue-card.guardrail .qrank { color: var(--error); }
+  .queue-card.guardrail .qarrow { color: var(--error); }
+
+  /* Views grid (legacy, kept for reference cards) */
   .views { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
   .view-link {
     background: var(--bg-secondary);
@@ -288,9 +328,9 @@
     </div>
 
     <div class="stats">
-      <div class="stat"><div class="stat-n">1,386</div><span class="stat-l">Contacts</span></div>
-      <div class="stat"><div class="stat-n">2,253</div><span class="stat-l">Recorded touches</span></div>
-      <div class="stat"><div class="stat-n">38</div><span class="stat-l">Events captured</span></div>
+      <div class="stat"><div class="stat-n">1,390</div><span class="stat-l">Contacts</span></div>
+      <div class="stat"><div class="stat-n">~2,272</div><span class="stat-l">Recorded touches</span></div>
+      <div class="stat"><div class="stat-n">39</div><span class="stat-l">Events captured</span></div>
       <div class="stat"><div class="stat-n">32</div><span class="stat-l">Initial leaders</span></div>
       <div class="stat"><div class="stat-n">711</div><span class="stat-l">Supporters</span></div>
     </div>
@@ -298,20 +338,76 @@
 
   <section class="cta" id="dashboard">
     <div>
-      <h2>Open your dashboard</h2>
-      <p>Your default view shows every contact assigned to you, sorted by engagement, with last conversation date and your planned next step on each row. Calls and texts get logged from the contact's record.</p>
+      <h2>Open your base</h2>
+      <p>Your home in Airtable. Your default view shows every contact assigned to you, sorted by engagement. Each new call, text, or 1-1 gets logged from the contact's record.</p>
     </div>
     <div class="cta-actions">
-      <a class="btn" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
-        Open Airtable dashboard
+      <a class="btn" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A" target="_blank" rel="noopener">
+        Open Airtable
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17l10-10M7 7h10v10"/></svg>
       </a>
-      <a class="btn btn-secondary" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
-        Add a new contact
+      <a class="btn btn-secondary" href="https://airtable.com/appQdixHbuttPldx6/tblXQXzxf8z1oht7z" target="_blank" rel="noopener">
+        Log a touch
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       </a>
     </div>
   </section>
+
+  <div class="section-head">
+    <h3>This week's targets</h3>
+    <span class="mono">Week of May 14 · per organizer</span>
+  </div>
+  <div class="ptg">
+    <a class="ptg-card" href="https://airtable.com/appQdixHbuttPldx6/tblXQXzxf8z1oht7z" target="_blank" rel="noopener">
+      <span class="ptg-label">Attempts</span>
+      <span class="ptg-target">50<em>target</em></span>
+      <div class="ptg-bar"><div style="width:0%"></div></div>
+      <span class="ptg-link">Open Touches view →</span>
+    </a>
+    <a class="ptg-card" href="https://airtable.com/appQdixHbuttPldx6/tblXQXzxf8z1oht7z" target="_blank" rel="noopener">
+      <span class="ptg-label">Conversations</span>
+      <span class="ptg-target">10<em>target</em></span>
+      <div class="ptg-bar"><div style="width:0%"></div></div>
+      <span class="ptg-link">Open conversations →</span>
+    </a>
+    <a class="ptg-card" href="https://airtable.com/appQdixHbuttPldx6/tblXQXzxf8z1oht7z" target="_blank" rel="noopener">
+      <span class="ptg-label">1-1s</span>
+      <span class="ptg-target">1<em>target</em></span>
+      <div class="ptg-bar"><div style="width:0%"></div></div>
+      <span class="ptg-link">Open 1-1s →</span>
+    </a>
+    <div class="ptg-card locked">
+      <span class="ptg-label">Leaders developed</span>
+      <span class="ptg-target">—<em>starts wk of June 1</em></span>
+      <div class="ptg-bar"><div style="width:0%"></div></div>
+      <span class="ptg-link" style="color:var(--text-tertiary)">Locked until June</span>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <h3>Where to start your day</h3>
+    <span class="mono">In priority order</span>
+  </div>
+  <div class="queue">
+    <a class="queue-card" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A" target="_blank" rel="noopener">
+      <span class="qrank">01 · primary</span>
+      <span class="qname">Fresh prospects</span>
+      <span class="qdesc">People with no outreach yet. Filter Contacts to: assigned to me, leader_ladder = Prospect, no touches with Call/Text/Email.</span>
+      <span class="qarrow">Open in Airtable →</span>
+    </a>
+    <a class="queue-card" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A" target="_blank" rel="noopener">
+      <span class="qrank">02 · secondary</span>
+      <span class="qname">Cold prospects, no relational link</span>
+      <span class="qdesc">Prospects who came in cold (no Core Leader brought them). They get lost first if no one calls.</span>
+      <span class="qarrow">Open in Airtable →</span>
+    </a>
+    <a class="queue-card guardrail" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A" target="_blank" rel="noopener">
+      <span class="qrank">⚠ guard rail</span>
+      <span class="qname">Conversations missing a next step</span>
+      <span class="qdesc">Every conversation should have a Next Step logged. Filter Contacts to: needs_next_step = 1. Fix these before new outreach.</span>
+      <span class="qarrow">Open in Airtable →</span>
+    </a>
+  </div>
 
   <div class="section-head" id="ladder">
     <h3>Leader ladder</h3>
@@ -344,69 +440,20 @@
     </div>
   </div>
 
-  <div class="section-head" id="views">
-    <h3>Quick views</h3>
-    <span class="mono">Saved filters in your base</span>
-  </div>
-  <div class="views">
-    <a class="view-link" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
-      <div>
-        <span class="vn">Unattempted</span>
-        <span class="vd">Fresh names you haven't reached yet</span>
-      </div>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-    </a>
-    <a class="view-link" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
-      <div>
-        <span class="vn">Attempted, no conversation</span>
-        <span class="vd">Left voicemail or no answer — try again</span>
-      </div>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-    </a>
-    <a class="view-link" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
-      <div>
-        <span class="vn">Had conversation</span>
-        <span class="vd">Spoken to — pending an ask</span>
-      </div>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-    </a>
-    <a class="view-link" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
-      <div>
-        <span class="vn">Committed</span>
-        <span class="vd">Yes-es on the books</span>
-      </div>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-    </a>
-    <a class="view-link" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
-      <div>
-        <span class="vn">By leader ladder</span>
-        <span class="vd">Kanban — drag people between tiers</span>
-      </div>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-    </a>
-    <a class="view-link" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9" target="_blank" rel="noopener">
-      <div>
-        <span class="vn">Next-step queue</span>
-        <span class="vd">Where you left off, oldest first</span>
-      </div>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-    </a>
-  </div>
-
   <div class="section-head" id="onboard">
     <h3>How to use it</h3>
-    <span class="mono">20-minute walkthrough</span>
+    <span class="mono">15-minute walkthrough</span>
   </div>
   <div class="onboard">
     <h4>The everyday flow</h4>
     <ol>
-      <li><b>Open Unattempted.</b> Pick three names. Don't agonize — these are people who already raised their hand.</li>
-      <li><b>Call or text.</b> Use your phone. When you're done with each one, find them in Airtable and tap "+ Touches" on their record.</li>
-      <li><b>Log what happened.</b> Method (call/text), Result (no answer, voicemail, conversation, committed), one line of Notes if the call had texture. Takes 20 seconds.</li>
-      <li><b>If you made an ask</b> — separate from logging the call — open "+ Asks" on the same record. Type the ask. Mark outcome: Pending, Committed, Declined.</li>
-      <li><b>Set the next step.</b> One sentence in the Next Step field. Future-you will thank past-you.</li>
-      <li><b>Move people on the ladder</b> as you go. Talked to a Prospect who's coming to two more events? Bump them to Supporter. Talked to a Supporter who's recruiting friends? Bump them to Leader.</li>
-      <li><b>End of week,</b> open By Leader Ladder. Look at the shape. Where is the pipeline thin? Where are people stuck?</li>
+      <li><b>Start with the queue above.</b> Pick three Fresh prospects. Don't agonize. These people raised their hand.</li>
+      <li><b>Call, text, or email.</b> When you're done with each one, find them in Airtable and click "+ Touches" on their record.</li>
+      <li><b>Log what happened.</b> Method (Call / Text / Email / 1-1), Result (No answer, Voicemail, Conversation, Committed), one line of Notes if the call had texture. ~20 seconds.</li>
+      <li><b>If you had a conversation</b>, set the Next Step on the contact. One sentence. Don't skip this — it's the guard rail.</li>
+      <li><b>If you made an ask</b>, click "+ Asks" on the same record. Type the ask, mark outcome: Pending, Committed, Declined.</li>
+      <li><b>Bump people on the ladder</b> as the data justifies it. Talked to a Prospect who's already brought a friend? Move them to Supporter. Supporter who's recruiting? Move them to Leader.</li>
+      <li><b>End of week</b>, open the leader ladder kanban. Look at the shape. Where is the pipeline thin?</li>
     </ol>
   </div>
 
