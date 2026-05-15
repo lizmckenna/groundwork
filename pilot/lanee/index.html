@@ -127,7 +127,7 @@
     background: var(--bg-secondary); border: 1px solid var(--border);
     border-radius: 12px; padding: 28px;
   }
-  .outreach-grid { display: grid; grid-template-columns: repeat(25, 1fr); gap: 4px; margin-bottom: 20px; max-width: 600px; }
+  .outreach-grid { display: grid; grid-template-columns: repeat(25, 1fr); gap: 5px; margin-bottom: 20px; }
   .dot {
     aspect-ratio: 1 / 1; border-radius: 4px;
     border: 1.5px solid var(--dot-empty-border); background: transparent;
@@ -374,11 +374,11 @@
 
     <div class="stat-row">
       <div class="stat-mini">
-        <span class="sml">Attempts this week</span>
+        <span class="sml">Attempts today</span>
         <span class="smv" id="stat-attempts">0<em>/ 50</em></span>
       </div>
       <div class="stat-mini">
-        <span class="sml">Conversations this week</span>
+        <span class="sml">Conversations today</span>
         <div class="smv-right">
           <span class="smv" id="stat-convos">0<em>/ 10</em></span>
           <span class="stat-rate" id="stat-rate">— contact rate</span>
@@ -387,7 +387,7 @@
     </div>
 
     <div class="section-head">
-      <h2>Outreach grid · this week</h2>
+      <h2>Outreach grid · today</h2>
       <span class="mono">50 attempts target · fills as you log</span>
     </div>
     <div class="outreach-grid-wrap">
@@ -661,10 +661,14 @@ function renderQueue() {
 async function fetchNextBatch() {
   try {
     qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
-    const res = await fetch(`${WORKER}/prospects?n=${5 + savedIds.size}`);
+    // Pull a bigger pool, filter client-side, then take 5
+    const res = await fetch(`${WORKER}/prospects?n=${20 + savedIds.size}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const all = await res.json();
-    const fresh = all.filter(c => !savedIds.has(c.id)).slice(0, 5);
+    const fresh = all
+      .filter(c => !savedIds.has(c.id))
+      .filter(c => (c.phone && c.phone.trim()) || (c.email && c.email.trim()))  // require contact info
+      .slice(0, 5);
     batches.push({ contacts: fresh, completed: new Set() });
     currentBatchIdx = batches.length - 1;
     queue = fresh;
