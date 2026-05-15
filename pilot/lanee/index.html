@@ -548,6 +548,9 @@ let queue = [];
 const savedIds = new Set();  // contacts logged in this session, don't re-show
 const batches = [];           // history of batches she's worked through
 let currentBatchIdx = -1;     // which batch she's currently viewing
+// Persistent across batches so grid + metrics don't zero out
+const sessionActions = []; // [{ contact_id, methods, outcome, gridIdx }]
+let nextGridIdx = 0;
 
 function phoneToTel(p) {
   const d = (p || '').replace(/\D/g, '');
@@ -756,6 +759,15 @@ async function submitRow(row) {
     saveBtn.textContent = 'Saved';
     savedIds.add(row.dataset.contactId);
     row.classList.add('row-complete');
+    // Persist this action across batches (grid + metrics survive Next 5)
+    const gridIdx = nextGridIdx;
+    nextGridIdx++;
+    sessionActions.push({ contact_id: row.dataset.contactId, methods, outcome, gridIdx });
+    // Fill the next available grid square (persistent, not tied to row idx)
+    const dots = document.querySelectorAll('#grid .dot');
+    const dotState = outcome || 'attempted';
+    if (dots[gridIdx]) dots[gridIdx].dataset.s = dotState;
+    recomputeMetrics();
     updateBatchNav();
   } catch (e) {
     status.textContent = `✕ Save failed: ${e.message}`;
@@ -868,6 +880,15 @@ async function undoSave(row) {
     savedIds.delete(row.dataset.contactId);
     status.textContent = '';
     status.style.color = 'var(--text-tertiary)';
+    // Pull this action out of sessionActions, clear its grid square
+    const idx = sessionActions.findIndex(a => a.contact_id === row.dataset.contactId);
+    if (idx !== -1) {
+      const action = sessionActions[idx];
+      sessionActions.splice(idx, 1);
+      const dots = document.querySelectorAll('#grid .dot');
+      if (dots[action.gridIdx]) dots[action.gridIdx].removeAttribute('data-s');
+    }
+    recomputeMetrics();
     updateBatchNav();
   } catch (e) {
     status.textContent = `✕ Undo failed: ${e.message}`;
@@ -876,8 +897,13 @@ async function undoSave(row) {
 }
 
 function updateRow(row) {
-  // If a saved row had a checkbox change, treat it as undo
+  // If a saved row had a checkbox change, confirm before deleting the record
   if (row.classList.contains('row-complete')) {
+    const ok = confirm("Unsave this entry? This will delete the record from Airtable. (Use this only to fix a mistake.)");
+    if (!ok) {
+      // Restore the checkbox they just unchecked by re-running render. Simpler: just don't undo.
+      return;
+    }
     undoSave(row);
     return;
   }
@@ -887,13 +913,7 @@ function updateRow(row) {
   });
   const top = rankOutcome(checks);
   const optsKey = optionsKey(checks);
-  const idx = parseInt(row.dataset.idx);
-  // Reflect dot color (uses single top)
-  const dots = document.querySelectorAll('.dot');
-  if (dots[idx]) {
-    if (top) dots[idx].dataset.s = top;
-    else dots[idx].removeAttribute('data-s');
-  }
+  // Note: grid dots only fill on Save (persistent), not on pre-save checkbox changes
   // Next-step dropdown
   const nsblock = row.querySelector('.qnextstep');
   const select = row.querySelector('.qnext-select');
@@ -923,16 +943,17 @@ function updateRow(row) {
 }
 
 function recomputeMetrics() {
-  let attempts = 0, convos = 0, signups = 0, oneones = 0, flagged = 0;
-  document.querySelectorAll('.queue-row').forEach(row => {
-    const checks = {};
-    row.querySelectorAll('.qcheck input').forEach(i => { checks[i.dataset.outcome] = i.checked; });
-    if (checks.called || checks.texted || checks.emailed || checks.connected || checks['signed-up'] || checks.oneonone) attempts++;
-    if (checks.connected || checks['signed-up'] || checks.oneonone) convos++;
-    if (checks['signed-up']) signups++;
-    if (checks.oneonone) oneones++;
-    if (row.classList.contains('warn-no-next')) flagged++;
-  });
+  // Pull from persistent sessionActions so metrics survive batch changes
+  let attempts = 0, convos = 0, signups = 0, oneones = 0;
+  for (const a of sessionActions) {
+    attempts += a.methods.length;
+    if (a.outcome === 'connected' || a.outcome === 'signed-up' || a.outcome === 'oneonone') convos++;
+    if (a.outcome === 'signed-up' || a.outcome === 'oneonone') signups++;
+    if (a.outcome === 'oneonone') oneones++;
+  }
+  // Flag counter: count currently-visible rows that need a next step
+  let flagged = 0;
+  document.querySelectorAll('.queue-row.warn-no-next').forEach(() => flagged++);
   // Mini-stats (just from current queue; in live version this'd be week-total from Airtable)
   document.getElementById('stat-attempts').innerHTML = `${attempts}<em>/ 50</em>`;
   document.getElementById('stat-convos').innerHTML = `${convos}<em>/ 10</em>`;
