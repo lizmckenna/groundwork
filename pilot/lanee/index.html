@@ -8,15 +8,43 @@
 <link rel="icon" type="image/svg+xml" href="/groundwork/favicon.svg">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
+  /* Default: LIGHT theme */
   :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #fafafa;
+    --bg-elevated: #f4f4f5;
+    --bg-hover: #ececef;
+    --gw-purple: #5371ff;
+    --gw-purple-light: #6d28d9;
+    --gw-purple-dim: rgba(83,113,255,0.12);
+    --gw-purple-soft: rgba(83,113,255,0.08);
+    --gw-green: #16a34a;
+    --gw-green-soft: rgba(22,163,74,0.12);
+    --gw-red: #dc2626;
+    --gw-red-soft: rgba(220,38,38,0.08);
+    --t-prospect: #71717a;
+    --t-supporter: #d97706;
+    --t-leader: #db2777;
+    --t-core: #6331ae;
+    --dot-empty-border: #d4d4d8;
+    --dot-grey: #a1a1aa;
+    --dot-light-purple: #a78bfa;
+    --dot-purple: var(--gw-purple);
+    --dot-green: var(--gw-green);
+    --text-primary: #18181b;
+    --text-secondary: #52525b;
+    --text-tertiary: #71717a;
+    --border: rgba(0,0,0,0.08);
+    --border-hover: rgba(0,0,0,0.16);
+  }
+  /* DARK theme override (opt-in via toggle) */
+  :root[data-theme="dark"] {
     --bg-primary: #0a0a0b;
     --bg-secondary: #111113;
     --bg-elevated: #18181b;
     --bg-hover: #1f1f23;
-    --gw-purple: #5371ff;
     --gw-purple-light: #818cf8;
     --gw-purple-dim: rgba(83,113,255,0.18);
-    --gw-purple-soft: rgba(83,113,255,0.08);
     --gw-green: #22c55e;
     --gw-green-soft: rgba(34,197,94,0.15);
     --gw-red: #ef4444;
@@ -24,12 +52,8 @@
     --t-prospect: #c5c7cd;
     --t-supporter: #ffd760;
     --t-leader: #f29be7;
-    --t-core: #6331ae;
     --dot-empty-border: rgba(255,255,255,0.15);
     --dot-grey: #52525b;
-    --dot-light-purple: #a78bfa;
-    --dot-purple: var(--gw-purple);
-    --dot-green: var(--gw-green);
     --text-primary: #fafafa;
     --text-secondary: #a1a1aa;
     --text-tertiary: #71717a;
@@ -171,6 +195,8 @@
   .qsave-row { display: flex; gap: 12px; align-items: center; padding-top: 8px; border-top: 1px dashed var(--border); width: 100%; justify-content: flex-end; }
   .qsave-btn { padding: 8px 18px; border-radius: 6px; background: var(--gw-purple); color: white; border: none; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
   .qsave-btn:disabled { background: var(--bg-elevated); color: var(--text-tertiary); cursor: not-allowed; }
+  .qundo-btn { padding: 8px 14px; border-radius: 6px; background: transparent; color: var(--gw-red); border: 1px solid var(--gw-red); font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; }
+  .qundo-btn:hover { background: var(--gw-red-soft); }
   .qsave-status { font-size: 12px; color: var(--text-tertiary); }
   .qcheck {
     display: inline-flex; align-items: center; gap: 6px;
@@ -333,6 +359,7 @@
       <a href="#" data-tab="howto">How to use</a>
       <a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9?blocks=hide" target="_blank" rel="noopener" style="color:var(--gw-purple-light);">Airtable ↗</a>
       <a href="https://tinyurl.com/groundwork-feedback" target="_blank" rel="noopener" style="color:var(--gw-purple-light);">Feedback ↗</a>
+      <button id="theme-toggle" title="Toggle theme" style="background:transparent;border:1px solid var(--border-hover);border-radius:6px;padding:6px 10px;color:var(--text-secondary);cursor:pointer;font-size:14px;font-family:inherit;margin-left:6px;">☾</button>
     </nav>
   </div>
 </header>
@@ -353,7 +380,7 @@
         <div class="bc-progress">
           <span class="bc-current" id="m-signup-current">0</span>
           <span class="bc-divider">/</span>
-          <span class="bc-target" id="m-signup-target">10</span>
+          <span class="bc-target" id="m-signup-target">20</span>
         </div>
         <div class="bc-bar"><div id="m-signup-bar" style="width:0%"></div></div>
         <div class="bc-foot">
@@ -650,6 +677,7 @@ function renderQueue() {
           </div>
           <div class="qsave-row">
             <button class="qsave-btn">Save</button>
+            <button class="qundo-btn" style="display:none;">Undo</button>
             <span class="qsave-status"></span>
           </div>
         </div>
@@ -675,6 +703,17 @@ function renderQueue() {
     select?.addEventListener('change', () => updateRow(row));
     freebox?.addEventListener('input', () => updateRow(row));
     row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row));
+    row.querySelector('.qundo-btn').addEventListener('click', () => {
+      if (confirm('Undo this save? This will delete the record from Airtable.')) undoSave(row);
+    });
+    // If this contact was already saved this session, restore the Saved state
+    if (savedIds.has(c.id)) {
+      row.querySelector('.qsave-btn').style.display = 'none';
+      row.querySelector('.qundo-btn').style.display = 'inline-flex';
+      const st = row.querySelector('.qsave-status');
+      st.textContent = '✓ Saved';
+      st.style.color = 'var(--gw-green)';
+    }
   });
 }
 
@@ -764,7 +803,8 @@ async function submitRow(row) {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     status.textContent = '✓ Saved';
     status.style.color = 'var(--gw-green)';
-    saveBtn.textContent = 'Saved';
+    saveBtn.style.display = 'none';
+    row.querySelector('.qundo-btn').style.display = 'inline-flex';
     savedIds.add(row.dataset.contactId);
     row.classList.add('row-complete');
     // One grid square per person (not per method)
@@ -905,6 +945,8 @@ async function undoSave(row) {
     row.classList.remove('row-complete');
     saveBtn.disabled = false;
     saveBtn.textContent = 'Save';
+    saveBtn.style.display = 'inline-flex';
+    row.querySelector('.qundo-btn').style.display = 'none';
     savedIds.delete(row.dataset.contactId);
     status.textContent = '';
     status.style.color = 'var(--text-tertiary)';
@@ -982,8 +1024,9 @@ function recomputeMetrics() {
   document.getElementById('stat-rate').textContent = rate === null ? '— contact rate' : `${rate}% contact rate`;
   // Big cards
   document.getElementById('m-signup-current').textContent = signups;
-  document.getElementById('m-signup-bar').style.width = `${Math.min(100, signups*10)}%`;
-  document.getElementById('m-signup-pct').textContent = `${Math.min(100, signups*10)}% to goal`;
+  const signupPct = Math.min(100, Math.round((signups / 20) * 100));
+  document.getElementById('m-signup-bar').style.width = `${signupPct}%`;
+  document.getElementById('m-signup-pct').textContent = `${signupPct}% to goal`;
   document.getElementById('m-oneonone-current').textContent = oneones;
   document.getElementById('m-oneonone-bar').style.width = `${Math.min(100, oneones*100)}%`;
   document.getElementById('m-oneonone-pct').textContent = `${Math.min(100, oneones*100)}% to goal`;
@@ -992,6 +1035,30 @@ function recomputeMetrics() {
   document.getElementById('flag-count').textContent = flagged;
   fc.classList.toggle('alert', flagged > 0);
 }
+
+// Theme toggle (default light, persist in localStorage)
+(function setupTheme() {
+  const stored = localStorage.getItem('gw-theme');
+  if (stored === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  const btn = document.getElementById('theme-toggle');
+  function refreshIcon() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    btn.textContent = isDark ? '☀' : '☾';
+    btn.title = isDark ? 'Switch to light' : 'Switch to dark';
+  }
+  refreshIcon();
+  btn.addEventListener('click', () => {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('gw-theme', 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('gw-theme', 'dark');
+    }
+    refreshIcon();
+  });
+})();
 
 // Tabs
 document.querySelectorAll('.tab-nav a').forEach(a => {
