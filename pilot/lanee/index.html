@@ -1016,10 +1016,7 @@ function recomputeMetrics() {
   document.getElementById('m-oneonone-current').textContent = oneones;
   document.getElementById('m-oneonone-bar').style.width = `${Math.min(100, oneones*100)}%`;
   document.getElementById('m-oneonone-pct').textContent = `${Math.min(100, oneones*100)}% to goal`;
-  // Flag counter
-  const fc = document.getElementById('flag-counter');
-  document.getElementById('flag-count').textContent = flagged;
-  fc.classList.toggle('alert', flagged > 0);
+  // Flag counter element was removed (next-step is required on save), no-op
 }
 
 // Theme toggle (default light, persist in localStorage)
