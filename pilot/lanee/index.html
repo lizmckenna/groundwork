@@ -760,11 +760,10 @@ async function submitRow(row) {
     saveBtn.textContent = 'Saved';
     savedIds.add(row.dataset.contactId);
     row.classList.add('row-complete');
-    // Persist this action across batches (grid + metrics survive Next 5)
+    // One grid square per person (not per method)
     const gridIdx = nextGridIdx;
     nextGridIdx++;
     sessionActions.push({ contact_id: row.dataset.contactId, methods, outcome, gridIdx });
-    // Fill the next available grid square (persistent, not tied to row idx)
     const dots = document.querySelectorAll('#grid .dot');
     const dotState = outcome || 'attempted';
     if (dots[gridIdx]) dots[gridIdx].dataset.s = dotState;
@@ -960,7 +959,7 @@ function recomputeMetrics() {
   // Pull from persistent sessionActions so metrics survive batch changes
   let attempts = 0, convos = 0, signups = 0, oneones = 0;
   for (const a of sessionActions) {
-    attempts += a.methods.length;
+    attempts++;  // one attempt per person, regardless of how many methods
     if (a.outcome === 'connected' || a.outcome === 'signed-up' || a.outcome === 'oneonone') convos++;
     if (a.outcome === 'signed-up' || a.outcome === 'oneonone') signups++;
     if (a.outcome === 'oneonone') oneones++;
