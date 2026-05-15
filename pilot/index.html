@@ -5,29 +5,38 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
 <title>Groundwork — MOI Pilot · Missouri</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
   :root {
     --bg-primary: #0a0a0b;
     --bg-secondary: #111113;
     --bg-elevated: #18181b;
     --bg-hover: #1f1f23;
-    --accent: #5371ff;
-    --accent-muted: #4361ee;
-    --accent-glow: rgba(83, 113, 255, 0.15);
-    --accent-subtle: rgba(83, 113, 255, 0.08);
+    /* Groundwork brand */
+    --gw-purple: #5371ff;
+    --gw-purple-light: #818cf8;
+    --gw-purple-dim: rgba(83,113,255,0.18);
+    --gw-purple-soft: rgba(83,113,255,0.08);
+    --gw-green: #22c55e;
+    --gw-green-soft: rgba(34,197,94,0.15);
+    /* Ladder colors (match Airtable bright palette) */
+    --t-prospect: #a1a1aa;
+    --t-supporter: #3b82f6;
+    --t-leader: #f97316;
+    --t-core: #ef4444;
+    /* Outreach grid states */
+    --dot-empty: transparent;
+    --dot-empty-border: rgba(255,255,255,0.15);
+    --dot-grey: #52525b;
+    --dot-light-purple: #a78bfa;
+    --dot-purple: var(--gw-purple);
+    --dot-green: var(--gw-green);
+    /* Text */
     --text-primary: #fafafa;
     --text-secondary: #a1a1aa;
     --text-tertiary: #71717a;
-    --success: #22c55e;
-    --warning: #f59e0b;
-    --error: #ef4444;
-    --prospect: #71717a;
-    --supporter: #5371ff;
-    --leader: #f59e0b;
-    --core-leader: #ef4444;
-    --border: rgba(255, 255, 255, 0.06);
-    --border-hover: rgba(255, 255, 255, 0.1);
+    --border: rgba(255,255,255,0.06);
+    --border-hover: rgba(255,255,255,0.12);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
@@ -35,243 +44,225 @@
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
-    line-height: 1.6;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
   }
   a { color: inherit; text-decoration: none; }
-  .mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); }
   .container { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-tertiary); }
 
   /* Header */
   header.site {
     border-bottom: 1px solid var(--border);
-    padding: 20px 0;
+    padding: 16px 0;
     position: sticky; top: 0; z-index: 10;
-    background: rgba(10,10,11,0.85);
+    background: rgba(10,10,11,0.92);
     backdrop-filter: blur(10px);
   }
   .site-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
   .brand { display: flex; align-items: center; gap: 12px; }
-  .brand svg { flex-shrink: 0; }
   .brand-name { font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
   .brand-sub { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 2px; }
-  header nav a {
-    font-size: 13px; color: var(--text-secondary);
-    margin-left: 28px; transition: color 0.15s;
+  .tab-nav { display: flex; gap: 4px; }
+  .tab-nav a {
+    padding: 8px 14px; font-size: 13px; color: var(--text-secondary);
+    border-radius: 6px; transition: all 0.15s;
   }
-  header nav a:hover { color: var(--text-primary); }
+  .tab-nav a:hover { color: var(--text-primary); background: var(--bg-hover); }
+  .tab-nav a.active { color: var(--text-primary); background: var(--gw-purple-soft); }
 
   /* Hero */
-  .hero { padding: 80px 0 56px; }
-  .eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--accent); margin-bottom: 20px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; }
-  .eyebrow::before { content:''; width: 24px; height: 1px; background: var(--accent); }
-  h1 { font-size: clamp(40px, 5vw, 64px); font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; margin-bottom: 20px; }
-  h1 em { font-style: italic; color: var(--accent); font-weight: 400; }
-  .lede { font-size: 18px; color: var(--text-secondary); max-width: 640px; line-height: 1.55; }
+  .hero { padding: 48px 0 8px; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--gw-purple); margin-bottom: 16px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .eyebrow::before { content:''; width: 24px; height: 1px; background: var(--gw-purple); }
+  h1 { font-size: clamp(32px, 4vw, 48px); font-weight: 600; letter-spacing: -0.025em; line-height: 1.05; margin-bottom: 12px; }
+  .hero p.lede { font-size: 16px; color: var(--text-secondary); max-width: 640px; }
 
-  /* Stats strip */
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    margin: 56px 0 0;
+  /* === TWO GIANT PTG CARDS === */
+  .big-metrics {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    margin: 40px 0 16px;
   }
-  .stat {
-    padding: 24px 20px;
-    border-right: 1px solid var(--border);
-  }
-  .stat:last-child { border-right: none; }
-  .stat-n { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); }
-  .stat-l { display: block; margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-tertiary); }
-  .stat .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 2px; }
-
-  /* Primary CTA card */
-  section.cta {
-    margin: 56px 0;
-    padding: 48px;
+  .big-card {
+    position: relative;
     background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg-secondary) 100%);
     border: 1px solid var(--border);
     border-radius: 16px;
-    display: grid;
-    grid-template-columns: 1.4fr 1fr;
-    gap: 48px;
-    align-items: center;
+    padding: 32px 36px;
+    overflow: hidden;
   }
-  section.cta h2 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 12px; line-height: 1.15; }
-  section.cta p { color: var(--text-secondary); font-size: 15px; max-width: 480px; }
-  .btn {
-    display: inline-flex; align-items: center; gap: 10px;
-    padding: 14px 24px;
-    background: var(--accent);
-    color: white;
-    border-radius: 10px;
-    font-weight: 500;
-    font-size: 15px;
-    border: none;
-    cursor: pointer;
-    transition: background 0.15s, transform 0.05s;
-    box-shadow: 0 0 0 1px var(--accent-muted), 0 8px 24px -8px var(--accent-glow);
+  .big-card.signup { border-color: rgba(83,113,255,0.25); }
+  .big-card.oneonone { border-color: rgba(34,197,94,0.25); }
+  .big-card::before {
+    content: ''; position: absolute; top: 0; right: 0;
+    width: 240px; height: 240px; border-radius: 50%;
+    opacity: 0.04; filter: blur(40px);
+    transform: translate(40%, -40%);
   }
-  .btn:hover { background: var(--accent-muted); }
-  .btn:active { transform: translateY(1px); }
-  .btn svg { width: 16px; height: 16px; }
-  .btn-secondary {
-    background: transparent;
-    color: var(--text-primary);
-    border: 1px solid var(--border-hover);
-    box-shadow: none;
+  .big-card.signup::before { background: var(--gw-purple); }
+  .big-card.oneonone::before { background: var(--gw-green); }
+  .big-card .bc-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    margin-bottom: 14px;
   }
-  .btn-secondary:hover { background: var(--bg-hover); }
-  .cta-actions { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
-  .cta-actions .btn { width: 100%; max-width: 320px; justify-content: center; }
+  .big-card.signup .bc-label { color: var(--gw-purple); }
+  .big-card.oneonone .bc-label { color: var(--gw-green); }
+  .big-card .bc-question { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; margin-bottom: 24px; color: var(--text-primary); }
+  .big-card .bc-progress { display: flex; align-items: baseline; gap: 6px; margin-bottom: 16px; }
+  .big-card .bc-current { font-size: 64px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; }
+  .big-card .bc-divider { font-size: 32px; color: var(--text-tertiary); font-weight: 300; }
+  .big-card .bc-target { font-size: 32px; color: var(--text-tertiary); font-weight: 500; letter-spacing: -0.02em; }
+  .big-card .bc-bar { height: 8px; background: var(--bg-primary); border-radius: 4px; overflow: hidden; margin: 18px 0 12px; }
+  .big-card .bc-bar > div { height: 100%; border-radius: 4px; transition: width 0.6s ease-out; }
+  .big-card.signup .bc-bar > div { background: var(--gw-purple); }
+  .big-card.oneonone .bc-bar > div { background: var(--gw-green); }
+  .big-card .bc-foot { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+  .big-card .bc-percent { color: var(--text-primary); font-weight: 600; }
 
-  /* Section heads */
+  /* === Smaller stat row === */
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 36px; }
+  .stat-mini {
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .stat-mini .sml { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-tertiary); }
+  .stat-mini .smv { font-size: 20px; font-weight: 600; }
+  .stat-mini .smv em { font-style: normal; color: var(--text-tertiary); font-size: 13px; font-weight: 400; margin-left: 4px; }
+
+  /* === Section heads === */
   .section-head {
-    margin: 72px 0 24px;
-    padding-bottom: 12px;
+    margin: 56px 0 18px;
+    padding-bottom: 10px;
     border-bottom: 1px solid var(--border);
     display: flex; justify-content: space-between; align-items: baseline;
   }
-  .section-head h3 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  .section-head h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
 
-  /* Ladder cards */
-  .ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-  .ladder-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 24px 20px;
-    transition: border-color 0.15s, transform 0.05s;
+  /* === GitHub-style outreach grid === */
+  .outreach-grid-wrap {
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 12px; padding: 28px;
   }
-  .ladder-card:hover { border-color: var(--border-hover); }
-  .ladder-card .dot { width: 10px; height: 10px; border-radius: 50%; margin-bottom: 14px; }
-  .ladder-card .nm { font-size: 14px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 8px; }
-  .ladder-card .desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 14px; }
-  .ladder-card .cnt { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.08em; }
-  .ladder-card .cnt b { color: var(--text-primary); font-weight: 600; }
+  .outreach-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 6px;
+    margin-bottom: 20px;
+  }
+  .dot {
+    aspect-ratio: 1 / 1;
+    border-radius: 4px;
+    border: 1.5px solid var(--dot-empty-border);
+    background: var(--dot-empty);
+    transition: transform 0.12s;
+    cursor: default;
+  }
+  .dot[data-s="attempted"] { background: var(--dot-grey); border-color: var(--dot-grey); }
+  .dot[data-s="connected"] { background: var(--dot-light-purple); border-color: var(--dot-light-purple); }
+  .dot[data-s="signed-up"] { background: var(--dot-purple); border-color: var(--dot-purple); }
+  .dot[data-s="oneonone"] { background: var(--dot-green); border-color: var(--dot-green); }
+  .dot:hover { transform: scale(1.15); }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px 24px; font-size: 12px; color: var(--text-secondary); padding-top: 8px; border-top: 1px solid var(--border); }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid var(--dot-empty-border); }
+  .legend-swatch.grey { background: var(--dot-grey); border-color: var(--dot-grey); }
+  .legend-swatch.light-purple { background: var(--dot-light-purple); border-color: var(--dot-light-purple); }
+  .legend-swatch.purple { background: var(--dot-purple); border-color: var(--dot-purple); }
+  .legend-swatch.green { background: var(--dot-green); border-color: var(--dot-green); }
 
-  /* PTG (progress to goal) cards */
-  .ptg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 24px; }
-  .ptg-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 22px 20px;
-    display: flex; flex-direction: column; gap: 12px;
-    transition: border-color 0.15s, background 0.15s;
+  /* === Next-5 queue === */
+  .queue-wrap {
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 12px; padding: 8px;
   }
-  .ptg-card:hover { background: var(--bg-hover); border-color: var(--border-hover); }
-  .ptg-card .ptg-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-tertiary); }
-  .ptg-card .ptg-target { font-size: 32px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; }
-  .ptg-card .ptg-target em { font-style: normal; font-size: 13px; color: var(--text-tertiary); font-weight: 400; margin-left: 6px; letter-spacing: 0; }
-  .ptg-card .ptg-bar { height: 4px; background: var(--bg-elevated); border-radius: 2px; overflow: hidden; }
-  .ptg-card .ptg-bar > div { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
-  .ptg-card .ptg-link { font-size: 12px; color: var(--accent); display: inline-flex; align-items: center; gap: 4px; }
-  .ptg-card .ptg-link:hover { text-decoration: underline; }
-  .ptg-card.locked { opacity: 0.5; }
-  .ptg-card.locked .ptg-target em { color: var(--text-tertiary); }
-
-  /* Queue cards (morning queue) */
-  .queue { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
-  .queue-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 22px 20px;
-    transition: background 0.15s, border-color 0.15s;
-    display: flex; flex-direction: column; gap: 8px;
-  }
-  .queue-card:hover { background: var(--bg-hover); border-color: var(--border-hover); }
-  .queue-card .qrank { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--accent); letter-spacing: 0.12em; }
-  .queue-card .qname { font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
-  .queue-card .qdesc { font-size: 13px; color: var(--text-secondary); line-height: 1.45; }
-  .queue-card .qarrow { color: var(--accent); font-size: 14px; margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; }
-  .queue-card.guardrail { border-color: rgba(239, 68, 68, 0.3); }
-  .queue-card.guardrail .qrank { color: var(--error); }
-  .queue-card.guardrail .qarrow { color: var(--error); }
-
-  /* Views grid (legacy, kept for reference cards) */
-  .views { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-  .view-link {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 18px 20px;
-    display: flex; align-items: center; justify-content: space-between;
-    transition: background 0.15s, border-color 0.15s;
-  }
-  .view-link:hover { background: var(--bg-hover); border-color: var(--border-hover); }
-  .view-link .vn { font-size: 14px; font-weight: 500; }
-  .view-link .vd { display: block; margin-top: 3px; font-size: 12px; color: var(--text-tertiary); font-weight: 400; }
-  .view-link svg { width: 16px; height: 16px; color: var(--text-tertiary); flex-shrink: 0; margin-left: 12px; }
-
-  /* Onboarding section */
-  .onboard {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 32px;
-  }
-  .onboard h4 { font-size: 16px; font-weight: 600; margin-bottom: 18px; letter-spacing: -0.005em; }
-  .onboard ol { list-style: none; counter-reset: step; padding: 0; }
-  .onboard ol li {
-    counter-increment: step;
-    padding: 14px 0 14px 44px;
-    position: relative;
-    border-top: 1px solid var(--border);
-    color: var(--text-secondary);
-    font-size: 14px;
-  }
-  .onboard ol li:first-child { border-top: none; padding-top: 4px; }
-  .onboard ol li::before {
-    content: counter(step, decimal-leading-zero);
-    position: absolute; left: 0; top: 14px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--accent);
-    letter-spacing: 0.08em;
-    font-weight: 500;
-  }
-  .onboard ol li:first-child::before { top: 4px; }
-  .onboard ol li b { color: var(--text-primary); font-weight: 500; }
-
-  /* Footer */
-  footer {
-    margin-top: 96px;
-    padding: 40px 0 56px;
-    border-top: 1px solid var(--border);
-    color: var(--text-tertiary);
-    font-size: 13px;
-  }
-  footer .container { display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; }
-  footer a { color: var(--text-secondary); }
-  footer a:hover { color: var(--text-primary); }
-
-  /* Pilot note banner */
-  .pilot-banner {
-    background: var(--accent-subtle);
-    border: 1px solid var(--accent-muted);
-    border-radius: 10px;
+  .queue-row {
+    display: grid;
+    grid-template-columns: 32px 1fr 200px auto;
+    gap: 16px;
+    align-items: center;
     padding: 14px 20px;
-    margin: 40px 0 0;
-    font-size: 13px;
-    color: var(--text-secondary);
-    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
   }
-  .pilot-banner b { color: var(--accent); font-weight: 600; }
+  .queue-row:last-child { border-bottom: none; }
+  .queue-row:hover { background: var(--bg-hover); }
+  .queue-row .qnum { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.08em; }
+  .queue-row .qperson .qname { font-weight: 500; font-size: 14px; }
+  .queue-row .qperson .qmeta { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+  .queue-row .qcontact { font-size: 13px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; }
+  .queue-row .qcontact div + div { margin-top: 4px; }
+  .queue-row .qactions { display: flex; gap: 6px; }
+  .qbtn {
+    padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-hover);
+    background: transparent; color: var(--text-secondary); cursor: pointer;
+    font-size: 11.5px; font-weight: 500; transition: all 0.12s;
+    font-family: inherit;
+  }
+  .qbtn:hover { color: var(--text-primary); background: var(--bg-hover); border-color: rgba(255,255,255,0.2); }
+  .qbtn.grey { border-color: var(--dot-grey); }
+  .qbtn.purple { border-color: var(--gw-purple); color: var(--gw-purple-light); }
+  .qbtn.green { border-color: var(--gw-green); color: var(--gw-green); }
 
-  @media (max-width: 768px) {
+  /* Ladder bar chart */
+  .ladder-chart { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; }
+  .ladder-bar { display: flex; gap: 4px; height: 32px; border-radius: 6px; overflow: hidden; margin: 18px 0; }
+  .ladder-bar > div { display: flex; align-items: center; justify-content: flex-start; padding-left: 12px; font-size: 12px; font-weight: 600; color: white; }
+  .ladder-rows { display: grid; gap: 10px; }
+  .ladder-row { display: grid; grid-template-columns: 16px 100px 1fr auto; gap: 14px; align-items: center; font-size: 13px; }
+  .ladder-row .dot { width: 12px; height: 12px; border-radius: 50%; aspect-ratio: auto; border: none; cursor: default; }
+  .ladder-row .lname { color: var(--text-secondary); }
+  .ladder-row .lbar { height: 8px; background: var(--bg-elevated); border-radius: 4px; overflow: hidden; }
+  .ladder-row .lbar > div { height: 100%; border-radius: 4px; }
+  .ladder-row .lcount { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-tertiary); letter-spacing: 0.06em; min-width: 56px; text-align: right; }
+
+  /* How to */
+  .howto { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 28px; }
+  .howto h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+  .howto ol { padding-left: 0; list-style: none; counter-reset: step; }
+  .howto ol li { counter-increment: step; padding: 10px 0 10px 36px; position: relative; color: var(--text-secondary); font-size: 14px; border-top: 1px solid var(--border); }
+  .howto ol li:first-child { border-top: none; }
+  .howto ol li::before { content: counter(step, decimal-leading-zero); position: absolute; left: 0; top: 11px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--gw-purple); letter-spacing: 0.06em; font-weight: 500; }
+  .howto ol li b { color: var(--text-primary); }
+
+  /* Placeholder section */
+  .stats-tba {
+    background: var(--bg-secondary); border: 1px dashed var(--border-hover); border-radius: 12px;
+    padding: 32px; text-align: center; color: var(--text-tertiary);
+  }
+  .stats-tba h3 { color: var(--text-secondary); font-size: 16px; margin-bottom: 12px; }
+  .stats-tba ul { margin-top: 14px; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .stats-tba li { font-size: 12px; padding: 6px 12px; background: var(--bg-elevated); border-radius: 6px; }
+
+  /* Pilot banner */
+  .pilot-banner {
+    background: var(--gw-purple-soft);
+    border: 1px solid rgba(83,113,255,0.25);
+    border-radius: 10px; padding: 14px 20px; margin: 24px 0 0;
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .pilot-banner b { color: var(--gw-purple-light); font-weight: 600; }
+
+  footer {
+    margin-top: 80px; padding: 32px 0 40px; border-top: 1px solid var(--border);
+    color: var(--text-tertiary); font-size: 13px;
+  }
+  footer .container { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+
+  /* Tabs (mobile-friendly) */
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  @media (max-width: 760px) {
     .container { padding: 0 20px; }
-    .hero { padding: 48px 0 32px; }
-    .stats { grid-template-columns: repeat(2, 1fr); }
-    .stat:nth-child(2) { border-right: none; }
-    .stat:nth-child(odd) { border-right: 1px solid var(--border); }
-    section.cta { grid-template-columns: 1fr; padding: 32px; gap: 24px; }
-    .ladder { grid-template-columns: repeat(2, 1fr); }
-    .views { grid-template-columns: 1fr; }
-    header nav { display: none; }
+    .big-metrics { grid-template-columns: 1fr; }
+    .big-card .bc-current { font-size: 48px; }
+    .stat-row { grid-template-columns: 1fr; }
+    .queue-row { grid-template-columns: 1fr; gap: 8px; padding: 16px; }
+    .queue-row .qactions { flex-wrap: wrap; }
+    .outreach-grid { grid-template-columns: repeat(10, 1fr); }
   }
 </style>
 </head>
@@ -294,177 +285,262 @@
         <line x1="50" y1="50" x2="50" y2="75" stroke="#5371ff" stroke-width="1.5"/>
         <line x1="50" y1="50" x2="28.35" y2="62.5" stroke="#5371ff" stroke-width="1.5"/>
         <line x1="50" y1="50" x2="28.35" y2="37.5" stroke="#5371ff" stroke-width="1.5"/>
-        <circle cx="50" cy="10" r="2.5" fill="#5371ff" opacity="0.6"/>
-        <circle cx="85" cy="30" r="2.5" fill="#5371ff" opacity="0.6"/>
-        <circle cx="85" cy="70" r="2.5" fill="#5371ff" opacity="0.6"/>
-        <circle cx="50" cy="90" r="2.5" fill="#5371ff" opacity="0.6"/>
-        <circle cx="15" cy="70" r="2.5" fill="#5371ff" opacity="0.6"/>
-        <circle cx="15" cy="30" r="2.5" fill="#5371ff" opacity="0.6"/>
       </svg>
       <div>
         <span class="brand-name">Groundwork</span>
-        <small class="brand-sub">MOI Pilot · Statewide Missouri</small>
+        <small class="brand-sub">MOI Pilot · Missouri</small>
       </div>
     </a>
-    <nav>
-      <a href="#dashboard">Dashboard</a>
-      <a href="#ladder">Leader ladder</a>
-      <a href="#views">Views</a>
-      <a href="#onboard">How to use</a>
+    <nav class="tab-nav">
+      <a href="#" class="active" data-tab="today">Today</a>
+      <a href="#" data-tab="stats">More stats</a>
+      <a href="#" data-tab="howto">How to use</a>
     </nav>
   </div>
 </header>
 
 <main class="container">
 
-  <section class="hero">
-    <div class="eyebrow">Pilot dashboard · Missouri</div>
-    <h1>Organizing technology<br>built <em>by</em> and <em>for</em> organizers.</h1>
-    <p class="lede">The working dashboard for the MOI pilot — statewide Missouri base list, seeded from KCPS Parent Power sign-ups. One contact list, one organizer view, real outreach tracking. Replaces the 40-tab spreadsheet.</p>
+  <!-- TAB: Today (the main view) -->
+  <div class="tab-pane active" data-pane="today">
+
+    <section class="hero">
+      <div class="eyebrow">Week of May 14 · LaNee's view</div>
+      <h1>Two numbers that matter this week.</h1>
+      <p class="lede">Every call, text, and email feeds these two metrics. Everything else is downstream of getting people to the 5/26 Orientation and booking 1-1s.</p>
+    </section>
+
+    <!-- TWO GIANT PTG CARDS -->
+    <section class="big-metrics">
+      <div class="big-card signup">
+        <div class="bc-label">Primary goal · 5/26 Orientation</div>
+        <div class="bc-question">Sign-ups to the First Orientation Call</div>
+        <div class="bc-progress">
+          <span class="bc-current" id="m-signup-current">3</span>
+          <span class="bc-divider">/</span>
+          <span class="bc-target" id="m-signup-target">30</span>
+        </div>
+        <div class="bc-bar"><div id="m-signup-bar" style="width:10%"></div></div>
+        <div class="bc-foot">
+          <span>commitments logged</span>
+          <span class="bc-percent" id="m-signup-pct">10% to goal</span>
+        </div>
+      </div>
+
+      <div class="big-card oneonone">
+        <div class="bc-label">Secondary · This week's 1-1s</div>
+        <div class="bc-question">1-1 meetings booked</div>
+        <div class="bc-progress">
+          <span class="bc-current" id="m-oneonone-current">0</span>
+          <span class="bc-divider">/</span>
+          <span class="bc-target" id="m-oneonone-target">1</span>
+        </div>
+        <div class="bc-bar"><div id="m-oneonone-bar" style="width:0%"></div></div>
+        <div class="bc-foot">
+          <span>weekly target ramps to 5/wk by May 25</span>
+          <span class="bc-percent" id="m-oneonone-pct">0% to goal</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Smaller stat row -->
+    <div class="stat-row">
+      <div class="stat-mini"><span class="sml">Attempts this week</span><span class="smv">12<em>/ 50</em></span></div>
+      <div class="stat-mini"><span class="sml">Conversations</span><span class="smv">4<em>/ 10</em></span></div>
+      <div class="stat-mini"><span class="sml">Days into week</span><span class="smv">2<em>/ 4</em></span></div>
+    </div>
+
+    <!-- GITHUB-STYLE OUTREACH GRID -->
+    <div class="section-head">
+      <h2>Outreach grid · this week</h2>
+      <span class="mono">50 attempts target · click to log</span>
+    </div>
+    <div class="outreach-grid-wrap">
+      <div class="outreach-grid" id="grid"></div>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-swatch"></span>Not yet attempted</span>
+        <span class="legend-item"><span class="legend-swatch grey"></span>Attempted · no answer</span>
+        <span class="legend-item"><span class="legend-swatch light-purple"></span>Connected · conversation</span>
+        <span class="legend-item"><span class="legend-swatch purple"></span>Signed up for 5/26</span>
+        <span class="legend-item"><span class="legend-swatch green"></span>1-1 booked</span>
+      </div>
+    </div>
+
+    <!-- NEXT-5 QUEUE -->
+    <div class="section-head">
+      <h2>Up next · 5 cold prospects</h2>
+      <span class="mono">refreshes as you log outcomes</span>
+    </div>
+    <div class="queue-wrap" id="queue">
+      <!-- populated by JS with placeholder data for now -->
+    </div>
 
     <div class="pilot-banner">
-      <b>Pilot phase</b>
-      <span>Data layer runs on Airtable while we build out Groundwork's native interface. Everything tracked here transfers cleanly when we cut over.</span>
-    </div>
-
-    <div class="stats">
-      <div class="stat"><div class="stat-n">1,390</div><span class="stat-l">Contacts</span></div>
-      <div class="stat"><div class="stat-n">~2,272</div><span class="stat-l">Recorded touches</span></div>
-      <div class="stat"><div class="stat-n">39</div><span class="stat-l">Events captured</span></div>
-      <div class="stat"><div class="stat-n">32</div><span class="stat-l">Initial leaders</span></div>
-      <div class="stat"><div class="stat-n">711</div><span class="stat-l">Supporters</span></div>
-    </div>
-  </section>
-
-  <section class="cta" id="dashboard">
-    <div>
-      <h2>Open your base</h2>
-      <p>Your home in Airtable. Your default view shows every contact assigned to you, sorted by engagement. Each new call, text, or 1-1 gets logged from the contact's record.</p>
-    </div>
-    <div class="cta-actions">
-      <a class="btn" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A" target="_blank" rel="noopener">
-        Open Airtable
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17l10-10M7 7h10v10"/></svg>
-      </a>
-      <a class="btn btn-secondary" href="https://airtable.com/appQdixHbuttPldx6/tblXQXzxf8z1oht7z" target="_blank" rel="noopener">
-        Log a touch
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-      </a>
-    </div>
-  </section>
-
-  <div class="section-head">
-    <h3>This week's targets</h3>
-    <span class="mono">Week of May 14 · per organizer</span>
-  </div>
-  <div class="ptg">
-    <a class="ptg-card" href="https://airtable.com/appQdixHbuttPldx6/tblXQXzxf8z1oht7z" target="_blank" rel="noopener">
-      <span class="ptg-label">Attempts</span>
-      <span class="ptg-target">50<em>target</em></span>
-      <div class="ptg-bar"><div style="width:0%"></div></div>
-      <span class="ptg-link">Open Touches view →</span>
-    </a>
-    <a class="ptg-card" href="https://airtable.com/appQdixHbuttPldx6/tblXQXzxf8z1oht7z" target="_blank" rel="noopener">
-      <span class="ptg-label">Conversations</span>
-      <span class="ptg-target">10<em>target</em></span>
-      <div class="ptg-bar"><div style="width:0%"></div></div>
-      <span class="ptg-link">Open conversations →</span>
-    </a>
-    <a class="ptg-card" href="https://airtable.com/appQdixHbuttPldx6/tblXQXzxf8z1oht7z" target="_blank" rel="noopener">
-      <span class="ptg-label">1-1s</span>
-      <span class="ptg-target">1<em>target</em></span>
-      <div class="ptg-bar"><div style="width:0%"></div></div>
-      <span class="ptg-link">Open 1-1s →</span>
-    </a>
-    <div class="ptg-card locked">
-      <span class="ptg-label">Leaders developed</span>
-      <span class="ptg-target">—<em>starts wk of June 1</em></span>
-      <div class="ptg-bar"><div style="width:0%"></div></div>
-      <span class="ptg-link" style="color:var(--text-tertiary)">Locked until June</span>
+      <b>This is a design preview.</b> Numbers and queue contents are placeholders. Live wiring to Airtable lands in the next session (Cloudflare Worker proxies the data so we don't expose API tokens in the browser).
     </div>
   </div>
 
-  <div class="section-head">
-    <h3>Where to start your day</h3>
-    <span class="mono">In priority order</span>
-  </div>
-  <div class="queue">
-    <a class="queue-card" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A" target="_blank" rel="noopener">
-      <span class="qrank">01 · primary</span>
-      <span class="qname">Fresh prospects</span>
-      <span class="qdesc">People with no outreach yet. Filter Contacts to: assigned to me, leader_ladder = Prospect, no touches with Call/Text/Email.</span>
-      <span class="qarrow">Open in Airtable →</span>
-    </a>
-    <a class="queue-card" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A" target="_blank" rel="noopener">
-      <span class="qrank">02 · secondary</span>
-      <span class="qname">Cold prospects, no relational link</span>
-      <span class="qdesc">Prospects who came in cold (no Core Leader brought them). They get lost first if no one calls.</span>
-      <span class="qarrow">Open in Airtable →</span>
-    </a>
-    <a class="queue-card guardrail" href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A" target="_blank" rel="noopener">
-      <span class="qrank">⚠ guard rail</span>
-      <span class="qname">Conversations missing a next step</span>
-      <span class="qdesc">Every conversation should have a Next Step logged. Filter Contacts to: needs_next_step = 1. Fix these before new outreach.</span>
-      <span class="qarrow">Open in Airtable →</span>
-    </a>
+  <!-- TAB: Stats -->
+  <div class="tab-pane" data-pane="stats">
+    <section class="hero">
+      <div class="eyebrow">Stats · base overview</div>
+      <h1>Where the base stands.</h1>
+      <p class="lede">Distribution across the leader ladder, attendance signal, and conversion rates over time.</p>
+    </section>
+
+    <div class="section-head">
+      <h2>Leader ladder distribution</h2>
+      <span class="mono">1,390 total · live in Airtable</span>
+    </div>
+    <div class="ladder-chart">
+      <div class="ladder-bar">
+        <div style="background: var(--t-prospect); width: 43%;">598</div>
+        <div style="background: var(--t-supporter); width: 53%;">734</div>
+        <div style="background: var(--t-leader); width: 3.5%;">49</div>
+        <div style="background: var(--t-core); width: 0.7%;">9</div>
+      </div>
+      <div class="ladder-rows">
+        <div class="ladder-row">
+          <span class="dot" style="background: var(--t-prospect);"></span>
+          <span class="lname">Prospect</span>
+          <span class="lbar"><div style="width:43%; background: var(--t-prospect);"></div></span>
+          <span class="lcount">598</span>
+        </div>
+        <div class="ladder-row">
+          <span class="dot" style="background: var(--t-supporter);"></span>
+          <span class="lname">Supporter</span>
+          <span class="lbar"><div style="width:53%; background: var(--t-supporter);"></div></span>
+          <span class="lcount">734</span>
+        </div>
+        <div class="ladder-row">
+          <span class="dot" style="background: var(--t-leader);"></span>
+          <span class="lname">Leader</span>
+          <span class="lbar"><div style="width:3.5%; background: var(--t-leader);"></div></span>
+          <span class="lcount">49</span>
+        </div>
+        <div class="ladder-row">
+          <span class="dot" style="background: var(--t-core);"></span>
+          <span class="lname">Core Leader</span>
+          <span class="lbar"><div style="width:0.7%; background: var(--t-core);"></div></span>
+          <span class="lcount">9</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-head">
+      <h2>Coming in next iteration</h2>
+      <span class="mono">when the Worker is wired</span>
+    </div>
+    <div class="stats-tba">
+      <h3>Time-series + intelligence layer</h3>
+      <p>Once Airtable data flows live, this section gets:</p>
+      <ul>
+        <li>Attempts + conversions over time</li>
+        <li>Sign-up rate by event</li>
+        <li>Flake rate (committed but no-show)</li>
+        <li>Conversion by leader-ladder tier</li>
+        <li>Network/relational map · who recruited whom</li>
+        <li>Profile of "likely to commit" (school, county, prior attendance)</li>
+      </ul>
+    </div>
   </div>
 
-  <div class="section-head" id="ladder">
-    <h3>Leader ladder</h3>
-    <span class="mono">Drag people up as they grow</span>
-  </div>
-  <div class="ladder">
-    <div class="ladder-card">
-      <div class="dot" style="background: var(--prospect);"></div>
-      <div class="nm">Prospect</div>
-      <div class="desc">Signed something, attended one event in the past year.</div>
-      <div class="cnt"><b>643</b> · current</div>
-    </div>
-    <div class="ladder-card">
-      <div class="dot" style="background: var(--supporter);"></div>
-      <div class="nm">Supporter</div>
-      <div class="desc">Attends regularly — more than once a year.</div>
-      <div class="cnt"><b>711</b> · current</div>
-    </div>
-    <div class="ladder-card">
-      <div class="dot" style="background: var(--leader);"></div>
-      <div class="nm">Leader</div>
-      <div class="desc">Carries tasks, has built a following.</div>
-      <div class="cnt"><b>32</b> · current</div>
-    </div>
-    <div class="ladder-card">
-      <div class="dot" style="background: var(--core-leader);"></div>
-      <div class="nm">Core Leader</div>
-      <div class="desc">Develops other leaders, builds teams.</div>
-      <div class="cnt"><b>0</b> · designate manually</div>
-    </div>
-  </div>
+  <!-- TAB: How to -->
+  <div class="tab-pane" data-pane="howto">
+    <section class="hero">
+      <div class="eyebrow">How to use it</div>
+      <h1>Three minutes, then you're going.</h1>
+    </section>
 
-  <div class="section-head" id="onboard">
-    <h3>How to use it</h3>
-    <span class="mono">15-minute walkthrough</span>
-  </div>
-  <div class="onboard">
-    <h4>The everyday flow</h4>
-    <ol>
-      <li><b>Start with the queue above.</b> Pick three Fresh prospects. Don't agonize. These people raised their hand.</li>
-      <li><b>Call, text, or email.</b> When you're done with each one, find them in Airtable and click "+ Touches" on their record.</li>
-      <li><b>Log what happened.</b> Method (Call / Text / Email / 1-1), Result (No answer, Voicemail, Conversation, Committed), one line of Notes if the call had texture. ~20 seconds.</li>
-      <li><b>If you had a conversation</b>, set the Next Step on the contact. One sentence. Don't skip this — it's the guard rail.</li>
-      <li><b>If you made an ask</b>, click "+ Asks" on the same record. Type the ask, mark outcome: Pending, Committed, Declined.</li>
-      <li><b>Bump people on the ladder</b> as the data justifies it. Talked to a Prospect who's already brought a friend? Move them to Supporter. Supporter who's recruiting? Move them to Leader.</li>
-      <li><b>End of week</b>, open the leader ladder kanban. Look at the shape. Where is the pipeline thin?</li>
-    </ol>
+    <div class="howto">
+      <h3>The flow</h3>
+      <ol>
+        <li><b>Look at the two big cards.</b> They're your scoreboard for the week. 5/26 sign-ups and 1-1s booked are the only numbers that matter.</li>
+        <li><b>Scan the outreach grid.</b> Empty squares are attempts you haven't made yet. Each filled square is one call/text/email logged. The colors track what happened.</li>
+        <li><b>Pick from "Up next."</b> Five names at a time, with their phone and email. Don't agonize about order — they're already sorted by priority.</li>
+        <li><b>Call, text, or email.</b> When you finish, click one of the buttons on the row:
+          <br>· <b>Attempted</b> — left a voicemail / no answer / wrong number
+          <br>· <b>Connected</b> — had a real conversation
+          <br>· <b>Signed up</b> — committed to 5/26 Orientation
+          <br>· <b>1-1 booked</b> — scheduled a 1-1</li>
+        <li><b>When you click "Connected" or "Signed up,"</b> a prompt asks you to log a next step (e.g., "follow up to confirm 5/26 attendance"). Don't skip this — it's how nothing falls through.</li>
+        <li><b>Your queue refreshes</b> with the next 5. Keep going.</li>
+        <li><b>End of week</b>, check the Stats tab to see your trend lines and the ladder shape.</li>
+      </ol>
+    </div>
   </div>
 
 </main>
 
 <footer>
   <div class="container">
-    <div>Groundwork — Missouri pilot · launched May 2026 · seeded with KCPS Parent Power list</div>
+    <div>Groundwork · Missouri pilot · launched May 2026</div>
     <div><a href="mailto:emckenna@hks.harvard.edu">emckenna@hks.harvard.edu</a></div>
   </div>
 </footer>
 
+<script>
+// === Render outreach grid (50 squares, placeholder states) ===
+(function renderGrid() {
+  const grid = document.getElementById('grid');
+  const states = [
+    // Mock distribution: 38 empty, 6 grey, 3 light-purple, 2 purple, 1 green
+    ...Array(6).fill('attempted'),
+    ...Array(3).fill('connected'),
+    ...Array(2).fill('signed-up'),
+    ...Array(1).fill('oneonone'),
+    ...Array(38).fill(null),
+  ];
+  for (const s of states) {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    if (s) d.dataset.s = s;
+    grid.appendChild(d);
+  }
+})();
+
+// === Render placeholder queue ===
+const queue = [
+  { name: 'Sarah Orozco', meta: 'Parent · FLA · KCPS', phone: '(816) 507-6489', email: 'sorozco816@gmail.com' },
+  { name: 'Allie Woods',  meta: 'Parent · FLA · KCPS', phone: '(816) 210-3425', email: 'alliemwoods@gmail.com' },
+  { name: 'Erin McGiffert', meta: 'Parent · FLA',     phone: '(773) 512-6600', email: 'mcgifferterin@gmail.com' },
+  { name: 'Kathryn Evans', meta: 'Parent · Border Star · KCPS', phone: '(615) 477-1555', email: 'kathryn@rootedstrategy.com' },
+  { name: 'Anika Hickman', meta: 'Parent · Lincoln Prep / Academie Lafayette', phone: '(816) 686-6966', email: 'anika.hickman@gmail.com' },
+];
+const qhost = document.getElementById('queue');
+queue.forEach((c, i) => {
+  const row = document.createElement('div');
+  row.className = 'queue-row';
+  row.innerHTML = `
+    <span class="qnum">${String(i+1).padStart(2,'0')}</span>
+    <div class="qperson">
+      <div class="qname">${c.name}</div>
+      <div class="qmeta">${c.meta}</div>
+    </div>
+    <div class="qcontact"><div>${c.phone}</div><div>${c.email}</div></div>
+    <div class="qactions">
+      <button class="qbtn grey">Attempted</button>
+      <button class="qbtn">Connected</button>
+      <button class="qbtn purple">Signed up</button>
+      <button class="qbtn green">1-1 booked</button>
+    </div>
+  `;
+  qhost.appendChild(row);
+});
+
+// === Tab switcher ===
+document.querySelectorAll('.tab-nav a').forEach(a => {
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.tab-nav a').forEach(x => x.classList.remove('active'));
+    a.classList.add('active');
+    const tab = a.dataset.tab;
+    document.querySelectorAll('.tab-pane').forEach(p => {
+      p.classList.toggle('active', p.dataset.pane === tab);
+    });
+    window.scrollTo({top:0, behavior:'smooth'});
+  });
+});
+</script>
 </body>
 </html>
