@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="6" fill="#5371ff"/>
+  <circle cx="50" cy="25" r="4" fill="#5371ff"/>
+  <circle cx="71.65" cy="37.5" r="4" fill="#5371ff"/>
+  <circle cx="71.65" cy="62.5" r="4" fill="#5371ff"/>
+  <circle cx="50" cy="75" r="4" fill="#5371ff"/>
+  <circle cx="28.35" cy="62.5" r="4" fill="#5371ff"/>
+  <circle cx="28.35" cy="37.5" r="4" fill="#5371ff"/>
+  <line x1="50" y1="50" x2="50" y2="25" stroke="#5371ff" stroke-width="1.5"/>
+  <line x1="50" y1="50" x2="71.65" y2="37.5" stroke="#5371ff" stroke-width="1.5"/>
+  <line x1="50" y1="50" x2="71.65" y2="62.5" stroke="#5371ff" stroke-width="1.5"/>
+  <line x1="50" y1="50" x2="50" y2="75" stroke="#5371ff" stroke-width="1.5"/>
+  <line x1="50" y1="50" x2="28.35" y2="62.5" stroke="#5371ff" stroke-width="1.5"/>
+  <line x1="50" y1="50" x2="28.35" y2="37.5" stroke="#5371ff" stroke-width="1.5"/>
+  <circle cx="50" cy="10" r="2.5" fill="#5371ff" opacity="0.6"/>
+  <circle cx="85" cy="30" r="2.5" fill="#5371ff" opacity="0.6"/>
+  <circle cx="85" cy="70" r="2.5" fill="#5371ff" opacity="0.6"/>
+  <circle cx="50" cy="90" r="2.5" fill="#5371ff" opacity="0.6"/>
+  <circle cx="15" cy="70" r="2.5" fill="#5371ff" opacity="0.6"/>
+  <circle cx="15" cy="30" r="2.5" fill="#5371ff" opacity="0.6"/>
+</svg>
