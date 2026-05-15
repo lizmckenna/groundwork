@@ -358,8 +358,8 @@
       <a href="#" data-tab="confirms">Confirm 5/26</a>
       <a href="#" data-tab="stats">More stats</a>
       <a href="#" data-tab="howto">How to use</a>
-      <a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9?blocks=hide" target="_blank" rel="noopener" style="color:var(--gw-purple-light);">Airtable ↗</a>
-      <a href="https://tinyurl.com/groundwork-feedback" target="_blank" rel="noopener" style="color:var(--gw-purple-light);">Feedback ↗</a>
+      <a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9?blocks=hide" target="_blank" rel="noopener" style="color:var(--gw-purple);">Airtable ↗</a>
+      <a href="https://tinyurl.com/groundwork-feedback" target="_blank" rel="noopener" style="color:var(--gw-purple);">Feedback ↗</a>
       <button id="theme-toggle" title="Toggle theme" style="background:transparent;border:1px solid var(--border-hover);border-radius:6px;padding:6px 10px;color:var(--text-secondary);cursor:pointer;font-size:14px;font-family:inherit;margin-left:6px;">☾</button>
     </nav>
   </div>
@@ -449,9 +449,9 @@
 
     <div class="pilot-banner">
       <b>Pilot v1.</b> Need to edit a contact's info (missing school, etc.)? Open the
-      <a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9?blocks=hide" target="_blank" rel="noopener" style="color:var(--gw-purple-light);text-decoration:underline;">Airtable base</a>
+      <a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9?blocks=hide" target="_blank" rel="noopener" style="color:var(--gw-purple);text-decoration:underline;">Airtable base</a>
       directly. See something off, missing, or backwards? Drop it in the
-      <a href="https://tinyurl.com/groundwork-feedback" target="_blank" rel="noopener" style="color:var(--gw-purple-light);text-decoration:underline;">feedback doc</a>.
+      <a href="https://tinyurl.com/groundwork-feedback" target="_blank" rel="noopener" style="color:var(--gw-purple);text-decoration:underline;">feedback doc</a>.
     </div>
   </div>
 
@@ -565,6 +565,8 @@
 
 // === Live Airtable wiring via Cloudflare Worker ===
 const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
+const PILOT_KEY = 'gw-pilot-7K9mNxQ2pVfL8jR4zHwY3bAeT5sUqDcM';
+const authHeaders = (extra = {}) => ({ 'X-Groundwork-Key': PILOT_KEY, ...extra });
 let queue = [];
 const savedIds = new Set();  // contacts logged in this session, don't re-show
 const batches = [];           // history of batches she's worked through
@@ -625,11 +627,11 @@ function contactLinks(c) {
   const tel = phoneToTel(c.phone);
   const phoneHtml = c.phone
     ? (tel
-        ? `<div><a href="tel:${tel}" style="color:var(--gw-purple-light)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--gw-purple-light)">text</a></div>`
+        ? `<div><a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a></div>`
         : `<div>${c.phone}</div>`)
     : '';
   const emailHtml = c.email
-    ? `<div><a href="mailto:${c.email}" style="color:var(--gw-purple-light)">${c.email}</a></div>`
+    ? `<div><a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a></div>`
     : '';
   return phoneHtml + emailHtml || '<div style="color:var(--text-tertiary)">no contact info</div>';
 }
@@ -710,7 +712,7 @@ async function fetchNextBatch() {
   try {
     qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
     // Pull a bigger pool, filter client-side, then take 5
-    const res = await fetch(`${WORKER}/prospects?n=${20 + savedIds.size}`);
+    const res = await fetch(`${WORKER}/prospects?n=${20 + savedIds.size}`, { headers: authHeaders() });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const all = await res.json();
     const fresh = all
@@ -784,7 +786,7 @@ async function submitRow(row) {
   try {
     const res = await fetch(`${WORKER}/log`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(body),
     });
     const data = await res.json();
@@ -816,7 +818,7 @@ loadTodayStats().then(() => fetchNextBatch());
 
 async function loadTodayStats() {
   try {
-    const res = await fetch(`${WORKER}/today-stats`);
+    const res = await fetch(`${WORKER}/today-stats`, { headers: authHeaders() });
     if (!res.ok) return;
     const data = await res.json();
     const dots = document.querySelectorAll('#grid .dot');
@@ -863,7 +865,7 @@ const chost = document.getElementById('confirms-queue');
 async function fetchConfirmees() {
   chost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
   try {
-    const res = await fetch(`${WORKER}/confirmees`);
+    const res = await fetch(`${WORKER}/confirmees`, { headers: authHeaders() });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const list = await res.json();
     if (list.length === 0) {
@@ -873,8 +875,8 @@ async function fetchConfirmees() {
     chost.innerHTML = '';
     list.forEach((c, i) => {
       const tel = phoneToTel(c.phone);
-      const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--gw-purple-light)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--gw-purple-light)">text</a>` : c.phone) : '';
-      const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--gw-purple-light)">${c.email}</a>` : '';
+      const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a>` : c.phone) : '';
+      const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a>` : '';
       const row = document.createElement('div');
       row.className = 'queue-row';
       row.innerHTML = `
@@ -923,7 +925,7 @@ async function undoSave(row) {
   try {
     const res = await fetch(`${WORKER}/undo`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ contact_id: row.dataset.contactId }),
     });
     if (!res.ok) {
