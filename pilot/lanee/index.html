@@ -299,6 +299,7 @@
     </a>
     <nav class="tab-nav">
       <a href="#" class="active" data-tab="today">Today</a>
+      <a href="#" data-tab="confirms">Confirm 5/26</a>
       <a href="#" data-tab="stats">More stats</a>
       <a href="#" data-tab="howto">How to use</a>
       <a href="https://tinyurl.com/groundwork-feedback" target="_blank" rel="noopener" style="color:var(--gw-purple-light);">Feedback ↗</a>
@@ -398,6 +399,20 @@
       <b>Pilot v1.</b> See something off, missing, or backwards? Drop it in the feedback doc:
       <a href="https://tinyurl.com/groundwork-feedback" target="_blank" rel="noopener" style="color:var(--gw-purple-light);text-decoration:underline;">tinyurl.com/groundwork-feedback</a>
     </div>
+  </div>
+
+  <div class="tab-pane" data-pane="confirms">
+    <section class="hero">
+      <div class="eyebrow">Confirmation calls · 5/26 Orientation</div>
+      <h1>Lock in who's coming.</h1>
+      <p class="lede">Anyone who signed up for the 5/26 Orientation. Hit them 1-2 days before to confirm. The point isn't to re-pitch — it's to make sure they remember and feel expected.</p>
+    </section>
+
+    <div class="section-head">
+      <h2>Confirmed 5/26 sign-ups</h2>
+      <span class="mono">last_attempt_result = Committed · event = 5/26</span>
+    </div>
+    <div class="queue-wrap" id="confirms-queue"></div>
   </div>
 
   <div class="tab-pane" data-pane="stats">
@@ -592,7 +607,8 @@ function renderQueue() {
           </select>
           <input type="text" class="qfree" placeholder="Type your own next step...">
           <div class="qmissing-flag">⚐ A next step is required when you connect</div>
-          <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
+          <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <button class="qquick-btn" style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--text-secondary);border:1px solid var(--border-hover);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">Tried, no answer → next</button>
             <button class="qsave-btn" style="padding:8px 16px;border-radius:6px;background:var(--gw-purple);color:white;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">Save outcome</button>
             <span class="qsave-status" style="font-size:12px;color:var(--text-tertiary);"></span>
           </div>
@@ -608,7 +624,8 @@ function renderQueue() {
     const freebox = row.querySelector('.qfree');
     select?.addEventListener('change', () => updateRow(row));
     freebox?.addEventListener('input', () => updateRow(row));
-    row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row));
+    row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row, false));
+    row.querySelector('.qquick-btn').addEventListener('click', () => submitRow(row, true));
   });
 }
 
@@ -626,15 +643,16 @@ async function fetchQueue() {
   }
 }
 
-async function submitRow(row) {
+async function submitRow(row, quickNoAnswer = false) {
   const checks = {};
   row.querySelectorAll('.qcheck input').forEach(i => { checks[i.dataset.outcome] = i.checked; });
   const methods = ['called','texted','emailed'].filter(m => checks[m]);
   let outcome = null;
-  if (checks.oneonone) outcome = 'oneonone';
-  else if (checks['signed-up']) outcome = 'signed-up';
-  else if (checks.connected) outcome = 'connected';
-  // next_step
+  if (!quickNoAnswer) {
+    if (checks.oneonone) outcome = 'oneonone';
+    else if (checks['signed-up']) outcome = 'signed-up';
+    else if (checks.connected) outcome = 'connected';
+  }
   const select = row.querySelector('.qnext-select');
   const freebox = row.querySelector('.qfree');
   const next_step = (select.value && !select.value.startsWith('Other'))
@@ -645,18 +663,16 @@ async function submitRow(row) {
     row.querySelector('.qsave-status').style.color = 'var(--gw-red)';
     return;
   }
-  if ((outcome === 'connected' || outcome === 'signed-up' || outcome === 'oneonone') && !next_step) {
+  if (!quickNoAnswer && (outcome === 'connected' || outcome === 'signed-up' || outcome === 'oneonone') && !next_step) {
     row.querySelector('.qsave-status').textContent = '✕ Next step required for conversations';
     row.querySelector('.qsave-status').style.color = 'var(--gw-red)';
     return;
   }
-  const body = {
-    contact_id: row.dataset.contactId,
-    methods, outcome, next_step,
-  };
-  const btn = row.querySelector('.qsave-btn');
+  const body = { contact_id: row.dataset.contactId, methods, outcome, next_step };
+  const saveBtn = row.querySelector('.qsave-btn');
+  const quickBtn = row.querySelector('.qquick-btn');
   const status = row.querySelector('.qsave-status');
-  btn.disabled = true;
+  saveBtn.disabled = true; quickBtn.disabled = true;
   status.textContent = 'Saving…';
   status.style.color = 'var(--text-tertiary)';
   try {
@@ -667,19 +683,61 @@ async function submitRow(row) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    status.textContent = `✓ Saved (${data.created_count} attempt${data.created_count===1?'':'s'} logged)`;
+    status.textContent = quickNoAnswer ? '✓ Logged · next' : '✓ Saved';
     status.style.color = 'var(--gw-green)';
-    btn.textContent = 'Saved';
+    saveBtn.textContent = 'Saved';
     savedIds.add(row.dataset.contactId);
-    setTimeout(() => fetchQueue(), 1500);
+    setTimeout(() => fetchQueue(), quickNoAnswer ? 600 : 1500);
   } catch (e) {
     status.textContent = `✕ Save failed: ${e.message}`;
     status.style.color = 'var(--gw-red)';
-    btn.disabled = false;
+    saveBtn.disabled = false;
+    quickBtn.disabled = false;
   }
 }
 
 fetchQueue();
+
+// === Confirm 5/26 tab ===
+const chost = document.getElementById('confirms-queue');
+async function fetchConfirmees() {
+  chost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
+  try {
+    const res = await fetch(`${WORKER}/confirmees`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const list = await res.json();
+    if (list.length === 0) {
+      chost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">No 5/26 sign-ups yet. Check back after LaNee starts logging.</div>`;
+      return;
+    }
+    chost.innerHTML = '';
+    list.forEach((c, i) => {
+      const tel = phoneToTel(c.phone);
+      const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--gw-purple-light)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--gw-purple-light)">text</a>` : c.phone) : '';
+      const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--gw-purple-light)">${c.email}</a>` : '';
+      const row = document.createElement('div');
+      row.className = 'queue-row';
+      row.innerHTML = `
+        <div class="qmain">
+          <span class="qnum">${String(i+1).padStart(2,'0')}</span>
+          <div class="qperson">
+            <div class="qname">${c.name || '(no name)'}</div>
+            <div class="qmeta">${[c.school, c.district].filter(Boolean).join(' · ') || '—'}</div>
+            <span class="qsignal" style="background:var(--gw-green-soft);color:var(--gw-green);">signed up · ${c.last_attempt_date || 'unknown date'}</span>
+          </div>
+          <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
+          <div class="qchecks">
+            <span style="font-size:12px;color:var(--text-tertiary);">Hit them 1–2 days before 5/26. The goal is to confirm, not re-pitch.</span>
+          </div>
+        </div>`;
+      chost.appendChild(row);
+    });
+  } catch (e) {
+    chost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load: ${e.message} (worker may need redeploy to add /confirmees endpoint)</div>`;
+  }
+}
+// Hook tab click to load confirms
+document.querySelector('.tab-nav a[data-tab="confirms"]').addEventListener('click', fetchConfirmees);
 
 // === Interaction logic ===
 function rankOutcome(checks) {
