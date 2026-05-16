@@ -391,7 +391,7 @@
 
   <div class="tab-pane active" data-pane="today">
     <section class="hero">
-      <div class="eyebrow">Week of May 14 · LaNee Bridewell</div>
+      <div class="eyebrow">Week of May 18 · LaNee Bridewell</div>
       <h1>Two numbers that matter right now.</h1>
       <p class="lede">Every call, text, and email feeds these two metrics. Everything else is downstream of getting people to the 5/26 Orientation and booking 1-1s.</p>
     </section>
@@ -618,6 +618,7 @@ async function authFetch(url, options = {}) {
 }
 let queue = [];
 const savedIds = new Set();  // contacts logged in this session, don't re-show
+const shownIds = new Set();  // contacts already shown in any batch (saved or not), don't re-show
 const batches = [];           // history of batches she's worked through
 let currentBatchIdx = -1;     // which batch she's currently viewing
 // Persistent across batches so grid + metrics don't zero out
@@ -763,14 +764,15 @@ function renderQueue() {
 async function fetchNextBatch() {
   try {
     qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
-    // Pull a bigger pool, filter client-side, then take 5
-    const res = await authFetch(`${WORKER}/prospects?n=${20 + savedIds.size}`);
+    // Pull a bigger pool, filter client-side (savedIds + shownIds), then take 5
+    const res = await authFetch(`${WORKER}/prospects?n=${20 + shownIds.size}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const all = await res.json();
     const fresh = all
-      .filter(c => !savedIds.has(c.id))
-      .filter(c => (c.phone && c.phone.trim()) || (c.email && c.email.trim()))  // require contact info
+      .filter(c => !shownIds.has(c.id))  // skip anyone already shown in a prior batch
+      .filter(c => (c.phone && c.phone.trim()) || (c.email && c.email.trim()))
       .slice(0, 5);
+    fresh.forEach(c => shownIds.add(c.id));  // remember everyone shown this batch
     batches.push({ contacts: fresh, completed: new Set() });
     currentBatchIdx = batches.length - 1;
     queue = fresh;
