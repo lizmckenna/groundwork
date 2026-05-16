@@ -981,6 +981,9 @@ async function loadTodayStats() {
     const data = await res.json();
     const dots = document.querySelectorAll('#grid .dot');
     for (const action of (data.actions || [])) {
+      // Skip web signups / event-attendance imports — those aren't LaNee's outreach
+      const onlyEventAttendance = action.methods.length === 1 && action.methods[0] === 'event attendance';
+      if (onlyEventAttendance) continue;
       const gridIdx = nextGridIdx;
       nextGridIdx++;
       sessionActions.push({ ...action, gridIdx });
