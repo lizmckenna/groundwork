@@ -396,10 +396,24 @@
       <p class="lede">Every call, text, and email feeds these two metrics. Everything else is downstream of getting people to the 5/26 Orientation and booking 1-1s.</p>
     </section>
 
+    <!-- Org-wide 5/26 turnout (everyone: website, FB ads, LaNee, Stephanie) -->
+    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:4px;">5/26 Orientation · org-wide turnout</div>
+          <div style="font-size:24px;font-weight:700;letter-spacing:-0.02em;color:var(--text-primary);"><span id="org-count">—</span> <span style="font-size:14px;font-weight:500;color:var(--text-tertiary);">of <span id="org-target">50</span> RSVPs</span></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;">all sources: web + cold calls + FB ads</div>
+      </div>
+      <div style="height:6px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;">
+        <div id="org-bar" style="height:100%;background:var(--gw-purple);width:0%;transition:width 0.6s;"></div>
+      </div>
+    </div>
+
     <section class="big-metrics">
       <div class="big-card signup">
-        <div class="bc-label">Primary goal · 5/26 Orientation</div>
-        <div class="bc-question">Sign-ups to the First Orientation Call</div>
+        <div class="bc-label">Your goal · cold-call signups</div>
+        <div class="bc-question">Sign-ups from your calls</div>
         <div class="bc-progress">
           <span class="bc-current" id="m-signup-current">0</span>
           <span class="bc-divider">/</span>
@@ -841,6 +855,8 @@ async function submitRow(row) {
     if (dots[gridIdx]) dots[gridIdx].dataset.s = dotState;
     recomputeMetrics();
     updateBatchNav();
+    // If a signup, refresh org-wide counter
+    if (outcome === 'signed-up' || outcome === 'oneonone') loadOrgTurnout();
   } catch (e) {
     status.textContent = `✕ Save failed: ${e.message}`;
     status.style.color = 'var(--gw-red)';
@@ -926,10 +942,26 @@ async function bootAuth() {
   const ok = await bootAuth();
   if (ok) {
     hideLogin();
+    await loadOrgTurnout();
     await loadTodayStats();
     await fetchNextBatch();
   }
 })();
+
+// Fetch org-wide 5/26 turnout count
+async function loadOrgTurnout() {
+  try {
+    const r = await authFetch(`${WORKER}/confirmees`);
+    if (!r.ok) return;
+    const list = await r.json();
+    const count = list.length;
+    const target = 50;
+    const pct = Math.min(100, Math.round((count / target) * 100));
+    document.getElementById('org-count').textContent = count;
+    document.getElementById('org-target').textContent = target;
+    document.getElementById('org-bar').style.width = `${pct}%`;
+  } catch (e) {}
+}
 
 async function loadTodayStats() {
   try {
