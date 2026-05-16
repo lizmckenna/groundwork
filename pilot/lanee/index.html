@@ -628,6 +628,9 @@ function phoneToTel(p) {
   const d = (p || '').replace(/\D/g, '');
   return d.length >= 10 ? `+1${d.slice(-10)}` : '';
 }
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
 // Next-step options conditional on outcome (key matches outcome combo)
 const NEXT_STEP_OPTIONS = {
@@ -856,7 +859,7 @@ async function submitRow(row) {
     recomputeMetrics();
     updateBatchNav();
     // If a signup, refresh org-wide counter
-    if (outcome === 'signed-up' || outcome === 'oneonone') loadOrgTurnout();
+    if (outcome === 'signed-up' || outcome === 'oneonone') loadCounters();
   } catch (e) {
     status.textContent = `✕ Save failed: ${e.message}`;
     status.style.color = 'var(--gw-red)';
@@ -942,24 +945,32 @@ async function bootAuth() {
   const ok = await bootAuth();
   if (ok) {
     hideLogin();
-    await loadOrgTurnout();
+    await loadCounters();
     await loadTodayStats();
     await fetchNextBatch();
   }
 })();
 
-// Fetch org-wide 5/26 turnout count
-async function loadOrgTurnout() {
+// Fetch + render: org-wide turnout AND LaNee's cumulative cold-call signups (excluding website-source)
+async function loadCounters() {
   try {
     const r = await authFetch(`${WORKER}/confirmees`);
     if (!r.ok) return;
     const list = await r.json();
-    const count = list.length;
-    const target = 50;
-    const pct = Math.min(100, Math.round((count / target) * 100));
-    document.getElementById('org-count').textContent = count;
-    document.getElementById('org-target').textContent = target;
-    document.getElementById('org-bar').style.width = `${pct}%`;
+    // Org-wide (everyone)
+    const orgCount = list.length;
+    const orgTarget = 50;
+    document.getElementById('org-count').textContent = orgCount;
+    document.getElementById('org-target').textContent = orgTarget;
+    document.getElementById('org-bar').style.width = `${Math.min(100, Math.round((orgCount/orgTarget)*100))}%`;
+    // LaNee's cumulative signups: confirmees whose source is NOT a website signup
+    const laneeCount = list.filter(c => !((c.source || '').toLowerCase().includes('website'))).length;
+    const laneeTarget = 20;
+    const pct = Math.min(100, Math.round((laneeCount / laneeTarget) * 100));
+    document.getElementById('m-signup-current').textContent = laneeCount;
+    document.getElementById('m-signup-target').textContent = laneeTarget;
+    document.getElementById('m-signup-bar').style.width = `${pct}%`;
+    document.getElementById('m-signup-pct').textContent = `${pct}% to goal`;
   } catch (e) {}
 }
 
@@ -1033,6 +1044,7 @@ async function fetchConfirmees() {
             <div class="qname">${c.name || '(no name)'}</div>
             <div class="qmeta">${[c.school, c.district].filter(Boolean).join(' · ') || '—'}</div>
             <span class="qsignal" style="background:var(--gw-green-soft);color:var(--gw-green);">signed up · ${c.last_attempt_date || 'unknown date'}</span>
+            ${c.source ? `<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase;">source: ${escapeHtml(c.source)}</div>` : ''}
           </div>
           <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
           <div class="qchecks">
@@ -1159,9 +1171,7 @@ function recomputeMetrics() {
   document.getElementById('stat-rate').textContent = rate === null ? '— contact rate' : `${rate}% contact rate`;
   // Big cards
   document.getElementById('m-signup-current').textContent = signups;
-  const signupPct = Math.min(100, Math.round((signups / 20) * 100));
-  document.getElementById('m-signup-bar').style.width = `${signupPct}%`;
-  document.getElementById('m-signup-pct').textContent = `${signupPct}% to goal`;
+  // signup count is owned by loadCounters (cumulative, not session-based)
   document.getElementById('m-oneonone-current').textContent = oneones;
   document.getElementById('m-oneonone-bar').style.width = `${Math.min(100, oneones*100)}%`;
   document.getElementById('m-oneonone-pct').textContent = `${Math.min(100, oneones*100)}% to goal`;
