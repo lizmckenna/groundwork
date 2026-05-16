@@ -337,6 +337,28 @@
 </head>
 <body>
 
+<!-- Login overlay: shown until user has a valid session -->
+<div id="login-overlay" style="display:none;position:fixed;inset:0;background:var(--bg-primary);z-index:9999;align-items:center;justify-content:center;padding:32px;">
+  <div style="max-width:420px;width:100%;padding:40px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:16px;text-align:center;">
+    <svg viewBox="0 0 100 100" width="48" height="48" style="margin-bottom:16px;" aria-hidden="true">
+      <circle cx="50" cy="50" r="6" fill="#5371ff"/>
+      <circle cx="50" cy="25" r="4" fill="#5371ff"/><circle cx="71.65" cy="37.5" r="4" fill="#5371ff"/><circle cx="71.65" cy="62.5" r="4" fill="#5371ff"/>
+      <circle cx="50" cy="75" r="4" fill="#5371ff"/><circle cx="28.35" cy="62.5" r="4" fill="#5371ff"/><circle cx="28.35" cy="37.5" r="4" fill="#5371ff"/>
+      <line x1="50" y1="50" x2="50" y2="25" stroke="#5371ff" stroke-width="1.5"/>
+      <line x1="50" y1="50" x2="71.65" y2="37.5" stroke="#5371ff" stroke-width="1.5"/>
+      <line x1="50" y1="50" x2="71.65" y2="62.5" stroke="#5371ff" stroke-width="1.5"/>
+      <line x1="50" y1="50" x2="50" y2="75" stroke="#5371ff" stroke-width="1.5"/>
+      <line x1="50" y1="50" x2="28.35" y2="62.5" stroke="#5371ff" stroke-width="1.5"/>
+      <line x1="50" y1="50" x2="28.35" y2="37.5" stroke="#5371ff" stroke-width="1.5"/>
+    </svg>
+    <h2 style="font-size:22px;font-weight:600;letter-spacing:-0.015em;margin-bottom:8px;color:var(--text-primary);">Sign in to Groundwork</h2>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:24px;line-height:1.5;">Enter your email and we'll send you a one-click sign-in link. The link expires in 10 minutes.</p>
+    <input id="login-email" type="email" placeholder="you@example.com" autocomplete="email" style="width:100%;padding:12px 14px;background:var(--bg-elevated);border:1px solid var(--border-hover);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;margin-bottom:12px;">
+    <button id="login-btn" style="width:100%;padding:12px;background:var(--gw-purple);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Send sign-in link</button>
+    <p id="login-msg" style="display:none;margin-top:16px;font-size:13px;color:var(--text-secondary);"></p>
+  </div>
+</div>
+
 <header class="site">
   <div class="container site-inner">
     <a class="brand" href="/groundwork/">
@@ -565,8 +587,21 @@
 
 // === Live Airtable wiring via Cloudflare Worker ===
 const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
-const PILOT_KEY = 'gw-pilot-7K9mNxQ2pVfL8jR4zHwY3bAeT5sUqDcM';
-const authHeaders = (extra = {}) => ({ 'X-Groundwork-Key': PILOT_KEY, ...extra });
+const authHeaders = (extra = {}) => ({
+  'X-Groundwork-Session': localStorage.getItem('gw-session') || '',
+  ...extra,
+});
+
+// Wraps fetch to bounce to login on 401
+async function authFetch(url, options = {}) {
+  const r = await fetch(url, { ...options, headers: authHeaders(options.headers || {}) });
+  if (r.status === 401) {
+    localStorage.removeItem('gw-session');
+    showLogin('Session expired. Sign in again.');
+    throw new Error('unauthorized');
+  }
+  return r;
+}
 let queue = [];
 const savedIds = new Set();  // contacts logged in this session, don't re-show
 const batches = [];           // history of batches she's worked through
@@ -712,7 +747,7 @@ async function fetchNextBatch() {
   try {
     qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
     // Pull a bigger pool, filter client-side, then take 5
-    const res = await fetch(`${WORKER}/prospects?n=${20 + savedIds.size}`, { headers: authHeaders() });
+    const res = await authFetch(`${WORKER}/prospects?n=${20 + savedIds.size}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const all = await res.json();
     const fresh = all
@@ -784,9 +819,9 @@ async function submitRow(row) {
   status.textContent = 'Saving…';
   status.style.color = 'var(--text-tertiary)';
   try {
-    const res = await fetch(`${WORKER}/log`, {
+    const res = await authFetch(`${WORKER}/log`, {
       method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     const data = await res.json();
@@ -813,12 +848,92 @@ async function submitRow(row) {
   }
 }
 
-// Load today's saved actions BEFORE first batch, so reload preserves the view
-loadTodayStats().then(() => fetchNextBatch());
+// === Auth boot: verify magic-link, check session, or show login ===
+function showLogin(msg) {
+  document.getElementById('login-overlay').style.display = 'flex';
+  if (msg) {
+    const m = document.getElementById('login-msg');
+    m.textContent = msg;
+    m.style.display = 'block';
+    m.style.color = 'var(--gw-red)';
+  }
+}
+function hideLogin() { document.getElementById('login-overlay').style.display = 'none'; }
+
+document.getElementById('login-btn').addEventListener('click', async () => {
+  const emailInput = document.getElementById('login-email');
+  const msg = document.getElementById('login-msg');
+  const btn = document.getElementById('login-btn');
+  const email = emailInput.value.trim();
+  if (!email || !email.includes('@')) {
+    msg.textContent = 'Enter a valid email';
+    msg.style.display = 'block';
+    msg.style.color = 'var(--gw-red)';
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const r = await fetch(`${WORKER}/auth/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    msg.textContent = `✓ Check ${email} for a sign-in link (expires in 10 min).`;
+    msg.style.display = 'block';
+    msg.style.color = 'var(--gw-green)';
+    btn.textContent = 'Sent — check your email';
+  } catch (e) {
+    msg.textContent = `Couldn't send: ${e.message}`;
+    msg.style.display = 'block';
+    msg.style.color = 'var(--gw-red)';
+    btn.disabled = false; btn.textContent = 'Send sign-in link';
+  }
+});
+
+async function bootAuth() {
+  // 1. If URL has ?token=XXX, verify it (came from magic link)
+  const params = new URLSearchParams(location.search);
+  const tokenFromUrl = params.get('token');
+  if (tokenFromUrl) {
+    try {
+      const r = await fetch(`${WORKER}/auth/verify`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: tokenFromUrl }),
+      });
+      const data = await r.json();
+      if (r.ok && data.session_token) {
+        localStorage.setItem('gw-session', data.session_token);
+        history.replaceState({}, '', location.pathname);
+        return true;
+      } else {
+        showLogin('Link expired or invalid. Enter your email to get a new one.');
+        return false;
+      }
+    } catch (e) {
+      showLogin(`Verification failed: ${e.message}`);
+      return false;
+    }
+  }
+  // 2. Check for existing session
+  if (localStorage.getItem('gw-session')) return true;
+  // 3. No session — show login
+  showLogin();
+  return false;
+}
+
+(async () => {
+  const ok = await bootAuth();
+  if (ok) {
+    hideLogin();
+    await loadTodayStats();
+    await fetchNextBatch();
+  }
+})();
 
 async function loadTodayStats() {
   try {
-    const res = await fetch(`${WORKER}/today-stats`, { headers: authHeaders() });
+    const res = await authFetch(`${WORKER}/today-stats`);
     if (!res.ok) return;
     const data = await res.json();
     const dots = document.querySelectorAll('#grid .dot');
@@ -865,7 +980,7 @@ const chost = document.getElementById('confirms-queue');
 async function fetchConfirmees() {
   chost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
   try {
-    const res = await fetch(`${WORKER}/confirmees`, { headers: authHeaders() });
+    const res = await authFetch(`${WORKER}/confirmees`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const list = await res.json();
     if (list.length === 0) {
@@ -923,9 +1038,9 @@ async function undoSave(row) {
   status.textContent = 'Undoing…';
   status.style.color = 'var(--text-tertiary)';
   try {
-    const res = await fetch(`${WORKER}/undo`, {
+    const res = await authFetch(`${WORKER}/undo`, {
       method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contact_id: row.dataset.contactId }),
     });
     if (!res.ok) {
