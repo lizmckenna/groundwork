@@ -982,10 +982,11 @@ async function loadTodayStats() {
     if (!res.ok) return;
     const data = await res.json();
     const dots = document.querySelectorAll('#grid .dot');
+    const OUTREACH_METHODS = ['called', 'texted', 'emailed', '1-1'];
     for (const action of (data.actions || [])) {
-      // Skip web signups / event-attendance imports — those aren't LaNee's outreach
-      const onlyEventAttendance = action.methods.length === 1 && action.methods[0] === 'event attendance';
-      if (onlyEventAttendance) continue;
+      // Only show actions where LaNee actively called/texted/emailed/1-1'd
+      const hasOutreach = (action.methods || []).some(m => OUTREACH_METHODS.includes(m));
+      if (!hasOutreach) continue;
       const gridIdx = nextGridIdx;
       nextGridIdx++;
       sessionActions.push({ ...action, gridIdx });
