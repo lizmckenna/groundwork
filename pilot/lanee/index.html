@@ -1170,7 +1170,6 @@ function recomputeMetrics() {
   const rate = attempts > 0 ? Math.round((convos / attempts) * 100) : null;
   document.getElementById('stat-rate').textContent = rate === null ? '— contact rate' : `${rate}% contact rate`;
   // Big cards
-  document.getElementById('m-signup-current').textContent = signups;
   // signup count is owned by loadCounters (cumulative, not session-based)
   document.getElementById('m-oneonone-current').textContent = oneones;
   document.getElementById('m-oneonone-bar').style.width = `${Math.min(100, oneones*100)}%`;
