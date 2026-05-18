@@ -1111,6 +1111,7 @@ async function undoSave(row) {
     savedIds.clear();
     document.querySelectorAll('#grid .dot').forEach(d => d.removeAttribute('data-s'));
     await loadTodayStats();
+    await loadCounters();
     recomputeMetrics();
     updateBatchNav();
   } catch (e) {
