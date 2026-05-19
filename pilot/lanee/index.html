@@ -1155,7 +1155,7 @@ async function fetchConfirmees() {
           <div class="qperson">
             <div class="qname">${escapeHtml(c.name || '(no name)')}${confirmStatusPill(cf.status)}</div>
             <div class="qmeta">${escapeHtml([c.school, c.district].filter(Boolean).join(' · ') || '—')}</div>
-            <span class="qsignal" style="background:var(--gw-green-soft);color:var(--gw-green);">signed up · ${escapeHtml(c.last_attempt_date || 'unknown date')}</span>
+            <span class="qsignal" style="background:rgba(82,82,91,0.15);color:var(--text-tertiary);">signed up · ${escapeHtml(c.last_attempt_date || 'unknown date')}</span>
             ${c.source ? `<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase;">source: ${escapeHtml(c.source)}</div>` : ''}
           </div>
           <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
