@@ -247,6 +247,18 @@
   .queue-row.row-complete .qname { text-decoration: line-through; }
   .queue-row.row-complete .qname::after { content: ' · DONE'; font-size: 10px; color: var(--gw-green); font-weight: 600; letter-spacing: 0.08em; text-decoration: none; vertical-align: 1px; }
 
+  /* Confirm 5/26 — full-row green wash when a person is Confirmed */
+  .queue-row.row-confirmed {
+    background: linear-gradient(180deg, rgba(34,197,94,0.18) 0%, rgba(34,197,94,0.08) 100%);
+    border-left: 4px solid var(--gw-green);
+    box-shadow: inset 0 0 0 1px rgba(34,197,94,0.18);
+  }
+  :root[data-theme="dark"] .queue-row.row-confirmed {
+    background: linear-gradient(180deg, rgba(34,197,94,0.22) 0%, rgba(34,197,94,0.10) 100%);
+  }
+  .queue-row.row-confirmed .qname { color: var(--gw-green); font-weight: 600; }
+  .queue-row.row-confirmed .qname::after { content: ' ✓'; color: var(--gw-green); font-weight: 700; margin-left: 4px; }
+
   /* Batch nav */
   .batch-nav {
     display: flex; gap: 12px; justify-content: space-between; align-items: center;
@@ -1135,6 +1147,7 @@ async function fetchConfirmees() {
       const statusSel = statusOpts.map(s => `<option value="${s}"${s===(cf.status||'')?' selected':''}>${s||'No update yet'}</option>`).join('');
       const row = document.createElement('div');
       row.className = 'queue-row';
+      if (cf.status === 'Confirmed') row.classList.add('row-confirmed');
       row.dataset.contactId = c.id;
       row.innerHTML = `
         <div class="qmain">
@@ -1228,6 +1241,8 @@ async function submitConfirmRow(row) {
     status.textContent = '✓ Saved';
     status.style.color = 'var(--gw-green)';
     btn.disabled = false;
+    // Toggle the full-row green wash when the new status is Confirmed
+    row.classList.toggle('row-confirmed', statusVal === 'Confirmed');
   } catch (e) {
     status.textContent = `✕ ${e.message}`;
     status.style.color = 'var(--gw-red)';
