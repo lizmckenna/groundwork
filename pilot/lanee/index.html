@@ -378,6 +378,7 @@
     <nav class="tab-nav">
       <a href="#" class="active" data-tab="today">Today</a>
       <a href="#" data-tab="confirms">Confirm 5/26</a>
+      <a href="#" data-tab="find">Find contact</a>
       <a href="#" data-tab="stats">More stats</a>
       <a href="#" data-tab="howto">How to use</a>
       <a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9?blocks=hide" target="_blank" rel="noopener" style="color:var(--gw-purple);">Airtable ↗</a>
@@ -472,8 +473,8 @@
     </div>
 
     <div class="section-head">
-      <h2>Up next · 5 hot prospects</h2>
-      <span class="mono">attended events or have a relational link</span>
+      <h2>Up next · 5 to call</h2>
+      <span class="mono"><span id="queue-total">—</span> total in your queue · warmest leads first</span>
     </div>
     <div class="queue-wrap" id="queue"></div>
 
@@ -503,6 +504,21 @@
       <span class="mono">last_attempt_result = Committed · event = 5/26</span>
     </div>
     <div class="queue-wrap" id="confirms-queue"></div>
+  </div>
+
+  <div class="tab-pane" data-pane="find">
+    <section class="hero">
+      <div class="eyebrow">Find a contact</div>
+      <h1>Search anyone in the base.</h1>
+      <p class="lede">Looking for someone you already called or texted? Search by name, phone, or email. Click a result to update them like a regular queue row.</p>
+    </section>
+    <div style="margin:24px 0 12px;display:flex;gap:8px;">
+      <input id="find-input" type="text" placeholder="Type a name, phone, or email…" style="flex:1;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:12px 14px;border-radius:8px;font-size:14px;font-family:inherit;">
+      <button id="find-btn" style="padding:12px 22px;border-radius:8px;background:var(--gw-purple);color:white;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Search</button>
+    </div>
+    <div class="queue-wrap" id="find-results">
+      <div style="padding:32px;text-align:center;color:var(--text-tertiary);">Search for someone above.</div>
+    </div>
   </div>
 
   <div class="tab-pane" data-pane="stats">
@@ -672,9 +688,20 @@ function metaLine(c) {
   return parts.join(' · ') || '—';
 }
 function signalLine(c) {
+  if (c.log_count >= 5) return `★ ${c.log_count} prior events · warm`;
   if (c.organized_by_count > 0) return 'in network · organized';
-  if (c.log_count > 1) return `${c.log_count} prior events`;
-  return 'hot lead';
+  if (c.log_count > 0) return `${c.log_count} prior events`;
+  return c.leader_ladder ? c.leader_ladder.toLowerCase() : 'new lead';
+}
+
+async function loadQueueCount() {
+  try {
+    const r = await authFetch(`${WORKER}/queue-count`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('queue-total');
+    if (el) el.textContent = (d.count || 0).toLocaleString();
+  } catch (e) {}
 }
 function contactLinks(c) {
   const tel = phoneToTel(c.phone);
@@ -719,6 +746,12 @@ function renderQueue() {
             <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up"> Signed up</label>
             <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
           </div>
+          <input type="text" class="qnotes" placeholder="Notes (optional — quick observation, what happened, etc.)" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:12.5px;font-family:inherit;">
+          <div class="qadmin-row" style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
+            <button class="qadmin-btn" data-admin="skipped" title="Already a P4KCKids leader or otherwise should not be cold-called" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border-hover);background:transparent;color:var(--text-tertiary);font-size:11px;font-family:inherit;cursor:pointer;">⊘ Skip · already leader</button>
+            <button class="qadmin-btn" data-admin="wrong-number" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border-hover);background:transparent;color:var(--text-tertiary);font-size:11px;font-family:inherit;cursor:pointer;">✕ Wrong #</button>
+            <button class="qadmin-btn" data-admin="do-not-contact" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(220,38,38,0.4);background:transparent;color:var(--gw-red);font-size:11px;font-family:inherit;cursor:pointer;">⊗ Remove from list</button>
+          </div>
           <div class="qsave-row">
             <button class="qsave-btn">Save</button>
             <button class="qundo-btn" style="display:none;">Undo</button>
@@ -749,6 +782,9 @@ function renderQueue() {
     row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row));
     row.querySelector('.qundo-btn').addEventListener('click', () => {
       if (confirm('Undo this save? This will delete the record from Airtable.')) undoSave(row);
+    });
+    row.querySelectorAll('.qadmin-btn').forEach(btn => {
+      btn.addEventListener('click', () => submitAdmin(row, btn.dataset.admin));
     });
     // If this contact was already saved this session, restore the Saved state
     if (savedIds.has(c.id)) {
@@ -808,6 +844,43 @@ function updateBatchNav() {
   info.textContent = `Batch ${currentBatchIdx + 1} · ${doneCount} of ${total} done`;
 }
 
+async function submitAdmin(row, adminOutcome) {
+  // Skip / Wrong # / Do-not-contact — pulls the contact out of the queue without an outreach attempt.
+  const confirmText = {
+    'skipped': 'Skip this person (e.g. already a P4KCKids leader)? They will not come back in your queue.',
+    'wrong-number': 'Mark this number as wrong / out of service? They will not come back in your queue.',
+    'do-not-contact': 'Mark this person as "do not contact"? They will be removed from the call list permanently.',
+  };
+  if (!confirm(confirmText[adminOutcome] || 'Apply this action?')) return;
+  const notes = (row.querySelector('.qnotes')?.value || '').trim();
+  const status = row.querySelector('.qsave-status');
+  const saveBtn = row.querySelector('.qsave-btn');
+  status.textContent = 'Saving…';
+  status.style.color = 'var(--text-tertiary)';
+  saveBtn.disabled = true;
+  try {
+    const res = await authFetch(`${WORKER}/log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact_id: row.dataset.contactId, methods: [], outcome: adminOutcome, notes }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    status.textContent = `✓ Marked ${adminOutcome.replace('-', ' ')}`;
+    status.style.color = 'var(--gw-green)';
+    saveBtn.style.display = 'none';
+    row.querySelector('.qundo-btn').style.display = 'inline-flex';
+    savedIds.add(row.dataset.contactId);
+    row.classList.add('row-complete');
+    sessionActions.push({ contact_id: row.dataset.contactId, methods: [], outcome: adminOutcome, gridIdx: -1 });
+    updateBatchNav();
+  } catch (e) {
+    status.textContent = `✕ ${e.message}`;
+    status.style.color = 'var(--gw-red)';
+    saveBtn.disabled = false;
+  }
+}
+
 async function submitRow(row) {
   const checks = {};
   row.querySelectorAll('.qcheck input').forEach(i => { checks[i.dataset.outcome] = i.checked; });
@@ -832,7 +905,8 @@ async function submitRow(row) {
     status.style.color = 'var(--gw-red)';
     return;
   }
-  const body = { contact_id: row.dataset.contactId, methods, outcome, next_step };
+  const notes = (row.querySelector('.qnotes')?.value || '').trim();
+  const body = { contact_id: row.dataset.contactId, methods, outcome, next_step, notes };
   const saveBtn = row.querySelector('.qsave-btn');
   saveBtn.disabled = true;
   status.textContent = 'Saving…';
@@ -950,6 +1024,7 @@ async function bootAuth() {
     await loadCounters();
     await loadTodayStats();
     await fetchNextBatch();
+    loadQueueCount(); // fire and forget
   }
 })();
 
@@ -1026,6 +1101,20 @@ qhost.addEventListener('click', (e) => {
 
 // === Confirm 5/26 tab ===
 const chost = document.getElementById('confirms-queue');
+
+function confirmStatusPill(status) {
+  if (!status) return '';
+  const map = {
+    'Confirmed':     { bg: 'var(--gw-green-soft)', color: 'var(--gw-green)' },
+    'Declined':      { bg: 'var(--gw-red-soft)',   color: 'var(--gw-red)' },
+    'Cancelled':     { bg: 'var(--gw-red-soft)',   color: 'var(--gw-red)' },
+    'No answer':     { bg: 'rgba(82,82,91,0.15)',  color: 'var(--text-tertiary)' },
+    'Reminder sent': { bg: 'var(--gw-purple-soft)', color: 'var(--gw-purple-light)' },
+  };
+  const c = map[status] || { bg: 'var(--bg-elevated)', color: 'var(--text-tertiary)' };
+  return `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:${c.bg};color:${c.color};margin-left:6px;">${status}</span>`;
+}
+
 async function fetchConfirmees() {
   chost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
   try {
@@ -1041,30 +1130,201 @@ async function fetchConfirmees() {
       const tel = phoneToTel(c.phone);
       const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a>` : c.phone) : '';
       const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a>` : '';
+      const cf = c.confirm || { email_sent:false, text_sent:false, call_made:false, status:null };
+      const statusOpts = ['', 'Reminder sent', 'Confirmed', 'No answer', 'Cancelled'];
+      const statusSel = statusOpts.map(s => `<option value="${s}"${s===(cf.status||'')?' selected':''}>${s||'No update yet'}</option>`).join('');
       const row = document.createElement('div');
       row.className = 'queue-row';
+      row.dataset.contactId = c.id;
       row.innerHTML = `
         <div class="qmain">
           <span class="qnum">${String(i+1).padStart(2,'0')}</span>
           <div class="qperson">
-            <div class="qname">${c.name || '(no name)'}</div>
-            <div class="qmeta">${[c.school, c.district].filter(Boolean).join(' · ') || '—'}</div>
-            <span class="qsignal" style="background:var(--gw-green-soft);color:var(--gw-green);">signed up · ${c.last_attempt_date || 'unknown date'}</span>
+            <div class="qname">${escapeHtml(c.name || '(no name)')}${confirmStatusPill(cf.status)}</div>
+            <div class="qmeta">${escapeHtml([c.school, c.district].filter(Boolean).join(' · ') || '—')}</div>
+            <span class="qsignal" style="background:var(--gw-green-soft);color:var(--gw-green);">signed up · ${escapeHtml(c.last_attempt_date || 'unknown date')}</span>
             ${c.source ? `<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase;">source: ${escapeHtml(c.source)}</div>` : ''}
           </div>
           <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
-          <div class="qchecks">
-            <span style="font-size:12px;color:var(--text-tertiary);">Contact them 1–2 days before 5/26. The goal is to confirm, answer questions, and make sure they have the Zoom details.</span>
+          <div class="qchecks-col">
+            <div class="qchecks">
+              <label class="qcheck grey"><input type="checkbox" data-cmethod="emailed" ${cf.email_sent?'checked':''}> Emailed Zoom</label>
+              <label class="qcheck grey"><input type="checkbox" data-cmethod="texted" ${cf.text_sent?'checked':''}> Texted</label>
+              <label class="qcheck grey"><input type="checkbox" data-cmethod="called" ${cf.call_made?'checked':''}> Called</label>
+            </div>
+            <div class="qchecks">
+              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;">Status</label>
+              <select class="qconfirm-status" style="background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;">
+                ${statusSel}
+              </select>
+            </div>
+            <div class="qsave-row">
+              <button class="qzoom-btn" title="Send the branded Zoom confirmation email to this person right now" ${c.email ? '' : 'disabled'} style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--gw-purple);border:1px solid var(--gw-purple);font-size:12px;font-weight:600;cursor:${c.email ? 'pointer' : 'not-allowed'};font-family:inherit;opacity:${c.email ? '1' : '0.4'};">✉ Send Zoom email</button>
+              <button class="qsave-btn qconfirm-save">Save</button>
+              <span class="qsave-status"></span>
+            </div>
           </div>
         </div>`;
       chost.appendChild(row);
+      row.querySelector('.qconfirm-save').addEventListener('click', () => submitConfirmRow(row));
+      const zoomBtn = row.querySelector('.qzoom-btn');
+      if (zoomBtn) zoomBtn.addEventListener('click', () => sendZoomEmail(row, c.email));
     });
   } catch (e) {
     chost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load: ${e.message} (worker may need redeploy to add /confirmees endpoint)</div>`;
   }
 }
+
+async function sendZoomEmail(row, emailAddr) {
+  if (!emailAddr) return;
+  if (!confirm(`Send the Parents for MO Public Schools Zoom email to ${emailAddr} right now?`)) return;
+  const status = row.querySelector('.qsave-status');
+  const btn = row.querySelector('.qzoom-btn');
+  btn.disabled = true;
+  status.textContent = 'Sending…';
+  status.style.color = 'var(--text-tertiary)';
+  try {
+    const res = await authFetch(`${WORKER}/send-zoom-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact_id: row.dataset.contactId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    status.textContent = `✓ Sent to ${data.sent_to}`;
+    status.style.color = 'var(--gw-green)';
+    // Refresh the confirm tab so the new email_sent state shows
+    setTimeout(() => fetchConfirmees(), 1200);
+  } catch (e) {
+    status.textContent = `✕ ${e.message}`;
+    status.style.color = 'var(--gw-red)';
+    btn.disabled = false;
+  }
+}
+
+async function submitConfirmRow(row) {
+  const methods = Array.from(row.querySelectorAll('.qchecks input[data-cmethod]'))
+    .filter(i => i.checked)
+    .map(i => i.dataset.cmethod);
+  const statusVal = row.querySelector('.qconfirm-status').value || null;
+  const status = row.querySelector('.qsave-status');
+  const btn = row.querySelector('.qconfirm-save');
+  if (methods.length === 0 && !statusVal) {
+    status.textContent = '✕ Check at least one box or pick a status';
+    status.style.color = 'var(--gw-red)';
+    return;
+  }
+  btn.disabled = true;
+  status.textContent = 'Saving…';
+  status.style.color = 'var(--text-tertiary)';
+  try {
+    const res = await authFetch(`${WORKER}/confirm-log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact_id: row.dataset.contactId, methods, status: statusVal }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    status.textContent = '✓ Saved';
+    status.style.color = 'var(--gw-green)';
+    btn.disabled = false;
+  } catch (e) {
+    status.textContent = `✕ ${e.message}`;
+    status.style.color = 'var(--gw-red)';
+    btn.disabled = false;
+  }
+}
+
 // Hook tab click to load confirms
 document.querySelector('.tab-nav a[data-tab="confirms"]').addEventListener('click', fetchConfirmees);
+
+// === Find contact tab ===
+const findHost = document.getElementById('find-results');
+async function runSearch() {
+  const q = document.getElementById('find-input').value.trim();
+  if (!q) {
+    findHost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Type a name, phone, or email above.</div>`;
+    return;
+  }
+  findHost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Searching…</div>`;
+  try {
+    const res = await authFetch(`${WORKER}/search?q=${encodeURIComponent(q)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const list = await res.json();
+    if (list.length === 0) {
+      findHost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">No matches.</div>`;
+      return;
+    }
+    // Render with the same queue UI — swap queue/qhost temporarily so renderQueue targets findHost.
+    const prevHost = qhost; // closure-captured, but we'll override by mutating queue + DOM
+    const prevQueue = queue.slice();
+    queue = list;
+    // renderQueue uses the module-level `qhost`. Inline a clone that writes into findHost.
+    findHost.innerHTML = '';
+    list.forEach((c, i) => {
+      const row = document.createElement('div');
+      row.className = 'queue-row';
+      if (savedIds.has(c.id)) row.classList.add('row-complete');
+      row.dataset.idx = i;
+      row.dataset.contactId = c.id;
+      const tel = phoneToTel(c.phone);
+      const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a>` : c.phone) : '';
+      const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a>` : '';
+      const status = c.last_attempt_result ? `<span class="qsignal" style="background:var(--bg-elevated);color:var(--text-tertiary);">${escapeHtml(c.last_attempt_result)} · ${escapeHtml(c.last_attempt_date || '')}</span>` : `<span class="qsignal">${escapeHtml(c.leader_ladder || 'not yet contacted')}</span>`;
+      row.innerHTML = `
+        <div class="qmain">
+          <span class="qnum">${String(i+1).padStart(2,'0')}</span>
+          <div class="qperson">
+            <div class="qname">${escapeHtml(c.name || '(no name)')}</div>
+            <div class="qmeta">${escapeHtml([c.school, c.district].filter(Boolean).join(' · ') || '—')}</div>
+            ${status}
+          </div>
+          <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
+          <div class="qchecks-col">
+            <div class="qchecks">
+              <label class="qcheck grey"><input type="checkbox" data-outcome="called"> Called</label>
+              <label class="qcheck grey"><input type="checkbox" data-outcome="texted"> Texted</label>
+              <label class="qcheck grey"><input type="checkbox" data-outcome="emailed"> Emailed</label>
+              <label class="qcheck light-purple"><input type="checkbox" data-outcome="connected"> Connected</label>
+              <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up"> Signed up</label>
+              <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
+            </div>
+            <input type="text" class="qnotes" placeholder="Notes (optional)" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <div class="qadmin-row" style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
+              <button class="qadmin-btn" data-admin="skipped" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border-hover);background:transparent;color:var(--text-tertiary);font-size:11px;font-family:inherit;cursor:pointer;">⊘ Skip · already leader</button>
+              <button class="qadmin-btn" data-admin="wrong-number" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border-hover);background:transparent;color:var(--text-tertiary);font-size:11px;font-family:inherit;cursor:pointer;">✕ Wrong #</button>
+              <button class="qadmin-btn" data-admin="do-not-contact" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(220,38,38,0.4);background:transparent;color:var(--gw-red);font-size:11px;font-family:inherit;cursor:pointer;">⊗ Remove</button>
+            </div>
+            <div class="qsave-row">
+              <button class="qsave-btn">Save</button>
+              <span class="qsave-status"></span>
+            </div>
+          </div>
+        </div>
+        <div class="qnextstep">
+          <span class="qnext-label">Next step</span>
+          <div>
+            <select class="qnext-select"><option value="">Choose a next step...</option></select>
+            <input type="text" class="qfree" placeholder="Type your own next step...">
+            <div class="qmissing-flag">⚐ A next step is required when you connect</div>
+          </div>
+        </div>`;
+      findHost.appendChild(row);
+      row.querySelectorAll('.qcheck input').forEach(input => input.addEventListener('change', () => updateRow(row)));
+      const sel = row.querySelector('.qnext-select');
+      const fre = row.querySelector('.qfree');
+      sel?.addEventListener('change', () => updateRow(row));
+      fre?.addEventListener('input', () => updateRow(row));
+      row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row));
+      row.querySelectorAll('.qadmin-btn').forEach(b => b.addEventListener('click', () => submitAdmin(row, b.dataset.admin)));
+    });
+    queue = prevQueue; // restore — search rows are self-contained
+  } catch (e) {
+    findHost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Search failed: ${e.message}</div>`;
+  }
+}
+document.getElementById('find-btn').addEventListener('click', runSearch);
+document.getElementById('find-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
 
 // === Interaction logic ===
 function rankOutcome(checks) {
