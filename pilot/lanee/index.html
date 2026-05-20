@@ -1084,11 +1084,25 @@ async function bootAuth() {
 
 // Cumulative grid: day-by-day rows of outreach attempts
 async function loadCumulativeGrid() {
+  let byDate = {};
   try {
     const r = await authFetch(`${WORKER}/recent-activity?days=14`);
-    if (!r.ok) return;
-    const data = await r.json();
-    const byDate = data.by_date || {};
+    if (r.ok) {
+      const data = await r.json();
+      byDate = data.by_date || {};
+    }
+  } catch (e) {}
+  // Fallback: if no history (e.g., endpoint not deployed), at least populate today
+  // from the in-page sessionActions so the user sees their current grid.
+  if (!byDate[(new Date()).toISOString().split('T')[0]]) {
+    const today = (new Date()).toISOString().split('T')[0];
+    try {
+      byDate[today] = (sessionActions || []).map(a => ({
+        contact_id: a.contact_id, methods: a.methods || [], outcome: a.outcome,
+      }));
+    } catch (e) { byDate[today] = []; }
+  }
+  try {
     const today = (new Date()).toISOString().split('T')[0];
     const TODAY_GOAL = 50;
     const wrap = document.getElementById('grid-days');
