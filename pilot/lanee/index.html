@@ -154,6 +154,14 @@
     border-radius: 12px; padding: 28px;
   }
   .outreach-grid { display: grid; grid-template-columns: repeat(25, 1fr); gap: 5px; margin-bottom: 20px; }
+  /* Cumulative day-row grid */
+  #grid-days { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+  .day-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .day-row .day-label { min-width: 150px; font-size: 12px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em; }
+  .day-row .day-label b { color: var(--text-primary); font-weight: 700; }
+  .day-row .day-squares { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; min-width: 0; }
+  .day-row .day-squares .dot { width: 14px; height: 14px; aspect-ratio: auto; flex: 0 0 14px; }
+  .day-row.today { padding: 8px 12px; background: var(--gw-purple-soft); border-radius: 8px; border: 1px solid rgba(83,113,255,0.15); }
   .dot {
     aspect-ratio: 1 / 1; border-radius: 4px;
     border: 1.5px solid var(--dot-empty-border); background: transparent;
@@ -470,11 +478,13 @@
     </div>
 
     <div class="section-head">
-      <h2>Outreach grid · today</h2>
-      <span class="mono">50 attempts target · fills as you log</span>
+      <h2>Outreach grid · cumulative</h2>
+      <span class="mono">your effort over time · today on top</span>
     </div>
     <div class="outreach-grid-wrap">
-      <div class="outreach-grid" id="grid"></div>
+      <div id="grid-days"></div>
+      <!-- Legacy fixed 50-grid kept hidden for backward compat with other code paths -->
+      <div class="outreach-grid" id="grid" style="display:none;"></div>
       <div class="legend">
         <span class="legend-item"><span class="legend-swatch"></span>Not yet attempted</span>
         <span class="legend-item"><span class="legend-swatch grey"></span>Attempted · no answer</span>
@@ -744,7 +754,7 @@ function renderQueue() {
       <div class="qmain">
         <span class="qnum">${String(i+1).padStart(2,'0')}</span>
         <div class="qperson">
-          <div class="qname">${c.name || '(no name)'}</div>
+          <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit (phone, email, school, etc.)" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${c.name || '(no name)'}</a></div>
           <div class="qmeta">${metaLine(c)}</div>
           <span class="qsignal">${signalLine(c)}</span>
         </div>
@@ -948,6 +958,7 @@ async function submitRow(row) {
     updateBatchNav();
     // If a signup, refresh org-wide counter
     if (outcome === 'signed-up' || outcome === 'oneonone') loadCounters();
+    loadCumulativeGrid();
   } catch (e) {
     status.textContent = `✕ Save failed: ${e.message}`;
     status.style.color = 'var(--gw-red)';
@@ -1037,8 +1048,62 @@ async function bootAuth() {
     await loadTodayStats();
     await fetchNextBatch();
     loadQueueCount(); // fire and forget
+    loadCumulativeGrid(); // fire and forget
   }
 })();
+
+// Cumulative grid: day-by-day rows of outreach attempts
+async function loadCumulativeGrid() {
+  try {
+    const r = await authFetch(`${WORKER}/recent-activity?days=14`);
+    if (!r.ok) return;
+    const data = await r.json();
+    const byDate = data.by_date || {};
+    const today = (new Date()).toISOString().split('T')[0];
+    const TODAY_GOAL = 50;
+    const wrap = document.getElementById('grid-days');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const dates = new Set([today, ...Object.keys(byDate)]);
+    const sorted = Array.from(dates).sort().reverse();
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    for (const d of sorted) {
+      const actions = byDate[d] || [];
+      const isToday = d === today;
+      const row = document.createElement('div');
+      row.className = 'day-row' + (isToday ? ' today' : '');
+      const dt = new Date(d + 'T00:00:00');
+      const label = document.createElement('div');
+      label.className = 'day-label';
+      label.innerHTML = isToday
+        ? `<b>Today</b> · ${actions.length} of ${TODAY_GOAL}`
+        : `${dayNames[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()} · ${actions.length}`;
+      row.appendChild(label);
+      const sq = document.createElement('div');
+      sq.className = 'day-squares';
+      for (const a of actions) {
+        const dot = document.createElement('div');
+        dot.className = 'dot';
+        const state = a.outcome === 'oneonone' ? 'oneonone'
+                    : a.outcome === 'signed-up' ? 'signed-up'
+                    : a.outcome === 'connected' ? 'connected'
+                    : 'attempted';
+        dot.dataset.s = state;
+        sq.appendChild(dot);
+      }
+      // Today: pad to daily goal with outline squares
+      if (isToday) {
+        for (let i = actions.length; i < TODAY_GOAL; i++) {
+          const dot = document.createElement('div');
+          dot.className = 'dot';
+          sq.appendChild(dot);
+        }
+      }
+      row.appendChild(sq);
+      wrap.appendChild(row);
+    }
+  } catch (e) {}
+}
 
 // Fetch + render: org-wide turnout AND LaNee's cumulative cold-call signups (excluding website-source)
 async function loadCounters() {
@@ -1153,7 +1218,7 @@ async function fetchConfirmees() {
         <div class="qmain">
           <span class="qnum">${String(i+1).padStart(2,'0')}</span>
           <div class="qperson">
-            <div class="qname">${escapeHtml(c.name || '(no name)')}${confirmStatusPill(cf.status)}</div>
+            <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a>${confirmStatusPill(cf.status)}</div>
             <div class="qmeta">${escapeHtml([c.school, c.district].filter(Boolean).join(' · ') || '—')}</div>
             <span class="qsignal" style="background:rgba(82,82,91,0.15);color:var(--text-tertiary);">signed up · ${escapeHtml(c.last_attempt_date || 'unknown date')}</span>
             ${c.source ? `<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase;">source: ${escapeHtml(c.source)}</div>` : ''}
@@ -1290,7 +1355,7 @@ async function runSearch() {
         <div class="qmain">
           <span class="qnum">${String(i+1).padStart(2,'0')}</span>
           <div class="qperson">
-            <div class="qname">${escapeHtml(c.name || '(no name)')}</div>
+            <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a></div>
             <div class="qmeta">${escapeHtml([c.school, c.district].filter(Boolean).join(' · ') || '—')}</div>
             ${status}
           </div>
