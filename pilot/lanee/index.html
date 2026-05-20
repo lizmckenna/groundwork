@@ -201,6 +201,22 @@
   .qcontact div + div { margin-top: 4px; }
   .qchecks-col { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
   .qchecks { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  /* Grouped checks: methods vs outcomes */
+  .qchecks-grouped { display: flex; align-items: stretch; gap: 14px; width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+  .check-group { display: flex; flex-direction: column; gap: 5px; }
+  .check-group-label { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-tertiary); text-align: right; }
+  .check-group-items { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .check-group-divider { width: 1px; background: var(--border); margin: 14px 0 0 0; align-self: stretch; }
+  @media (max-width: 760px) { .check-group-divider { display: none; } }
+  /* Admin actions overflow menu */
+  .qadmin-menu { position: relative; }
+  .qadmin-menu summary { list-style: none; cursor: pointer; padding: 8px 10px; border-radius: 6px; color: var(--text-tertiary); font-size: 18px; line-height: 1; user-select: none; }
+  .qadmin-menu summary::-webkit-details-marker { display: none; }
+  .qadmin-menu summary:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .qadmin-menu[open] summary { background: var(--bg-hover); color: var(--text-primary); }
+  .qadmin-popover { position: absolute; top: calc(100% + 4px); right: 0; background: var(--bg-secondary); border: 1px solid var(--border-hover); border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 2px; min-width: 200px; z-index: 20; box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+  .qadmin-popover .qadmin-btn { padding: 8px 12px; border-radius: 6px; border: none; background: transparent; color: var(--text-secondary); font-size: 12.5px; font-family: inherit; cursor: pointer; text-align: left; }
+  .qadmin-popover .qadmin-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
   .qsave-row { display: flex; gap: 12px; align-items: center; padding-top: 8px; border-top: 1px dashed var(--border); width: 100%; justify-content: flex-end; }
   .qsave-btn { padding: 8px 18px; border-radius: 6px; background: var(--gw-purple); color: white; border: none; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
   .qsave-btn:disabled { background: var(--bg-elevated); color: var(--text-tertiary); cursor: not-allowed; }
@@ -760,24 +776,38 @@ function renderQueue() {
         </div>
         <div class="qcontact">${contactLinks(c)}</div>
         <div class="qchecks-col">
-          <div class="qchecks">
-            <label class="qcheck grey"><input type="checkbox" data-outcome="called"> Called</label>
-            <label class="qcheck grey"><input type="checkbox" data-outcome="texted"> Texted</label>
-            <label class="qcheck grey"><input type="checkbox" data-outcome="emailed"> Emailed</label>
-            <label class="qcheck light-purple"><input type="checkbox" data-outcome="connected"> Connected</label>
-            <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up"> Signed up</label>
-            <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
+          <div class="qchecks-grouped">
+            <div class="check-group">
+              <div class="check-group-label">How you reached out</div>
+              <div class="check-group-items">
+                <label class="qcheck grey"><input type="checkbox" data-outcome="called"> Called</label>
+                <label class="qcheck grey"><input type="checkbox" data-outcome="texted"> Texted</label>
+                <label class="qcheck grey"><input type="checkbox" data-outcome="emailed"> Emailed</label>
+              </div>
+            </div>
+            <div class="check-group-divider"></div>
+            <div class="check-group">
+              <div class="check-group-label">What happened</div>
+              <div class="check-group-items">
+                <label class="qcheck light-purple"><input type="checkbox" data-outcome="connected"> Connected</label>
+                <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up"> Signed up</label>
+                <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
+              </div>
+            </div>
           </div>
           <input type="text" class="qnotes" placeholder="Notes (optional — quick observation, what happened, etc.)" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:12.5px;font-family:inherit;">
-          <div class="qadmin-row" style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
-            <button class="qadmin-btn" data-admin="skipped" title="Take this person out of your queue without an outreach attempt" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border-hover);background:transparent;color:var(--text-tertiary);font-size:11px;font-family:inherit;cursor:pointer;">⊘ Skip</button>
-            <button class="qadmin-btn" data-admin="wrong-number" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border-hover);background:transparent;color:var(--text-tertiary);font-size:11px;font-family:inherit;cursor:pointer;">✕ Wrong #</button>
-            <button class="qadmin-btn" data-admin="do-not-contact" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(220,38,38,0.4);background:transparent;color:var(--gw-red);font-size:11px;font-family:inherit;cursor:pointer;">⊗ Remove from call list</button>
-          </div>
           <div class="qsave-row">
             <button class="qsave-btn">Save</button>
             <button class="qundo-btn" style="display:none;">Undo</button>
             <span class="qsave-status"></span>
+            <details class="qadmin-menu">
+              <summary title="More actions">⋮</summary>
+              <div class="qadmin-popover">
+                <button class="qadmin-btn" data-admin="skipped" title="Take this person out of your queue without an outreach attempt">⊘ Skip</button>
+                <button class="qadmin-btn" data-admin="wrong-number">✕ Wrong number</button>
+                <button class="qadmin-btn" data-admin="do-not-contact" style="color:var(--gw-red);">⊗ Remove from call list</button>
+              </div>
+            </details>
           </div>
         </div>
       </div>
@@ -1361,23 +1391,37 @@ async function runSearch() {
           </div>
           <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
           <div class="qchecks-col">
-            <div class="qchecks">
-              <label class="qcheck grey"><input type="checkbox" data-outcome="called"> Called</label>
-              <label class="qcheck grey"><input type="checkbox" data-outcome="texted"> Texted</label>
-              <label class="qcheck grey"><input type="checkbox" data-outcome="emailed"> Emailed</label>
-              <label class="qcheck light-purple"><input type="checkbox" data-outcome="connected"> Connected</label>
-              <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up"> Signed up</label>
-              <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
+            <div class="qchecks-grouped">
+              <div class="check-group">
+                <div class="check-group-label">How you reached out</div>
+                <div class="check-group-items">
+                  <label class="qcheck grey"><input type="checkbox" data-outcome="called"> Called</label>
+                  <label class="qcheck grey"><input type="checkbox" data-outcome="texted"> Texted</label>
+                  <label class="qcheck grey"><input type="checkbox" data-outcome="emailed"> Emailed</label>
+                </div>
+              </div>
+              <div class="check-group-divider"></div>
+              <div class="check-group">
+                <div class="check-group-label">What happened</div>
+                <div class="check-group-items">
+                  <label class="qcheck light-purple"><input type="checkbox" data-outcome="connected"> Connected</label>
+                  <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up"> Signed up</label>
+                  <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
+                </div>
+              </div>
             </div>
             <input type="text" class="qnotes" placeholder="Notes (optional)" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:12.5px;font-family:inherit;">
-            <div class="qadmin-row" style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
-              <button class="qadmin-btn" data-admin="skipped" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border-hover);background:transparent;color:var(--text-tertiary);font-size:11px;font-family:inherit;cursor:pointer;">⊘ Skip</button>
-              <button class="qadmin-btn" data-admin="wrong-number" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border-hover);background:transparent;color:var(--text-tertiary);font-size:11px;font-family:inherit;cursor:pointer;">✕ Wrong #</button>
-              <button class="qadmin-btn" data-admin="do-not-contact" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(220,38,38,0.4);background:transparent;color:var(--gw-red);font-size:11px;font-family:inherit;cursor:pointer;">⊗ Remove</button>
-            </div>
             <div class="qsave-row">
               <button class="qsave-btn">Save</button>
               <span class="qsave-status"></span>
+              <details class="qadmin-menu">
+                <summary title="More actions">⋮</summary>
+                <div class="qadmin-popover">
+                  <button class="qadmin-btn" data-admin="skipped" title="Take this person out of your queue without an outreach attempt">⊘ Skip</button>
+                  <button class="qadmin-btn" data-admin="wrong-number">✕ Wrong number</button>
+                  <button class="qadmin-btn" data-admin="do-not-contact" style="color:var(--gw-red);">⊗ Remove from call list</button>
+                </div>
+              </details>
             </div>
           </div>
         </div>
