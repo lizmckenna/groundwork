@@ -734,6 +734,36 @@ function signalLine(c) {
   return c.leader_ladder ? c.leader_ladder.toLowerCase() : 'new lead';
 }
 
+// --- Cached counters: paint last-known values from localStorage on boot ---
+const COUNTER_CACHE_KEY = 'gw_lanee_counter_cache_v1';
+function readCounterCache() {
+  try { return JSON.parse(localStorage.getItem(COUNTER_CACHE_KEY) || '{}'); }
+  catch (e) { return {}; }
+}
+function writeCounterCache(patch) {
+  try {
+    const cur = readCounterCache();
+    localStorage.setItem(COUNTER_CACHE_KEY, JSON.stringify({ ...cur, ...patch, ts: Date.now() }));
+  } catch (e) {}
+}
+function renderCachedCounters() {
+  const c = readCounterCache();
+  if (c.orgCount != null) {
+    const el = document.getElementById('org-count'); if (el) el.textContent = c.orgCount;
+    const t = document.getElementById('org-target'); if (t && c.orgTarget) t.textContent = c.orgTarget;
+    const bar = document.getElementById('org-bar'); if (bar && c.orgTarget) bar.style.width = `${Math.min(100, Math.round((c.orgCount/c.orgTarget)*100))}%`;
+  }
+  if (c.laneeCount != null) {
+    const el = document.getElementById('m-signup-current'); if (el) el.textContent = c.laneeCount;
+    const t = document.getElementById('m-signup-target'); if (t && c.laneeTarget) t.textContent = c.laneeTarget;
+    const bar = document.getElementById('m-signup-bar'); if (bar && c.laneeTarget) bar.style.width = `${Math.min(100, Math.round((c.laneeCount/c.laneeTarget)*100))}%`;
+    const pctEl = document.getElementById('m-signup-pct'); if (pctEl && c.laneeTarget) pctEl.textContent = `${Math.min(100, Math.round((c.laneeCount/c.laneeTarget)*100))}% to goal`;
+  }
+  if (c.queueCount != null) {
+    const el = document.getElementById('queue-total'); if (el) el.textContent = Number(c.queueCount).toLocaleString();
+  }
+}
+
 async function loadQueueCount() {
   try {
     const r = await authFetch(`${WORKER}/queue-count`);
@@ -741,6 +771,7 @@ async function loadQueueCount() {
     const d = await r.json();
     const el = document.getElementById('queue-total');
     if (el) el.textContent = (d.count || 0).toLocaleString();
+    writeCounterCache({ queueCount: d.count || 0 });
   } catch (e) {}
 }
 function contactLinks(c) {
@@ -1076,11 +1107,16 @@ async function bootAuth() {
   const ok = await bootAuth();
   if (ok) {
     hideLogin();
-    await loadCounters();
-    await loadTodayStats();
-    await fetchNextBatch();
-    loadQueueCount(); // fire and forget
-    loadCumulativeGrid(); // fire and forget
+    // Paint cached counters instantly so the page doesn't flash zeros
+    renderCachedCounters();
+    // Fire everything in parallel — none of these depend on each other
+    Promise.all([
+      loadCounters(),
+      loadTodayStats(),
+      fetchNextBatch(),
+      loadQueueCount(),
+      loadCumulativeGrid(),
+    ]);
   }
 })();
 
@@ -1184,6 +1220,7 @@ async function loadCounters() {
     document.getElementById('m-signup-target').textContent = laneeTarget;
     document.getElementById('m-signup-bar').style.width = `${pct}%`;
     document.getElementById('m-signup-pct').textContent = `${pct}% to goal`;
+    writeCounterCache({ orgCount, orgTarget, laneeCount, laneeTarget });
   } catch (e) {}
 }
 
