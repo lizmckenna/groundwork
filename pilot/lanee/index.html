@@ -159,8 +159,10 @@
   .day-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .day-row .day-label { min-width: 150px; font-size: 12px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em; }
   .day-row .day-label b { color: var(--text-primary); font-weight: 700; }
-  .day-row .day-squares { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; min-width: 0; }
-  .day-row .day-squares .dot { width: 14px; height: 14px; aspect-ratio: auto; flex: 0 0 14px; }
+  .day-row .day-squares { display: grid; grid-template-columns: repeat(25, 1fr); gap: 4px; flex: 1; min-width: 0; max-width: 560px; }
+  .day-row .day-squares .dot { width: 100%; aspect-ratio: 1/1; height: auto; }
+  .day-row.future .day-label { color: var(--text-tertiary); }
+  .day-row.future .day-squares .dot { opacity: 0.55; }
   .day-row.today { padding: 8px 12px; background: var(--gw-purple-soft); border-radius: 8px; border: 1px solid rgba(83,113,255,0.15); }
   .dot {
     aspect-ratio: 1 / 1; border-radius: 4px;
@@ -1108,20 +1110,33 @@ async function loadCumulativeGrid() {
     const wrap = document.getElementById('grid-days');
     if (!wrap) return;
     wrap.innerHTML = '';
-    const dates = new Set([today, ...Object.keys(byDate)]);
-    const sorted = Array.from(dates).sort().reverse();
+    // Build list: future days (Fri, Thu) at top, then today, then past days from byDate
     const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    for (const d of sorted) {
+    const todayDate = new Date(today + 'T00:00:00');
+    // Add up to 2 future days
+    const futureDates = [];
+    for (let i = 1; i <= 2; i++) {
+      const f = new Date(todayDate);
+      f.setDate(todayDate.getDate() + i);
+      futureDates.push(f.toISOString().split('T')[0]);
+    }
+    const pastDates = Object.keys(byDate).filter(d => d !== today).sort().reverse();
+    const ordered = [...futureDates.reverse(), today, ...pastDates];
+    for (const d of ordered) {
       const actions = byDate[d] || [];
       const isToday = d === today;
+      const isFuture = d > today;
       const row = document.createElement('div');
-      row.className = 'day-row' + (isToday ? ' today' : '');
+      row.className = 'day-row' + (isToday ? ' today' : isFuture ? ' future' : '');
       const dt = new Date(d + 'T00:00:00');
       const label = document.createElement('div');
       label.className = 'day-label';
+      const dateStr = `${dayNames[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()}`;
       label.innerHTML = isToday
-        ? `<b>Today</b> · ${actions.length} of ${TODAY_GOAL}`
-        : `${dayNames[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()} · ${actions.length}`;
+        ? `<b>Today</b> · ${dateStr} · ${actions.length} of ${TODAY_GOAL}`
+        : isFuture
+        ? `${dateStr} · target ${TODAY_GOAL}`
+        : `${dateStr} · ${actions.length}`;
       row.appendChild(label);
       const sq = document.createElement('div');
       sq.className = 'day-squares';
@@ -1135,8 +1150,8 @@ async function loadCumulativeGrid() {
         dot.dataset.s = state;
         sq.appendChild(dot);
       }
-      // Today: pad to daily goal with outline squares
-      if (isToday) {
+      // Today and future days: pad to daily goal with outline squares
+      if (isToday || isFuture) {
         for (let i = actions.length; i < TODAY_GOAL; i++) {
           const dot = document.createElement('div');
           dot.className = 'dot';
