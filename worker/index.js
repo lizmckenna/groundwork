@@ -1,11 +1,13 @@
-// Groundwork pilot worker — v3.5, 2026-05-21
-// Changes from v3.4:
-//   - NEW: /house-meeting-hosts — returns known host names so the sign-in form can
-//     autocomplete + reduce misspelling. Merges seeded list with distinct values from
-//     past contact_log house-meeting entries.
-// v3.4: /house-meeting-signup endpoint with dedupe + per-commitment logging.
-// v3.3: bolder confirmation-email "forward to two parents" copy.
-// v3.2: KV caching on /confirmees, /today-stats, /recent-activity.
+// Groundwork pilot worker — v3.6, 2026-05-21
+// Merge of Liz's deployed copy edits + missing house-meeting endpoints.
+// Preserves her edits to the confirmation email:
+//   - "three other parents" (was "two")
+//   - "Every parent we bring in makes our movement for Missouri's kids stronger" (softer close)
+// Adds back:
+//   - POST /house-meeting-signup — public form dedupes by email/phone, logs commitments
+//   - GET  /house-meeting-hosts  — autocomplete list for the form (seeded + past hosts)
+// v3.3: bolder confirmation-email forward-this ask · FROM = Parents for MO Kids · REPLY_TO = lanee4kckids@gmail.com
+// v3.2: KV caching on /confirmees, /today-stats, /recent-activity (60s); /queue-count (300s); writes invalidate.
 
 const BASE = 'appQdixHbuttPldx6';
 const CONTACTS_TBL = 'tblJeHqz13AOvq71A';
@@ -234,7 +236,7 @@ async function signup(request, env) {
 // Cached 5 minutes in KV.
 // =========================================================================
 const SEEDED_HOSTS = [
-  'Catherine Evans', // Kathryn — running biweekly trainings
+  'Catherine Evans',
   'Ellen Gin',
   'Molly Fleming',
   'LaNeé Bridewell',
@@ -247,7 +249,6 @@ async function houseMeetingHosts(env) {
   const cached = await cacheGet(env, cacheKey);
   if (cached) return json(cached);
 
-  // Pull recent house-meeting log entries, extract host names from notes ("Host: NAME · ...")
   const filter = `OR({method}='House meeting',FIND('Host: ',{notes}&'')>0)`;
   const records = [];
   let offset = null;
@@ -297,7 +298,6 @@ async function houseMeetingSignup(request, env) {
   const cEmail = String(email).toLowerCase().trim();
   const cPhone = String(phone).trim();
 
-  // Dedupe lookup
   let existingId = null;
   const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
   if (r.records.length > 0) existingId = r.records[0].id;
@@ -309,14 +309,12 @@ async function houseMeetingSignup(request, env) {
     }
   }
 
-  // Determine organizer assignment by county heuristic (city/zip → county is fuzzy; default to Stephanie unless host indicates KC)
-  // Practical: assign by which counties show up in the city name. Fall back to Stephanie.
+  // Organizer assignment via city heuristic; fall back to Stephanie.
   const cityLower = (city || '').toLowerCase();
   const KC_CITIES = ['kansas city', 'independence', 'liberty', 'gladstone', 'raytown', 'grandview', 'lee\'s summit', 'lees summit', 'blue springs', 'belton', 'overland park', 'shawnee', 'olathe'];
   const isLaneeArea = KC_CITIES.some(c => cityLower.includes(c));
   const organizerId = isLaneeArea ? LANEE_ID : STEPHANIE_ID;
 
-  // Create or update contact
   let contactId;
   const baseFields = {
     first: cFirst,
@@ -333,7 +331,6 @@ async function houseMeetingSignup(request, env) {
 
   if (existingId) {
     contactId = existingId;
-    // Patch only fields that came in this submission (don't blow away existing data with blanks)
     const patch = {};
     if (street_address) patch.street_address = baseFields.street_address;
     if (city) patch.city = baseFields.city;
@@ -359,7 +356,6 @@ async function houseMeetingSignup(request, env) {
     contactId = created.records[0].id;
   }
 
-  // Log the sign-in itself
   const logRecords = [];
   logRecords.push({
     fields: {
@@ -373,9 +369,8 @@ async function houseMeetingSignup(request, env) {
     }
   });
 
-  // One log row per commitment (clean querying later)
   for (const c of commitments) {
-    if (c === 'Other') continue; // captured in primary log row's notes
+    if (c === 'Other') continue;
     logRecords.push({
       fields: {
         Summary: `${date} — commitment: ${c}`,
@@ -389,7 +384,6 @@ async function houseMeetingSignup(request, env) {
     });
   }
 
-  // Airtable max 10 records per create
   for (let i = 0; i < logRecords.length; i += 10) {
     const batch = logRecords.slice(i, i + 10);
     await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
@@ -702,7 +696,7 @@ Emergency Meeting on Public School Funding · Tue May 26 · 7:30 PM CT · Zoom
         </td></tr>
 
         <tr><td style="padding:0 0 18px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1A2418">
-          <strong>Help us reach more parents.</strong> Please forward this email to <strong>two other parents</strong>, educators, or neighbors who care about public schools, and ask them to sign up at <a href="https://parents4mopublicschools.org/" style="color:#1A2418;text-decoration:underline"><strong>parents4mopublicschools.org</strong></a>. Every parent we bring in makes us harder to ignore.
+          <strong>Help us reach more parents.</strong> Please forward this email to <strong>three other parents</strong>, educators, or neighbors who care about public schools, and ask them to sign up at <a href="https://parents4mopublicschools.org/" style="color:#1A2418;text-decoration:underline"><strong>parents4mopublicschools.org</strong></a>. Every parent we bring in makes our movement for Missouri's kids stronger.
         </td></tr>
 
         <tr><td style="padding:0 0 28px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1A2418">
@@ -975,9 +969,6 @@ async function getTodayStats(env) {
   return json(payload);
 }
 
-// NEW: history endpoint for the cumulative grid.
-// Returns { by_date: { 'YYYY-MM-DD': [ { contact_id, methods, outcome } ] } } for the last N days.
-// Mirrors getTodayStats's filtering (drops Confirm-5/26 events, keeps outreach + admin outcomes).
 async function getRecentActivity(env, url) {
   const days = parseInt(url.searchParams.get('days') || '14');
   const cacheKey = `cache:recent-activity:${days}`;
