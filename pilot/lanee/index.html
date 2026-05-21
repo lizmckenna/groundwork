@@ -163,7 +163,7 @@
   .day-row .day-squares .dot { width: 100%; aspect-ratio: 1/1; height: auto; }
   .day-row.future .day-label { color: var(--text-tertiary); }
   .day-row.future .day-squares .dot { opacity: 0.55; }
-  .day-row.today { padding: 8px 12px; background: var(--gw-purple-soft); border-radius: 8px; border: 1px solid rgba(83,113,255,0.15); }
+  .day-row.today .day-label { color: var(--gw-purple); font-weight: 700; }
   .dot {
     aspect-ratio: 1 / 1; border-radius: 4px;
     border: 1.5px solid var(--dot-empty-border); background: transparent;
@@ -1158,8 +1158,14 @@ async function loadCumulativeGrid() {
     }
     const pastDates = Object.keys(byDate).filter(d => d !== today).sort(); // oldest first
     const ordered = [...pastDates, today, ...futureDates];
-    for (const d of ordered) {
-      const actions = byDate[d] || [];
+    // Spillover: any day's overflow (>TODAY_GOAL) rolls into the next day's row as filled squares
+    let spillover = [];
+    for (let idx = 0; idx < ordered.length; idx++) {
+      const d = ordered[idx];
+      const dayActions = byDate[d] || [];
+      const combined = [...spillover, ...dayActions];
+      const visible = combined.slice(0, TODAY_GOAL);
+      spillover = combined.slice(TODAY_GOAL);
       const isToday = d === today;
       const isFuture = d > today;
       const row = document.createElement('div');
@@ -1167,16 +1173,11 @@ async function loadCumulativeGrid() {
       const dt = new Date(d + 'T00:00:00');
       const label = document.createElement('div');
       label.className = 'day-label';
-      const dateStr = `${dayNames[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()}`;
-      label.innerHTML = isToday
-        ? `<b>Today</b> · ${dateStr} · ${actions.length} of ${TODAY_GOAL}`
-        : isFuture
-        ? `${dateStr} · target ${TODAY_GOAL}`
-        : `${dateStr} · ${actions.length}`;
+      label.textContent = `${dayNames[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()}`;
       row.appendChild(label);
       const sq = document.createElement('div');
       sq.className = 'day-squares';
-      for (const a of actions) {
+      for (const a of visible) {
         const dot = document.createElement('div');
         dot.className = 'dot';
         const state = a.outcome === 'oneonone' ? 'oneonone'
@@ -1186,8 +1187,8 @@ async function loadCumulativeGrid() {
         dot.dataset.s = state;
         sq.appendChild(dot);
       }
-      // Every day pads to daily goal with outline squares so rows line up evenly
-      for (let i = actions.length; i < TODAY_GOAL; i++) {
+      // Pad to TODAY_GOAL with outline squares so every row aligns at 50
+      for (let i = visible.length; i < TODAY_GOAL; i++) {
         const dot = document.createElement('div');
         dot.className = 'dot';
         sq.appendChild(dot);
