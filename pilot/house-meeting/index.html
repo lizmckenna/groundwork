@@ -155,7 +155,7 @@
     font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
     font-weight: 600; color: var(--ink);
   }
-  label.f.req::after { content: " *"; color: var(--rose); }
+  label.f .req-star { color: var(--rose); margin-left: 3px; }
   input[type="text"], input[type="email"], input[type="tel"], input[type="date"] {
     font-family: 'DM Sans', sans-serif; font-size: 16px;
     padding: 13px 14px; border-radius: 8px;
@@ -273,31 +273,29 @@
         <fieldset class="s-meeting">
           <legend><span class="num">1</span> The meeting</legend>
           <div class="row2">
-            <label class="f req">Date
+            <label class="f">Date<span class="req-star">*</span>
               <input type="date" name="date" required>
             </label>
-            <label class="f req">Host
-              <input type="text" name="host_name" list="hosts" placeholder="Who's hosting tonight" required autocomplete="off">
-              <datalist id="hosts"></datalist>
+            <label class="f">Host<span class="req-star">*</span>
+              <input type="text" name="host_name" placeholder="Who's hosting tonight" required autocomplete="off">
             </label>
           </div>
-          <p class="host-help">Start typing — pick your host from the list if they appear, so we keep names consistent.</p>
         </fieldset>
 
         <fieldset class="s-you">
           <legend><span class="num">2</span> You</legend>
           <div class="row2">
-            <label class="f req">First name
+            <label class="f">First name<span class="req-star">*</span>
               <input type="text" name="first" autocomplete="given-name" required>
             </label>
-            <label class="f req">Last name
+            <label class="f">Last name<span class="req-star">*</span>
               <input type="text" name="last" autocomplete="family-name" required>
             </label>
           </div>
-          <label class="f req">Phone
+          <label class="f">Phone<span class="req-star">*</span>
             <input type="tel" name="phone" autocomplete="tel" placeholder="555-555-5555" required>
           </label>
-          <label class="f req">Email
+          <label class="f">Email<span class="req-star">*</span>
             <input type="email" name="email" autocomplete="email" required>
           </label>
         </fieldset>
@@ -406,20 +404,13 @@ otherCheck.addEventListener('change', () => {
   if (otherCheck.checked) otherText.focus();
 });
 
-// Fetch known hosts → populate datalist
-(async () => {
-  try {
-    const r = await fetch(`${WORKER}/house-meeting-hosts`);
-    if (!r.ok) return;
-    const data = await r.json();
-    const dl = document.getElementById('hosts');
-    for (const h of (data.hosts || [])) {
-      const opt = document.createElement('option');
-      opt.value = h;
-      dl.appendChild(opt);
-    }
-  } catch (e) { /* silent */ }
-})();
+// Normalize host name on entry: trim, collapse whitespace, title-case
+function cleanHost(s) {
+  return String(s || '').trim().replace(/\s+/g, ' ')
+    .split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+const hostInput = document.querySelector('input[name="host_name"]');
+hostInput.addEventListener('blur', () => { hostInput.value = cleanHost(hostInput.value); });
 
 const form = document.getElementById('signin');
 const btn = document.getElementById('submit-btn');
@@ -437,7 +428,7 @@ form.addEventListener('submit', async (e) => {
   const payload = {
     website: fd.get('website'),
     date: fd.get('date'),
-    host_name: (fd.get('host_name') || '').trim(),
+    host_name: cleanHost(fd.get('host_name')),
     first: fd.get('first'),
     last: fd.get('last'),
     phone: fd.get('phone'),
