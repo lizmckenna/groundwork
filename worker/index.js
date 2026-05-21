@@ -1,8 +1,11 @@
-// Groundwork pilot worker — v3.4, 2026-05-21
-// Changes from v3.3:
-//   - NEW: /house-meeting-signup endpoint — public sign-in form for in-person house meetings.
-//     Dedupes by email/phone (same logic as /signup). Creates one contact_log row per commitment.
-// (v3.3: bolder confirmation-email "forward to two parents" copy. v3.2: KV caching.)
+// Groundwork pilot worker — v3.5, 2026-05-21
+// Changes from v3.4:
+//   - NEW: /house-meeting-hosts — returns known host names so the sign-in form can
+//     autocomplete + reduce misspelling. Merges seeded list with distinct values from
+//     past contact_log house-meeting entries.
+// v3.4: /house-meeting-signup endpoint with dedupe + per-commitment logging.
+// v3.3: bolder confirmation-email "forward to two parents" copy.
+// v3.2: KV caching on /confirmees, /today-stats, /recent-activity.
 
 const BASE = 'appQdixHbuttPldx6';
 const CONTACTS_TBL = 'tblJeHqz13AOvq71A';
@@ -46,6 +49,7 @@ const READ_CACHE_KEYS = [
   'cache:recent-activity:7',
   'cache:recent-activity:14',
   'cache:recent-activity:30',
+  'cache:house-hosts',
   'queue:count',
 ];
 async function cacheGet(env, key) {
@@ -68,6 +72,7 @@ export default {
       if (url.pathname === '/auth/verify' && request.method === 'POST') return await authVerify(request, env);
       if (url.pathname === '/signup' && request.method === 'POST') return await signup(request, env);
       if (url.pathname === '/house-meeting-signup' && request.method === 'POST') return await houseMeetingSignup(request, env);
+      if (url.pathname === '/house-meeting-hosts' && request.method === 'GET') return await houseMeetingHosts(env);
       const sessionToken = request.headers.get('X-Groundwork-Session');
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
@@ -221,6 +226,51 @@ async function signup(request, env) {
 
   await invalidateReadCaches(env);
   return json({ ok: true, contact_id: contactId, message: 'thanks for signing up' });
+}
+
+// =========================================================================
+// /house-meeting-hosts — list of known hosts for autocomplete on the sign-in form.
+// Seeded list + distinct host names from past sign-ins (extracted from log notes).
+// Cached 5 minutes in KV.
+// =========================================================================
+const SEEDED_HOSTS = [
+  'Catherine Evans', // Kathryn — running biweekly trainings
+  'Ellen Gin',
+  'Molly Fleming',
+  'LaNeé Bridewell',
+  'Stephanie Rittgers',
+  'Rachel Hogan',
+];
+
+async function houseMeetingHosts(env) {
+  const cacheKey = 'cache:house-hosts';
+  const cached = await cacheGet(env, cacheKey);
+  if (cached) return json(cached);
+
+  // Pull recent house-meeting log entries, extract host names from notes ("Host: NAME · ...")
+  const filter = `OR({method}='House meeting',FIND('Host: ',{notes}&'')>0)`;
+  const records = [];
+  let offset = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100&fields%5B%5D=notes&maxRecords=500`;
+    if (offset) q += `&offset=${offset}`;
+    try {
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+      records.push(...d.records);
+      offset = d.offset;
+    } catch (e) { offset = null; }
+  } while (offset);
+
+  const found = new Set(SEEDED_HOSTS);
+  for (const r of records) {
+    const notes = r.fields.notes || '';
+    const m = notes.match(/Host:\s*([^·\n]+?)(?:\s*·|$)/);
+    if (m && m[1]) found.add(m[1].trim());
+  }
+  const hosts = Array.from(found).sort();
+  const payload = { hosts };
+  await cachePut(env, cacheKey, payload, 300);
+  return json(payload);
 }
 
 // =========================================================================
