@@ -1,9 +1,8 @@
-// Groundwork pilot worker — v3.3, 2026-05-21
-// Changes from v3.2:
-//   - Confirmation email: replaced soft "invite others" line with bold ask to forward
-//     to two more parents + sign up at parents4mopublicschools.org
-// (v3.2 KV caching still in place: /confirmees, /today-stats, /recent-activity ~60s,
-//  /queue-count 300s, write endpoints invalidate caches.)
+// Groundwork pilot worker — v3.4, 2026-05-21
+// Changes from v3.3:
+//   - NEW: /house-meeting-signup endpoint — public sign-in form for in-person house meetings.
+//     Dedupes by email/phone (same logic as /signup). Creates one contact_log row per commitment.
+// (v3.3: bolder confirmation-email "forward to two parents" copy. v3.2: KV caching.)
 
 const BASE = 'appQdixHbuttPldx6';
 const CONTACTS_TBL = 'tblJeHqz13AOvq71A';
@@ -19,7 +18,7 @@ const AUTO_CONFIRM_EMAIL = false;
 const ZOOM_LINK_5_26 = 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1';
 const EVENT_NAME = 'Emergency Meeting on Public School Funding in Missouri';
 const EVENT_DATE_LABEL = 'Tuesday, May 26 · 7:30 PM CST';
-const FROM_CONFIRM = 'Parents for KC Kids <groundwork@civicpowerlab.us>';
+const FROM_CONFIRM = 'Parents for MO Kids <groundwork@civicpowerlab.us>';
 const REPLY_TO_CONFIRM = 'lanee4kckids@gmail.com';
 
 const ALLOWLIST = [
@@ -68,6 +67,7 @@ export default {
       if (url.pathname === '/auth/start' && request.method === 'POST') return await authStart(request, env);
       if (url.pathname === '/auth/verify' && request.method === 'POST') return await authVerify(request, env);
       if (url.pathname === '/signup' && request.method === 'POST') return await signup(request, env);
+      if (url.pathname === '/house-meeting-signup' && request.method === 'POST') return await houseMeetingSignup(request, env);
       const sessionToken = request.headers.get('X-Groundwork-Session');
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
@@ -221,6 +221,135 @@ async function signup(request, env) {
 
   await invalidateReadCaches(env);
   return json({ ok: true, contact_id: contactId, message: 'thanks for signing up' });
+}
+
+// =========================================================================
+// /house-meeting-signup — public sign-in form for in-person house meetings.
+// Dedupes by email/phone. Creates one contact_log row per commitment.
+// =========================================================================
+async function houseMeetingSignup(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:hmsignup:${ip}`;
+  const count = parseInt(await env.KV_BINDING.get(rlKey) || '0');
+  if (count >= 20) return json({ error: 'too many requests, try again later' }, 429, { 'Retry-After': '300' });
+  await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 });
+
+  const body = await request.json();
+  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+  const { date, host_name, first, last, phone, email, street_address, city, state, zip, district, school, commitments = [], other_text, source } = body;
+  if (!first || !last || !phone || !email || !date || !host_name) {
+    return json({ error: 'first, last, phone, email, date, and host name are required' }, 400);
+  }
+
+  const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
+  const cFirst = clean(first);
+  const cLast = clean(last);
+  const cEmail = String(email).toLowerCase().trim();
+  const cPhone = String(phone).trim();
+
+  // Dedupe lookup
+  let existingId = null;
+  const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+  if (r.records.length > 0) existingId = r.records[0].id;
+  if (!existingId) {
+    const digits = cPhone.replace(/\D/g, '').slice(-10);
+    if (digits.length === 10) {
+      const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+      if (r2.records.length > 0) existingId = r2.records[0].id;
+    }
+  }
+
+  // Determine organizer assignment by county heuristic (city/zip → county is fuzzy; default to Stephanie unless host indicates KC)
+  // Practical: assign by which counties show up in the city name. Fall back to Stephanie.
+  const cityLower = (city || '').toLowerCase();
+  const KC_CITIES = ['kansas city', 'independence', 'liberty', 'gladstone', 'raytown', 'grandview', 'lee\'s summit', 'lees summit', 'blue springs', 'belton', 'overland park', 'shawnee', 'olathe'];
+  const isLaneeArea = KC_CITIES.some(c => cityLower.includes(c));
+  const organizerId = isLaneeArea ? LANEE_ID : STEPHANIE_ID;
+
+  // Create or update contact
+  let contactId;
+  const baseFields = {
+    first: cFirst,
+    last: cLast,
+    email: cEmail,
+    phone: cPhone,
+    source: source || 'house meeting sign-in',
+  };
+  if (street_address) baseFields.street_address = String(street_address).trim();
+  if (city) baseFields.city = String(city).trim();
+  if (zip) baseFields.zip = String(zip).trim();
+  if (district) baseFields.district = String(district).trim();
+  if (school) baseFields.school = String(school).trim();
+
+  if (existingId) {
+    contactId = existingId;
+    // Patch only fields that came in this submission (don't blow away existing data with blanks)
+    const patch = {};
+    if (street_address) patch.street_address = baseFields.street_address;
+    if (city) patch.city = baseFields.city;
+    if (zip) patch.zip = baseFields.zip;
+    if (district) patch.district = baseFields.district;
+    if (school) patch.school = baseFields.school;
+    if (Object.keys(patch).length > 0) {
+      await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: patch, typecast: true })
+      });
+    }
+  } else {
+    const fields = {
+      ...baseFields,
+      leader_ladder: 'Prospect',
+      assigned_organizer: [organizerId],
+    };
+    const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+      method: 'POST',
+      body: JSON.stringify({ records: [{ fields }], typecast: true })
+    });
+    contactId = created.records[0].id;
+  }
+
+  // Log the sign-in itself
+  const logRecords = [];
+  logRecords.push({
+    fields: {
+      Summary: `${date} — house meeting sign-in (host: ${host_name})`,
+      date,
+      method: 'House meeting',
+      result: 'Attended',
+      event: `House meeting ${date}`,
+      contact: [contactId],
+      notes: `Host: ${host_name}${commitments.length ? ` · Commitments: ${commitments.join(', ')}` : ''}${other_text ? ` · Other: ${other_text}` : ''}`,
+    }
+  });
+
+  // One log row per commitment (clean querying later)
+  for (const c of commitments) {
+    if (c === 'Other') continue; // captured in primary log row's notes
+    logRecords.push({
+      fields: {
+        Summary: `${date} — commitment: ${c}`,
+        date,
+        method: 'Commitment',
+        result: 'Committed',
+        event: c,
+        contact: [contactId],
+        notes: `From house meeting on ${date}, host ${host_name}`,
+      }
+    });
+  }
+
+  // Airtable max 10 records per create
+  for (let i = 0; i < logRecords.length; i += 10) {
+    const batch = logRecords.slice(i, i + 10);
+    await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+      method: 'POST',
+      body: JSON.stringify({ records: batch, typecast: true })
+    });
+  }
+
+  await invalidateReadCaches(env);
+  return json({ ok: true, contact_id: contactId, commitments_logged: commitments.length });
 }
 
 async function authStart(request, env) {

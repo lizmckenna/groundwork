@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Sign in · Parents for MO Public Schools</title>
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --cream: #E9E5CE;
+    --cream-card: #D9D5C0;
+    --ink: #1A2418;
+    --burgundy: #B25048;
+    --gold: #C99633;
+    --green: #2F5E3D;
+    --muted: rgba(26,36,24,0.6);
+    --border: rgba(26,36,24,0.18);
+    --border-strong: rgba(26,36,24,0.5);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: 24px 16px 64px;
+  }
+  .wrap { max-width: 520px; margin: 0 auto; }
+
+  /* Header */
+  header.brand { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
+  .logo {
+    width: 44px; height: 44px; background: var(--burgundy);
+    border-radius: 22px; display: flex; align-items: center; justify-content: center;
+  }
+  .logo .ring {
+    width: 32px; height: 32px; background: var(--gold);
+    border-radius: 16px; display: flex; align-items: center; justify-content: center;
+  }
+  .logo .dot { width: 16px; height: 16px; background: var(--cream); border-radius: 8px; }
+  .brand-name {
+    font-weight: 700; font-size: 14px; line-height: 1.15;
+    text-transform: uppercase; letter-spacing: 0.02em;
+  }
+
+  /* Hero */
+  h1 {
+    font-weight: 800; font-size: 36px; line-height: 0.98;
+    letter-spacing: 0.01em; text-transform: uppercase;
+    margin: 8px 0 14px;
+  }
+  .lede { font-size: 15px; line-height: 1.6; margin: 0 0 24px; color: var(--ink); }
+  .meeting-info {
+    background: var(--cream-card); border: 2px solid var(--ink); border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 24px;
+    font-size: 13px; line-height: 1.5;
+  }
+  .meeting-info strong { display: block; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.14em; color: var(--green); margin-bottom: 4px; }
+
+  /* Form */
+  form { display: flex; flex-direction: column; gap: 18px; }
+  fieldset {
+    border: none; padding: 0; margin: 0;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  legend {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em;
+    font-weight: 700; color: var(--green); padding: 0 0 6px;
+    width: 100%; border-bottom: 1px solid var(--border); margin-bottom: 8px;
+  }
+  label.f {
+    display: flex; flex-direction: column; gap: 6px;
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+    font-weight: 600; color: var(--ink);
+  }
+  label.f.req::after { content: " *"; color: var(--burgundy); }
+  input[type="text"], input[type="email"], input[type="tel"], input[type="date"],
+  select, textarea {
+    font-family: inherit; font-size: 16px;
+    padding: 12px 14px; border-radius: 8px;
+    border: 1.5px solid var(--border-strong);
+    background: #FFF8E4; color: var(--ink);
+    -webkit-appearance: none; appearance: none;
+    text-transform: none; letter-spacing: normal;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--burgundy); background: #fff;
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 420px) {
+    .row3 { grid-template-columns: 1fr; }
+  }
+
+  /* Commitments */
+  .commits { display: flex; flex-direction: column; gap: 10px; }
+  .commit {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px 14px; background: rgba(255,248,228,0.6);
+    border: 1.5px solid var(--border); border-radius: 10px;
+    cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  }
+  .commit:hover { background: #FFF8E4; }
+  .commit input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none;
+    width: 22px; height: 22px; min-width: 22px;
+    margin: 1px 0 0; border: 2px solid var(--ink);
+    border-radius: 5px; background: #FFF8E4; cursor: pointer; position: relative;
+  }
+  .commit input[type="checkbox"]:checked {
+    background: var(--burgundy); border-color: var(--burgundy);
+  }
+  .commit input[type="checkbox"]:checked::after {
+    content: ""; position: absolute; left: 5px; top: 1px;
+    width: 6px; height: 12px; border: solid white;
+    border-width: 0 2.5px 2.5px 0; transform: rotate(45deg);
+  }
+  .commit:has(input:checked) { border-color: var(--burgundy); background: #FFF8E4; }
+  .commit-text { flex: 1; font-size: 14px; line-height: 1.4; }
+  .commit-text b { display: block; text-transform: uppercase; font-size: 12px; letter-spacing: 0.06em; }
+  .commit-text span { color: var(--muted); font-size: 13px; }
+  #other-text { margin-top: 8px; display: none; }
+  #other-text.show { display: block; }
+
+  /* Submit */
+  button.submit {
+    margin-top: 12px; padding: 16px 20px;
+    background: var(--ink); color: var(--cream);
+    border: none; border-radius: 10px; cursor: pointer;
+    font-family: inherit; font-size: 15px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    transition: transform 0.08s, background 0.15s;
+  }
+  button.submit:hover { background: var(--burgundy); }
+  button.submit:active { transform: scale(0.985); }
+  button.submit:disabled { opacity: 0.5; cursor: wait; }
+
+  /* Status */
+  .status {
+    padding: 14px 16px; border-radius: 10px;
+    font-size: 14px; margin-top: 12px; display: none;
+  }
+  .status.show { display: block; }
+  .status.err { background: rgba(178,80,72,0.12); color: var(--burgundy); border: 1px solid var(--burgundy); }
+
+  /* Success state */
+  .thanks { display: none; text-align: center; padding: 40px 16px; }
+  .thanks.show { display: block; }
+  .thanks h2 {
+    font-size: 32px; text-transform: uppercase; font-weight: 800;
+    margin: 16px 0 12px; letter-spacing: 0.01em;
+  }
+  .thanks p { font-size: 15px; line-height: 1.6; color: var(--ink); }
+  .check {
+    width: 64px; height: 64px; border-radius: 32px;
+    background: var(--green); display: inline-flex; align-items: center; justify-content: center;
+    margin-bottom: 8px;
+  }
+  .check::after {
+    content: ""; width: 16px; height: 28px; border: solid white;
+    border-width: 0 4px 4px 0; transform: rotate(45deg); margin-top: -6px;
+  }
+
+  /* Required note */
+  .req-note { font-size: 11px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.1em; margin: -6px 0 0; }
+
+  /* Honeypot */
+  .hp { position: absolute; left: -9999px; width: 1px; height: 1px; }
+
+  /* Footer */
+  footer.f { margin-top: 40px; padding-top: 24px; border-top: 1px dashed var(--border);
+    font-size: 11px; color: var(--muted); text-align: center; letter-spacing: 0.08em;
+    text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="brand">
+    <div class="logo"><div class="ring"><div class="dot"></div></div></div>
+    <div class="brand-name">Parents for Missouri<br>Public Schools</div>
+  </header>
+
+  <div id="form-view">
+    <h1>You're in.</h1>
+    <p class="lede">Sign in below and make your commitments. Takes about a minute.</p>
+
+    <p class="req-note">* required</p>
+
+    <form id="signin">
+      <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off">
+
+      <fieldset>
+        <legend>Meeting</legend>
+        <div class="row2">
+          <label class="f req">Date
+            <input type="date" name="date" required>
+          </label>
+          <label class="f req">Host
+            <input type="text" name="host_name" placeholder="Person hosting" required>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>You</legend>
+        <div class="row2">
+          <label class="f req">First name
+            <input type="text" name="first" autocomplete="given-name" required>
+          </label>
+          <label class="f req">Last name
+            <input type="text" name="last" autocomplete="family-name" required>
+          </label>
+        </div>
+        <label class="f req">Phone
+          <input type="tel" name="phone" autocomplete="tel" placeholder="555-555-5555" required>
+        </label>
+        <label class="f req">Email
+          <input type="email" name="email" autocomplete="email" required>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Address</legend>
+        <label class="f">Street address
+          <input type="text" name="street_address" autocomplete="street-address">
+        </label>
+        <div class="row3">
+          <label class="f">City
+            <input type="text" name="city" autocomplete="address-level2">
+          </label>
+          <label class="f">State
+            <input type="text" name="state" value="MO" autocomplete="address-level1">
+          </label>
+          <label class="f">Zip
+            <input type="text" name="zip" inputmode="numeric" autocomplete="postal-code">
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Your school</legend>
+        <label class="f">School district
+          <input type="text" name="district" placeholder="e.g. Kansas City Public Schools">
+        </label>
+        <label class="f">School
+          <input type="text" name="school" placeholder="e.g. Border Star Montessori">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Your commitments</legend>
+        <div class="commits">
+          <label class="commit">
+            <input type="checkbox" name="commitments" value="Amplifier">
+            <span class="commit-text"><b>Amplifier</b><span>I'll talk to 5–10 people and get them to vote no</span></span>
+          </label>
+          <label class="commit">
+            <input type="checkbox" name="commitments" value="Host house meeting">
+            <span class="commit-text"><b>Host my own house meeting</b></span>
+          </label>
+          <label class="commit">
+            <input type="checkbox" name="commitments" value="Join parent team at my school">
+            <span class="commit-text"><b>Join the parent team at my school</b></span>
+          </label>
+          <label class="commit">
+            <input type="checkbox" name="commitments" value="Start parent team at my school">
+            <span class="commit-text"><b>Start a parent team at my own school</b></span>
+          </label>
+          <label class="commit">
+            <input type="checkbox" name="commitments" value="Parent Power Camp training">
+            <span class="commit-text"><b>Attend Parent Power Camp training</b></span>
+          </label>
+          <label class="commit">
+            <input type="checkbox" name="commitments" value="Regional MO launch">
+            <span class="commit-text"><b>Attend the Regional Parents for Missouri Public Schools launch</b><span>Date + location TBD</span></span>
+          </label>
+          <label class="commit">
+            <input type="checkbox" name="commitments" value="Other" id="other-check">
+            <span class="commit-text" style="flex:1">
+              <b>Other</b>
+              <input type="text" id="other-text" name="other_text" placeholder="Tell us what" style="width:100%;margin-top:6px;font-size:14px;text-transform:none;letter-spacing:normal;">
+            </span>
+          </label>
+        </div>
+      </fieldset>
+
+      <button type="submit" class="submit" id="submit-btn">Sign me in</button>
+      <div class="status" id="status"></div>
+    </form>
+  </div>
+
+  <div id="thanks-view" class="thanks">
+    <div class="check"></div>
+    <h2>You're in.</h2>
+    <p>Thanks for signing in and stepping up. We'll be in touch with what's next.</p>
+  </div>
+
+  <footer class="f">parents4mopublicschools.org</footer>
+</div>
+
+<script>
+const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
+
+// Default date to today
+document.querySelector('input[name="date"]').valueAsDate = new Date();
+
+// Pre-fill from URL params if present (e.g. ?host=Kathryn&date=2026-05-28)
+const params = new URLSearchParams(location.search);
+if (params.get('host')) document.querySelector('input[name="host_name"]').value = params.get('host');
+if (params.get('date')) document.querySelector('input[name="date"]').value = params.get('date');
+
+// Show/hide "Other" text input when checkbox toggled
+const otherCheck = document.getElementById('other-check');
+const otherText = document.getElementById('other-text');
+otherCheck.addEventListener('change', () => {
+  otherText.classList.toggle('show', otherCheck.checked);
+  if (otherCheck.checked) otherText.focus();
+});
+
+const form = document.getElementById('signin');
+const btn = document.getElementById('submit-btn');
+const status = document.getElementById('status');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  status.className = 'status';
+  status.textContent = '';
+
+  const fd = new FormData(form);
+  const commitments = fd.getAll('commitments');
+  const payload = {
+    website: fd.get('website'), // honeypot
+    date: fd.get('date'),
+    host_name: fd.get('host_name'),
+    first: fd.get('first'),
+    last: fd.get('last'),
+    phone: fd.get('phone'),
+    email: fd.get('email'),
+    street_address: fd.get('street_address'),
+    city: fd.get('city'),
+    state: fd.get('state'),
+    zip: fd.get('zip'),
+    district: fd.get('district'),
+    school: fd.get('school'),
+    commitments,
+    other_text: commitments.includes('Other') ? fd.get('other_text') : '',
+    source: 'house meeting sign-in',
+  };
+
+  try {
+    const res = await fetch(`${WORKER}/house-meeting-signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      status.textContent = data.error || 'Something went wrong. Please try again.';
+      status.classList.add('show', 'err');
+      btn.disabled = false;
+      btn.textContent = 'Sign me in';
+      return;
+    }
+    document.getElementById('form-view').style.display = 'none';
+    document.getElementById('thanks-view').classList.add('show');
+    window.scrollTo(0, 0);
+  } catch (err) {
+    status.textContent = 'Network error. Please try again.';
+    status.classList.add('show', 'err');
+    btn.disabled = false;
+    btn.textContent = 'Sign me in';
+  }
+});
+</script>
+</body>
+</html>
