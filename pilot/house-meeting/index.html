@@ -125,6 +125,7 @@
     -webkit-appearance: none; appearance: none;
     text-transform: none; letter-spacing: normal;
     transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    width: 100%; min-width: 0; max-width: 100%;
   }
   input:focus {
     outline: none; border-color: var(--burgundy);
@@ -292,7 +293,7 @@
 
         <p class="req-note"><span class="star">*</span> required</p>
 
-        <button type="submit" class="submit" id="submit-btn">Sign me in →</button>
+        <button type="submit" class="submit" id="submit-btn">Count me in →</button>
         <div class="status" id="status"></div>
       </form>
     </div>
@@ -377,7 +378,7 @@ form.addEventListener('submit', async (e) => {
       status.textContent = data.error || 'Something went wrong. Please try again.';
       status.classList.add('show', 'err');
       btn.disabled = false;
-      btn.textContent = 'Sign me in →';
+      btn.textContent = 'Count me in →';
       return;
     }
     document.getElementById('form-view').style.display = 'none';
@@ -387,7 +388,7 @@ form.addEventListener('submit', async (e) => {
     status.textContent = 'Network error. Please try again.';
     status.classList.add('show', 'err');
     btn.disabled = false;
-    btn.textContent = 'Sign me in →';
+    btn.textContent = 'Count me in →';
   }
 });
 </script>
