@@ -1186,13 +1186,11 @@ async function loadCumulativeGrid() {
         dot.dataset.s = state;
         sq.appendChild(dot);
       }
-      // Today and future days: pad to daily goal with outline squares
-      if (isToday || isFuture) {
-        for (let i = actions.length; i < TODAY_GOAL; i++) {
-          const dot = document.createElement('div');
-          dot.className = 'dot';
-          sq.appendChild(dot);
-        }
+      // Every day pads to daily goal with outline squares so rows line up evenly
+      for (let i = actions.length; i < TODAY_GOAL; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'dot';
+        sq.appendChild(dot);
       }
       row.appendChild(sq);
       wrap.appendChild(row);
