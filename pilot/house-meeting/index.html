@@ -11,25 +11,31 @@
 <style>
   :root {
     /* Parents for Missouri Public Schools — live site palette */
-    --cream:        #E9E5CE;
-    --cream-card:   #D9D5C0;
+    --paper:        #E9E5CE;
+    --paper-2:      #D9D5C0;
     --ink:          #1A2418;
-    --burgundy:     #B25048;
-    --gold:         #C99633;
-    --green:        #2F5E3D;
-    --slate:        #335A78;
-    --slate-deep:   #3E4F6E;
-    --rust:         #B05A2C;
+    --rose:         #B25048;  /* burgundy */
+    --sun:          #C99633;  /* gold */
+    --teal:         #2F5E3D;  /* green */
+    --plum:         #3E4F6E;
+    --sky:          #335A78;
+    --tangerine:    #B05A2C;
 
+    --card-bg:      #F4F0DA;  /* lighter than paper for the form surface */
+    --input-bg:     #FFFCEB;  /* near-white input fields */
     --muted:        rgba(26,36,24,0.6);
     --line:         rgba(26,36,24,0.18);
     --line-strong:  rgba(26,36,24,0.5);
-    --input-bg:     #F4F0DA;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
-    background: var(--cream);
+    background-color: var(--paper);
+    background-image:
+      radial-gradient(rgba(42,42,58,.05) 1px, transparent 1.4px),
+      radial-gradient(rgba(42,42,58,.035) 1px, transparent 1.2px);
+    background-size: 7px 7px, 13px 13px;
+    background-position: 0 0, 3px 3px;
     color: var(--ink);
     font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
     font-size: 16px; line-height: 1.55;
@@ -40,14 +46,14 @@
   /* Header brand */
   header.brand { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
   .logo {
-    width: 48px; height: 48px; background: var(--burgundy);
+    width: 48px; height: 48px; background: var(--rose);
     border-radius: 24px; display: flex; align-items: center; justify-content: center;
   }
   .logo .ring {
-    width: 34px; height: 34px; background: var(--gold);
+    width: 34px; height: 34px; background: var(--sun);
     border-radius: 17px; display: flex; align-items: center; justify-content: center;
   }
-  .logo .dot { width: 16px; height: 16px; background: var(--cream); border-radius: 8px; }
+  .logo .dot { width: 16px; height: 16px; background: var(--paper); border-radius: 8px; }
   .brand-name {
     font-family: 'Archivo Narrow', sans-serif;
     font-weight: 700; font-size: 15px; line-height: 1.15;
@@ -59,7 +65,7 @@
   .eyebrow {
     font-family: 'Archivo Narrow', sans-serif;
     font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em;
-    font-weight: 600; color: var(--green); margin: 0 0 10px;
+    font-weight: 600; color: var(--teal); margin: 0 0 10px;
   }
   h1 {
     font-family: 'Archivo Narrow', sans-serif;
@@ -71,11 +77,11 @@
     font-size: 15px; line-height: 1.6; margin: 0;
     color: var(--ink);
   }
-  .lede b { color: var(--burgundy); font-weight: 600; }
+  .lede b { color: var(--rose); font-weight: 600; }
 
   /* Card surface */
   .card {
-    background: var(--cream-card); border-radius: 14px;
+    background: var(--card-bg); border-radius: 14px;
     padding: 24px 20px; margin-top: 20px;
     border: 2px solid var(--ink);
   }
@@ -98,17 +104,50 @@
   legend .num {
     display: inline-flex; align-items: center; justify-content: center;
     width: 26px; height: 26px; border-radius: 13px;
-    color: var(--cream); font-size: 12px; font-weight: 700; letter-spacing: 0;
+    color: var(--paper); font-size: 12px; font-weight: 700; letter-spacing: 0;
     font-family: 'Archivo Narrow', sans-serif;
   }
-  fieldset.s-meeting legend { color: var(--burgundy); }
-  fieldset.s-meeting legend .num { background: var(--burgundy); }
-  fieldset.s-you legend { color: var(--green); }
-  fieldset.s-you legend .num { background: var(--green); }
-  fieldset.s-addr legend { color: var(--slate); }
-  fieldset.s-addr legend .num { background: var(--slate); }
-  fieldset.s-school legend { color: var(--rust); }
-  fieldset.s-school legend .num { background: var(--rust); }
+  fieldset.s-meeting legend { color: var(--rose); }
+  fieldset.s-meeting legend .num { background: var(--rose); }
+  fieldset.s-you legend { color: var(--teal); }
+  fieldset.s-you legend .num { background: var(--teal); }
+  fieldset.s-addr legend { color: var(--sky); }
+  fieldset.s-addr legend .num { background: var(--sky); }
+  fieldset.s-school legend { color: var(--tangerine); }
+  fieldset.s-school legend .num { background: var(--tangerine); }
+  fieldset.s-commit legend { color: var(--plum); }
+  fieldset.s-commit legend .num { background: var(--plum); }
+
+  /* Commitment checkboxes */
+  .commits { display: flex; flex-direction: column; gap: 10px; }
+  .commit {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px 14px; background: var(--input-bg);
+    border: 1.5px solid var(--line); border-radius: 10px;
+    cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  }
+  .commit:hover { border-color: var(--rose); }
+  .commit input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none;
+    width: 22px; height: 22px; min-width: 22px;
+    margin: 1px 0 0; border: 2px solid var(--ink);
+    border-radius: 5px; background: white; cursor: pointer; position: relative;
+    flex-shrink: 0;
+  }
+  .commit input[type="checkbox"]:checked {
+    background: var(--rose); border-color: var(--rose);
+  }
+  .commit input[type="checkbox"]:checked::after {
+    content: ""; position: absolute; left: 5px; top: 1px;
+    width: 6px; height: 12px; border: solid white;
+    border-width: 0 2.5px 2.5px 0; transform: rotate(45deg);
+  }
+  .commit:has(input:checked) { border-color: var(--rose); background: #FFFCEB; }
+  .commit-text { flex: 1; font-family: 'DM Sans', sans-serif; font-size: 14px; line-height: 1.4; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .commit-text b { display: block; font-family: 'Archivo Narrow', sans-serif; text-transform: uppercase; font-size: 12px; letter-spacing: 0.08em; font-weight: 700; margin-bottom: 2px; color: var(--ink); }
+  .commit-text span { color: var(--muted); font-size: 13px; }
+  #other-text { display: none; }
+  #other-text.show { display: block; margin-top: 8px; }
 
   label.f {
     display: flex; flex-direction: column; gap: 6px;
@@ -116,7 +155,7 @@
     font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
     font-weight: 600; color: var(--ink);
   }
-  label.f.req::after { content: " *"; color: var(--burgundy); }
+  label.f.req::after { content: " *"; color: var(--rose); }
   input[type="text"], input[type="email"], input[type="tel"], input[type="date"] {
     font-family: 'DM Sans', sans-serif; font-size: 16px;
     padding: 13px 14px; border-radius: 8px;
@@ -128,7 +167,7 @@
     width: 100%; min-width: 0; max-width: 100%;
   }
   input:focus {
-    outline: none; border-color: var(--burgundy);
+    outline: none; border-color: var(--rose);
     background: #FFFCE8;
     box-shadow: 0 0 0 3px rgba(178,80,72,0.15);
   }
@@ -149,14 +188,14 @@
   /* Submit */
   button.submit {
     margin-top: 22px; padding: 16px 22px;
-    background: var(--ink); color: var(--cream);
+    background: var(--ink); color: var(--paper);
     border: none; border-radius: 8px; cursor: pointer;
     font-family: 'Archivo Narrow', sans-serif;
     font-size: 15px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.08em;
     transition: transform 0.08s, background 0.15s;
   }
-  button.submit:hover { background: var(--burgundy); }
+  button.submit:hover { background: var(--rose); }
   button.submit:active { transform: scale(0.985); }
   button.submit:disabled { opacity: 0.55; cursor: wait; }
 
@@ -167,8 +206,8 @@
   }
   .status.show { display: block; }
   .status.err {
-    background: rgba(178,80,72,0.12); color: var(--burgundy);
-    border: 1px solid var(--burgundy);
+    background: rgba(178,80,72,0.12); color: var(--rose);
+    border: 1px solid var(--rose);
   }
 
   /* Success state */
@@ -182,11 +221,11 @@
   .thanks p { font-size: 15px; line-height: 1.6; color: var(--ink); margin: 0 0 8px; }
   .check {
     width: 72px; height: 72px; border-radius: 36px;
-    background: var(--green); display: inline-flex; align-items: center; justify-content: center;
+    background: var(--teal); display: inline-flex; align-items: center; justify-content: center;
     margin-bottom: 8px;
   }
   .check::after {
-    content: ""; width: 18px; height: 32px; border: solid var(--cream);
+    content: ""; width: 18px; height: 32px; border: solid var(--paper);
     border-width: 0 5px 5px 0; transform: rotate(45deg); margin-top: -6px;
   }
 
@@ -196,7 +235,7 @@
     font-size: 11px; color: var(--muted); text-transform: uppercase;
     letter-spacing: 0.12em; margin: 16px 0 0; text-align: right; font-weight: 600;
   }
-  .req-note .star { color: var(--burgundy); font-weight: 700; }
+  .req-note .star { color: var(--rose); font-weight: 700; }
 
   /* Honeypot */
   .hp { position: absolute; left: -9999px; width: 1px; height: 1px; }
@@ -209,7 +248,7 @@
     font-size: 11px; color: var(--muted); text-align: center;
     letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600;
   }
-  footer.f a { color: var(--burgundy); text-decoration: none; }
+  footer.f a { color: var(--rose); text-decoration: none; }
 </style>
 </head>
 <body>
@@ -291,6 +330,43 @@
           </label>
         </fieldset>
 
+        <fieldset class="s-commit">
+          <legend><span class="num">5</span> What you're up for (check any)</legend>
+          <div class="commits">
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Amplifier">
+              <span class="commit-text"><b>Amplifier</b><span>Talk to 5–10 people and ask them to vote no on Amendment 5</span></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Host house meeting">
+              <span class="commit-text"><b>Host my own house meeting</b><span>Gather a few people in your circle for a conversation like this one</span></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Join parent team at my school">
+              <span class="commit-text"><b>Join the parent team at my school</b></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Start parent team at my school">
+              <span class="commit-text"><b>Start a parent team at my own school</b></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Parent Power Camp training">
+              <span class="commit-text"><b>Attend Parent Power Camp training</b></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Regional MO launch">
+              <span class="commit-text"><b>Attend the Regional Parents for MO Public Schools launch</b><span>Date and location to come</span></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Other" id="other-check">
+              <span class="commit-text" style="flex:1">
+                <b>Other</b>
+                <input type="text" id="other-text" name="other_text" placeholder="Tell us what you're up for" style="margin-top:6px;">
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
         <p class="req-note"><span class="star">*</span> required</p>
 
         <button type="submit" class="submit" id="submit-btn">Count me in →</button>
@@ -322,6 +398,14 @@ const params = new URLSearchParams(location.search);
 if (params.get('host')) document.querySelector('input[name="host_name"]').value = params.get('host');
 if (params.get('date')) document.querySelector('input[name="date"]').value = params.get('date');
 
+// Show/hide "Other" text input when its checkbox toggled
+const otherCheck = document.getElementById('other-check');
+const otherText = document.getElementById('other-text');
+otherCheck.addEventListener('change', () => {
+  otherText.classList.toggle('show', otherCheck.checked);
+  if (otherCheck.checked) otherText.focus();
+});
+
 // Fetch known hosts → populate datalist
 (async () => {
   try {
@@ -349,6 +433,7 @@ form.addEventListener('submit', async (e) => {
   status.textContent = '';
 
   const fd = new FormData(form);
+  const commitments = fd.getAll('commitments');
   const payload = {
     website: fd.get('website'),
     date: fd.get('date'),
@@ -363,7 +448,8 @@ form.addEventListener('submit', async (e) => {
     zip: fd.get('zip'),
     district: fd.get('district'),
     school: fd.get('school'),
-    commitments: [],
+    commitments,
+    other_text: commitments.includes('Other') ? fd.get('other_text') : '',
     source: 'house meeting sign-in',
   };
 
