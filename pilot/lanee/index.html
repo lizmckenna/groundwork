@@ -159,7 +159,7 @@
   .day-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .day-row .day-label { min-width: 150px; font-size: 12px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em; }
   .day-row .day-label b { color: var(--text-primary); font-weight: 700; }
-  .day-row .day-squares { display: grid; grid-template-columns: repeat(25, 1fr); gap: 4px; flex: 1; min-width: 0; max-width: 560px; }
+  .day-row .day-squares { display: grid; grid-template-columns: repeat(25, 1fr); gap: 6px; flex: 1; min-width: 0; max-width: 900px; }
   .day-row .day-squares .dot { width: 100%; aspect-ratio: 1/1; height: auto; }
   .day-row.future .day-label { color: var(--text-tertiary); }
   .day-row.future .day-squares .dot { opacity: 0.55; }
@@ -1110,18 +1110,18 @@ async function loadCumulativeGrid() {
     const wrap = document.getElementById('grid-days');
     if (!wrap) return;
     wrap.innerHTML = '';
-    // Build list: future days (Fri, Thu) at top, then today, then past days from byDate
+    // Build list: oldest past days at top, then today, then future days (Thu, Fri) at bottom
     const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     const todayDate = new Date(today + 'T00:00:00');
-    // Add up to 2 future days
+    // Add up to 2 future days (chronological: +1, +2)
     const futureDates = [];
     for (let i = 1; i <= 2; i++) {
       const f = new Date(todayDate);
       f.setDate(todayDate.getDate() + i);
       futureDates.push(f.toISOString().split('T')[0]);
     }
-    const pastDates = Object.keys(byDate).filter(d => d !== today).sort().reverse();
-    const ordered = [...futureDates.reverse(), today, ...pastDates];
+    const pastDates = Object.keys(byDate).filter(d => d !== today).sort(); // oldest first
+    const ordered = [...pastDates, today, ...futureDates];
     for (const d of ordered) {
       const actions = byDate[d] || [];
       const isToday = d === today;
