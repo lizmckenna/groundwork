@@ -523,7 +523,7 @@ Emergency Meeting on Public School Funding · Tue May 26 · 7:30 PM CT · Zoom
         </td></tr>
 
         <tr><td style="padding:0 0 18px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1A2418">
-          <strong>Help us reach more parents.</strong> Please forward this email to <strong>two other parents</strong>, educators, or neighbors who care about public schools, and ask them to sign up at <a href="https://parents4mopublicschools.org/" style="color:#1A2418;text-decoration:underline"><strong>parents4mopublicschools.org</strong></a>. The more we get organized, the stronger the movement we're building for Missouri's kids.
+          <strong>Help us reach more parents.</strong> Please forward this email to <strong>two other parents</strong>, educators, or neighbors who care about public schools, and ask them to sign up at <a href="https://parents4mopublicschools.org/" style="color:#1A2418;text-decoration:underline"><strong>parents4mopublicschools.org</strong></a>. Every parent we bring in makes us harder to ignore.
         </td></tr>
 
         <tr><td style="padding:0 0 28px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1A2418">
