@@ -1,8 +1,9 @@
-// Groundwork pilot worker — v3.1, 2026-05-20
-// Changes from v3:
-//   - /recent-activity (GET ?days=N) — returns per-day grouped contact_log for the cumulative grid
-// (v3 changes still present: Leader tier in prospects, AUTO_CONFIRM_EMAIL=false, real Zoom link,
-//  Parents for KC Kids branding + LaNeé sign-off, on-demand /send-zoom-email, /queue-count)
+// Groundwork pilot worker — v3.3, 2026-05-21
+// Changes from v3.2:
+//   - Confirmation email: replaced soft "invite others" line with bold ask to forward
+//     to two more parents + sign up at parents4mopublicschools.org
+// (v3.2 KV caching still in place: /confirmees, /today-stats, /recent-activity ~60s,
+//  /queue-count 300s, write endpoints invalidate caches.)
 
 const BASE = 'appQdixHbuttPldx6';
 const CONTACTS_TBL = 'tblJeHqz13AOvq71A';
@@ -37,6 +38,27 @@ const LOGO_URL = 'https://lizmckenna.github.io/groundwork/groundwork-logo-256.pn
 const FROM_AUTH = 'Groundwork <groundwork@civicpowerlab.us>';
 const CODE_TTL = 600;
 const SESSION_TTL = 604800;
+
+// --- KV read-cache ---
+const READ_CACHE_TTL = 60; // seconds
+const READ_CACHE_KEYS = [
+  'cache:confirmees',
+  'cache:today-stats',
+  'cache:recent-activity:7',
+  'cache:recent-activity:14',
+  'cache:recent-activity:30',
+  'queue:count',
+];
+async function cacheGet(env, key) {
+  const v = await env.KV_BINDING.get(key);
+  return v ? JSON.parse(v) : null;
+}
+async function cachePut(env, key, payload, ttl = READ_CACHE_TTL) {
+  await env.KV_BINDING.put(key, JSON.stringify(payload), { expirationTtl: ttl });
+}
+async function invalidateReadCaches(env) {
+  await Promise.all(READ_CACHE_KEYS.map(k => env.KV_BINDING.delete(k)));
+}
 
 export default {
   async fetch(request, env) {
@@ -197,6 +219,7 @@ async function signup(request, env) {
     }
   }
 
+  await invalidateReadCaches(env);
   return json({ ok: true, contact_id: contactId, message: 'thanks for signing up' });
 }
 
@@ -401,10 +424,12 @@ async function logOutcome(request, env) {
         confirmation_email_sent = true;
       }
     } catch (e) {
+      await invalidateReadCaches(env);
       return json({ ok: true, created_count: created.records.length, confirmation_email_sent: false, email_warning: e.message });
     }
   }
 
+  await invalidateReadCaches(env);
   return json({ ok: true, created_count: created.records.length, confirmation_email_sent });
 }
 
@@ -498,7 +523,7 @@ Emergency Meeting on Public School Funding · Tue May 26 · 7:30 PM CT · Zoom
         </td></tr>
 
         <tr><td style="padding:0 0 18px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1A2418">
-          Please also feel free to invite other parents, educators, and community members who care about protecting public education in Missouri.
+          <strong>Help us reach more parents.</strong> Please forward this email to <strong>two other parents</strong>, educators, or neighbors who care about public schools, and ask them to sign up at <a href="https://parents4mopublicschools.org/" style="color:#1A2418;text-decoration:underline"><strong>parents4mopublicschools.org</strong></a>. The more we get organized, the stronger the movement we're building for Missouri's kids.
         </td></tr>
 
         <tr><td style="padding:0 0 28px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1A2418">
@@ -585,10 +610,14 @@ async function undoSave(request, env) {
       last_attempt_result: null, next_step: '',
     }, typecast: true })
   });
+  await invalidateReadCaches(env);
   return json({ ok: true, deleted });
 }
 
 async function getConfirmees(env) {
+  const cached = await cacheGet(env, 'cache:confirmees');
+  if (cached) return json(cached);
+
   const filter = "{last_attempt_result}='Signed up'";
   const fields = ['Name','first','last','phone','email','school','district','last_attempt_date','source'];
   let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=200`;
@@ -624,7 +653,7 @@ async function getConfirmees(env) {
     if (r.fields.date && (!s.last_date || r.fields.date > s.last_date)) s.last_date = r.fields.date;
   }
 
-  return json(contactsData.records.map(r => ({
+  const payload = contactsData.records.map(r => ({
     id: r.id,
     name: r.fields.Name || `${r.fields.first || ''} ${r.fields.last || ''}`.trim(),
     phone: r.fields.phone || '',
@@ -634,7 +663,9 @@ async function getConfirmees(env) {
     last_attempt_date: r.fields.last_attempt_date || '',
     source: r.fields.source || '',
     confirm: stateByContact[r.id] || { email_sent: false, text_sent: false, call_made: false, status: null, last_date: null },
-  })));
+  }));
+  await cachePut(env, 'cache:confirmees', payload);
+  return json(payload);
 }
 
 async function confirmLog(request, env) {
@@ -681,6 +712,7 @@ async function confirmLog(request, env) {
     method: 'POST',
     body: JSON.stringify({ records, typecast: true })
   });
+  await invalidateReadCaches(env);
   return json({ ok: true, created_count: created.records.length, status: result });
 }
 
@@ -716,6 +748,9 @@ async function searchContacts(env, url) {
 }
 
 async function getTodayStats(env) {
+  const cached = await cacheGet(env, 'cache:today-stats');
+  if (cached) return json(cached);
+
   const date = new Date().toISOString().split('T')[0];
   const filter = `{date}=DATETIME_PARSE('${date}')`;
   const fields = ['contact','method','result','event','date'];
@@ -756,7 +791,9 @@ async function getTodayStats(env) {
       outcome,
     };
   });
-  return json({ actions });
+  const payload = { actions };
+  await cachePut(env, 'cache:today-stats', payload);
+  return json(payload);
 }
 
 // NEW: history endpoint for the cumulative grid.
@@ -764,6 +801,10 @@ async function getTodayStats(env) {
 // Mirrors getTodayStats's filtering (drops Confirm-5/26 events, keeps outreach + admin outcomes).
 async function getRecentActivity(env, url) {
   const days = parseInt(url.searchParams.get('days') || '14');
+  const cacheKey = `cache:recent-activity:${days}`;
+  const cached = await cacheGet(env, cacheKey);
+  if (cached) return json(cached);
+
   const filter = `IS_AFTER({date},DATEADD(TODAY(),-${days},'days'))`;
   const fields = ['contact','method','result','event','date'];
   let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100`;
@@ -807,5 +848,7 @@ async function getRecentActivity(env, url) {
       };
     });
   }
-  return json({ by_date: out });
+  const payload = { by_date: out };
+  await cachePut(env, cacheKey, payload);
+  return json(payload);
 }
