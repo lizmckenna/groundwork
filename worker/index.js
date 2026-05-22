@@ -525,27 +525,43 @@ const EXCLUDED_ROLES = ['Fellow organizer'];
 // Note: no state-based exclusion. KC-metro includes KS counties (Johnson, Wyandotte) — those are LaNeé's.
 // Stephanie's queue is just whatever's assigned to her; we manage assignments rather than filter geography.
 
-function prospectsFilter(organizerName) {
-  const id = organizerName ? ORGANIZER_IDS[organizerName] : null;
-  const orgClause = id ? `,FIND('${id}',ARRAYJOIN({assigned_organizer}))>0` : '';
+// Organizer NAMES (matches what {assigned_organizer} stringifies to — primary field of Contacts table).
+// Multi-select stringifies as comma-joined names, so name-based FIND is the reliable filter.
+const ORGANIZER_NAMES_LC = {
+  'lanee':     'LaNeé Bridewell',
+  'laneé':     'LaNeé Bridewell',
+  'stephanie': 'Stephanie Rittgers',
+};
+function organizerName(name) {
+  if (!name) return null;
+  return ORGANIZER_NAMES_LC[String(name).toLowerCase().trim()] || null;
+}
+
+function prospectsFilter(organizerName_) {
+  // Name-based filter — record-ID-based was broken because ARRAYJOIN returns names not IDs.
+  const orgFullName = organizerName(organizerName_);
+  const orgClause = orgFullName ? `,FIND('${orgFullName}',{assigned_organizer}&'')>0` : '';
   const schoolExcl = EXCLUDED_SCHOOL_PATTERNS
     .map(p => `FIND('${p}',LOWER({school}&''))=0`)
     .join(',');
   const roleExcl = EXCLUDED_ROLES
     .map(r => `FIND('${r}',{role}&'')=0`)
     .join(',');
-  return `AND(
-    NOT({leader_ladder}='Core Leader'),
-    NOT({leader_ladder}='Not a prospect'),
-    OR({last_attempt_date}=BLANK(), DATETIME_DIFF(TODAY(), {last_attempt_date}, 'days') > 7),
-    NOT({last_attempt_result}='Signed up'),
-    NOT({last_attempt_result}='Skipped'),
-    NOT({last_attempt_result}='Wrong number'),
-    NOT({last_attempt_result}='Do not contact'),
-    ${schoolExcl},
-    ${roleExcl}
-    ${orgClause}
-  )`.replace(/\s+/g, '');
+  // CRITICAL: build as a SINGLE LINE so .replace doesn't mangle spaces inside string literals.
+  return [
+    `AND(`,
+    `NOT({leader_ladder}='Core Leader'),`,
+    `NOT({leader_ladder}='Not a prospect'),`,
+    `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>7),`,
+    `NOT({last_attempt_result}='Signed up'),`,
+    `NOT({last_attempt_result}='Skipped'),`,
+    `NOT({last_attempt_result}='Wrong number'),`,
+    `NOT({last_attempt_result}='Do not contact'),`,
+    `${schoolExcl},`,
+    `${roleExcl}`,
+    `${orgClause}`,
+    `)`,
+  ].join('');
 }
 const PROSPECTS_FILTER = prospectsFilter();  // legacy default — no organizer filter
 
@@ -875,9 +891,9 @@ async function getConfirmees(env, urlObj) {
   const cached = await cacheGet(env, cacheKey);
   if (cached) return json(cached);
 
-  const orgId = organizer ? ORGANIZER_IDS[organizer] : null;
-  const filter = orgId
-    ? `AND({last_attempt_result}='Signed up',FIND('${orgId}',ARRAYJOIN({assigned_organizer}))>0)`
+  const orgFullName = organizerName(organizer);
+  const filter = orgFullName
+    ? `AND({last_attempt_result}='Signed up',FIND('${orgFullName}',{assigned_organizer}&'')>0)`
     : "{last_attempt_result}='Signed up'";
   const fields = ['Name','first','last','phone','email','school','district','last_attempt_date','source'];
   let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=200`;
@@ -1008,13 +1024,13 @@ async function searchContacts(env, url) {
 }
 
 // Returns the set of contact IDs assigned to the given organizer. Cached 5 min.
-async function organizerContactIds(env, organizerName) {
-  const orgId = ORGANIZER_IDS[organizerName];
-  if (!orgId) return null;
-  const cacheKey = `cache:org-contacts:${organizerName}`;
+async function organizerContactIds(env, organizerName_) {
+  const orgFullName = organizerName(organizerName_);
+  if (!orgFullName) return null;
+  const cacheKey = `cache:org-contacts:${String(organizerName_).toLowerCase()}`;
   const cached = await cacheGet(env, cacheKey);
   if (cached) return new Set(cached);
-  const filter = `FIND('${orgId}',ARRAYJOIN({assigned_organizer}))>0`;
+  const filter = `FIND('${orgFullName}',{assigned_organizer}&'')>0`;
   const ids = [];
   let offset = null;
   do {
