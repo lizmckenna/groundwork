@@ -520,7 +520,7 @@ async function authVerify(request, env) {
 // Schools whose parents are organized by their own school teams — exclude from
 // any organizer's call queue. Matches via case-insensitive "contains" so all
 // spelling variants get caught (e.g. "Hale Cook Elementary", "FLA/Holliday").
-const EXCLUDED_SCHOOL_PATTERNS = ['hale cook', 'fla', 'border star', 'bsm'];
+const EXCLUDED_SCHOOL_PATTERNS = ['hale cook', 'fla', 'foreign language academy', 'border star', 'bsm'];
 const EXCLUDED_ROLES = ['Fellow organizer'];
 // Note: no state-based exclusion. KC-metro includes KS counties (Johnson, Wyandotte) — those are LaNeé's.
 // Stephanie's queue is just whatever's assigned to her; we manage assignments rather than filter geography.
