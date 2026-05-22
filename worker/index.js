@@ -109,6 +109,7 @@ export default {
       if (url.pathname === '/admin/role-append' && request.method === 'POST') return await adminRoleAppend(request, env);
       if (url.pathname === '/admin/queue-check' && request.method === 'GET') return await adminQueueCheck(request, env, url);
       if (url.pathname === '/admin/log-debug' && request.method === 'GET') return await adminLogDebug(request, env, url);
+      if (url.pathname === '/admin/recent-debug' && request.method === 'GET') return await adminRecentDebug(request, env, url);
       const sessionToken = request.headers.get('X-Groundwork-Session');
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
@@ -1707,4 +1708,67 @@ async function adminLogDebug(request, env, urlObj) {
     });
   }
   return json({ count: results.length, logs: results });
+}
+
+// =========================================================================
+// /admin/recent-debug?organizer=stephanie — runs the EXACT same logic getRecentActivity does
+// and returns the result + the raw log count + the filter steps. Admin-key gated.
+// =========================================================================
+async function adminRecentDebug(request, env, urlObj) {
+  const key = request.headers.get('X-Admin-Key');
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+  const days = parseInt(urlObj.searchParams.get('days') || '14');
+  const organizer = urlObj.searchParams.get('organizer');
+
+  const filter = `IS_AFTER({date},DATEADD(TODAY(),-${days},'days'))`;
+  const fields = ['contact','method','result','event','date'];
+  let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100`;
+  for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+  const records = [];
+  let offset = null;
+  do {
+    const u = `/${BASE}/${CONTACT_LOG_TBL}${q}${offset ? `&offset=${offset}` : ''}`;
+    const data = await at(env, u);
+    records.push(...data.records);
+    offset = data.offset;
+  } while (offset);
+
+  const allowedIds = organizer ? await organizerContactIds(env, organizer) : null;
+
+  let totalRecords = records.length;
+  let droppedConfirm = 0;
+  let droppedNoContact = 0;
+  let droppedOrgFilter = 0;
+  let kept = 0;
+  const byDate = {};
+  for (const r of records) {
+    const d = r.fields.date;
+    if (!d) { droppedNoContact++; continue; }
+    if (r.fields.event === CONFIRM_EVENT) { droppedConfirm++; continue; }
+    const cid = (r.fields.contact || [])[0];
+    if (!cid) { droppedNoContact++; continue; }
+    if (allowedIds && !allowedIds.has(cid)) { droppedOrgFilter++; continue; }
+    if (!byDate[d]) byDate[d] = {};
+    if (!byDate[d][cid]) byDate[d][cid] = { methods: new Set(), result: null, event: null };
+    if (r.fields.method) byDate[d][cid].methods.add(r.fields.method);
+    if (r.fields.result) byDate[d][cid].result = r.fields.result;
+    if (r.fields.event) byDate[d][cid].event = r.fields.event;
+    kept++;
+  }
+  // Summarize byDate
+  const summary = {};
+  for (const [d, contacts] of Object.entries(byDate)) {
+    summary[d] = Object.keys(contacts).length;
+  }
+  return json({
+    organizer,
+    organizer_set_size: allowedIds ? allowedIds.size : null,
+    confirm_event_constant: CONFIRM_EVENT,
+    raw_log_count: totalRecords,
+    dropped_confirm: droppedConfirm,
+    dropped_no_contact: droppedNoContact,
+    dropped_org_filter: droppedOrgFilter,
+    kept: kept,
+    grid_squares_per_date: summary,
+  });
 }
