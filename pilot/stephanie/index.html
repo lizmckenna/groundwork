@@ -1173,27 +1173,34 @@ async function loadCumulativeGrid() {
   } catch (e) {}
 }
 
-// Fetch + render: org-wide turnout AND LaNee's cumulative cold-call signups (excluding website-source)
+// Fetch + render: org-wide turnout (everyone) AND this organizer's cumulative cold-call signups
 async function loadCounters() {
   try {
-    const r = await authFetch(`${WORKER}/confirmees?organizer=${ORGANIZER}`);
-    if (!r.ok) return;
-    const list = await r.json();
-    // Org-wide (everyone)
-    const orgCount = list.length;
+    // Two parallel calls: unfiltered for org-wide, organizer-filtered for individual
+    const [orgRes, mineRes] = await Promise.all([
+      authFetch(`${WORKER}/confirmees`),
+      authFetch(`${WORKER}/confirmees?organizer=${ORGANIZER}`),
+    ]);
+    if (!orgRes.ok || !mineRes.ok) return;
+    const orgList = await orgRes.json();
+    const mineList = await mineRes.json();
+
+    // Org-wide turnout (all sources)
+    const orgCount = orgList.length;
     const orgTarget = 30;
     document.getElementById('org-count').textContent = orgCount;
     document.getElementById('org-target').textContent = orgTarget;
     document.getElementById('org-bar').style.width = `${Math.min(100, Math.round((orgCount/orgTarget)*100))}%`;
-    // LaNee's cumulative signups: confirmees whose source is NOT a website signup
-    const laneeCount = list.filter(c => !((c.source || '').toLowerCase().includes('website'))).length;
-    const laneeTarget = 20;
-    const pct = Math.min(100, Math.round((laneeCount / laneeTarget) * 100));
-    document.getElementById('m-signup-current').textContent = laneeCount;
-    document.getElementById('m-signup-target').textContent = laneeTarget;
+
+    // This organizer's cold-call signups (exclude website-sourced; those are passive signups)
+    const mineCount = mineList.filter(c => !((c.source || '').toLowerCase().includes('website'))).length;
+    const mineTarget = 20;
+    const pct = Math.min(100, Math.round((mineCount / mineTarget) * 100));
+    document.getElementById('m-signup-current').textContent = mineCount;
+    document.getElementById('m-signup-target').textContent = mineTarget;
     document.getElementById('m-signup-bar').style.width = `${pct}%`;
     document.getElementById('m-signup-pct').textContent = `${pct}% to goal`;
-    writeCounterCache({ orgCount, orgTarget, laneeCount, laneeTarget });
+    writeCounterCache({ orgCount, orgTarget, laneeCount: mineCount, laneeTarget: mineTarget });
   } catch (e) {}
 }
 

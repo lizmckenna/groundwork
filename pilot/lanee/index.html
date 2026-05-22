@@ -737,7 +737,7 @@ function renderCachedCounters() {
 
 async function loadQueueCount() {
   try {
-    const r = await authFetch(`${WORKER}/queue-count`);
+    const r = await authFetch(`${WORKER}/queue-count?organizer=lanee`);
     if (!r.ok) return;
     const d = await r.json();
     const el = document.getElementById('queue-total');
@@ -857,7 +857,7 @@ async function fetchNextBatch() {
   try {
     qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
     // Pull a bigger pool, filter client-side (savedIds + shownIds), then take 5
-    const res = await authFetch(`${WORKER}/prospects?n=${20 + shownIds.size}`);
+    const res = await authFetch(`${WORKER}/prospects?n=${20 + shownIds.size}&organizer=lanee`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const all = await res.json();
     const fresh = all
@@ -1095,7 +1095,7 @@ async function bootAuth() {
 async function loadCumulativeGrid() {
   let byDate = {};
   try {
-    const r = await authFetch(`${WORKER}/recent-activity?days=14`);
+    const r = await authFetch(`${WORKER}/recent-activity?days=14&organizer=lanee`);
     if (r.ok) {
       const data = await r.json();
       byDate = data.by_date || {};
@@ -1170,20 +1170,24 @@ async function loadCumulativeGrid() {
   } catch (e) {}
 }
 
-// Fetch + render: org-wide turnout AND LaNee's cumulative cold-call signups (excluding website-source)
+// Fetch + render: org-wide turnout (everyone) AND LaNeé's cumulative cold-call signups
 async function loadCounters() {
   try {
-    const r = await authFetch(`${WORKER}/confirmees`);
-    if (!r.ok) return;
-    const list = await r.json();
-    // Org-wide (everyone)
-    const orgCount = list.length;
+    const [orgRes, mineRes] = await Promise.all([
+      authFetch(`${WORKER}/confirmees`),
+      authFetch(`${WORKER}/confirmees?organizer=lanee`),
+    ]);
+    if (!orgRes.ok || !mineRes.ok) return;
+    const orgList = await orgRes.json();
+    const mineList = await mineRes.json();
+
+    const orgCount = orgList.length;
     const orgTarget = 30;
     document.getElementById('org-count').textContent = orgCount;
     document.getElementById('org-target').textContent = orgTarget;
     document.getElementById('org-bar').style.width = `${Math.min(100, Math.round((orgCount/orgTarget)*100))}%`;
-    // LaNee's cumulative signups: confirmees whose source is NOT a website signup
-    const laneeCount = list.filter(c => !((c.source || '').toLowerCase().includes('website'))).length;
+
+    const laneeCount = mineList.filter(c => !((c.source || '').toLowerCase().includes('website'))).length;
     const laneeTarget = 20;
     const pct = Math.min(100, Math.round((laneeCount / laneeTarget) * 100));
     document.getElementById('m-signup-current').textContent = laneeCount;
@@ -1196,7 +1200,7 @@ async function loadCounters() {
 
 async function loadTodayStats() {
   try {
-    const res = await authFetch(`${WORKER}/today-stats`);
+    const res = await authFetch(`${WORKER}/today-stats?organizer=lanee`);
     if (!res.ok) return;
     const data = await res.json();
     const dots = document.querySelectorAll('#grid .dot');
