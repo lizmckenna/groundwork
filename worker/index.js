@@ -532,7 +532,7 @@ function prospectsFilter(organizerName) {
     .map(p => `FIND('${p}',LOWER({school}&''))=0`)
     .join(',');
   const roleExcl = EXCLUDED_ROLES
-    .map(r => `FIND('${r}',ARRAYJOIN({role}&''))=0`)
+    .map(r => `FIND('${r}',{role}&'')=0`)
     .join(',');
   return `AND(
     NOT({leader_ladder}='Core Leader'),
