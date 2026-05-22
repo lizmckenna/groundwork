@@ -60,6 +60,12 @@ const READ_CACHE_KEYS = [
   'cache:recent-activity:7',
   'cache:recent-activity:14',
   'cache:recent-activity:30',
+  'cache:recent-activity:14:lanee',
+  'cache:recent-activity:14:stephanie',
+  'cache:today-stats:lanee',
+  'cache:today-stats:stephanie',
+  'cache:org-contacts:lanee',
+  'cache:org-contacts:stephanie',
   'cache:house-hosts',
   'queue:count',
   'queue:count:lanee',
@@ -96,7 +102,7 @@ export default {
       if (url.pathname === '/undo' && request.method === 'POST') return await undoSave(request, env);
       if (url.pathname === '/confirmees') return await getConfirmees(env, url);
       if (url.pathname === '/confirm-log' && request.method === 'POST') return await confirmLog(request, env);
-      if (url.pathname === '/today-stats') return await getTodayStats(env);
+      if (url.pathname === '/today-stats') return await getTodayStats(env, url);
       if (url.pathname === '/recent-activity') return await getRecentActivity(env, url);
       if (url.pathname === '/search') return await searchContacts(env, url);
       if (url.pathname === '/queue-count') return await getQueueCount(env, url);
@@ -970,8 +976,31 @@ async function searchContacts(env, url) {
   })));
 }
 
-async function getTodayStats(env) {
-  const cached = await cacheGet(env, 'cache:today-stats');
+// Returns the set of contact IDs assigned to the given organizer. Cached 5 min.
+async function organizerContactIds(env, organizerName) {
+  const orgId = ORGANIZER_IDS[organizerName];
+  if (!orgId) return null;
+  const cacheKey = `cache:org-contacts:${organizerName}`;
+  const cached = await cacheGet(env, cacheKey);
+  if (cached) return new Set(cached);
+  const filter = `FIND('${orgId}',ARRAYJOIN({assigned_organizer}))>0`;
+  const ids = [];
+  let offset = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100&fields%5B%5D=Name`;
+    if (offset) q += `&offset=${offset}`;
+    const data = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of data.records) ids.push(r.id);
+    offset = data.offset;
+  } while (offset);
+  await cachePut(env, cacheKey, ids, 300);
+  return new Set(ids);
+}
+
+async function getTodayStats(env, urlObj) {
+  const organizer = urlObj ? urlObj.searchParams.get('organizer') : null;
+  const cacheKey = organizer ? `cache:today-stats:${organizer}` : 'cache:today-stats';
+  const cached = await cacheGet(env, cacheKey);
   if (cached) return json(cached);
 
   const date = todayCT();
@@ -987,11 +1016,16 @@ async function getTodayStats(env) {
     records.push(...data.records);
     offset = data.offset;
   } while (offset);
+
+  // Filter to only this organizer's assigned contacts when organizer param is set
+  const allowedIds = organizer ? await organizerContactIds(env, organizer) : null;
+
   const byContact = {};
   const order = [];
   for (const r of records) {
     const cid = (r.fields.contact || [])[0];
     if (!cid) continue;
+    if (allowedIds && !allowedIds.has(cid)) continue;
     if (r.fields.event === CONFIRM_EVENT) continue;
     if (!byContact[cid]) { byContact[cid] = { contact_id: cid, methods: new Set(), result: null, event: null }; order.push(cid); }
     if (r.fields.method) byContact[cid].methods.add(r.fields.method);
@@ -1015,13 +1049,16 @@ async function getTodayStats(env) {
     };
   });
   const payload = { actions };
-  await cachePut(env, 'cache:today-stats', payload);
+  await cachePut(env, cacheKey, payload);
   return json(payload);
 }
 
 async function getRecentActivity(env, url) {
   const days = parseInt(url.searchParams.get('days') || '14');
-  const cacheKey = `cache:recent-activity:${days}`;
+  const organizer = url.searchParams.get('organizer');
+  const cacheKey = organizer
+    ? `cache:recent-activity:${days}:${organizer}`
+    : `cache:recent-activity:${days}`;
   const cached = await cacheGet(env, cacheKey);
   if (cached) return json(cached);
 
@@ -1037,14 +1074,18 @@ async function getRecentActivity(env, url) {
     records.push(...data.records);
     offset = data.offset;
   } while (offset);
+  // Filter to only this organizer's assigned contacts when organizer param is set
+  const allowedIds = organizer ? await organizerContactIds(env, organizer) : null;
+
   const byDate = {};
   for (const r of records) {
     const d = r.fields.date;
     if (!d) continue;
     if (r.fields.event === CONFIRM_EVENT) continue;
-    if (!byDate[d]) byDate[d] = {};
     const cid = (r.fields.contact || [])[0];
     if (!cid) continue;
+    if (allowedIds && !allowedIds.has(cid)) continue;
+    if (!byDate[d]) byDate[d] = {};
     if (!byDate[d][cid]) byDate[d][cid] = { methods: new Set(), result: null, event: null };
     if (r.fields.method) byDate[d][cid].methods.add(r.fields.method);
     if (r.fields.result) byDate[d][cid].result = r.fields.result;
