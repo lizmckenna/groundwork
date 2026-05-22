@@ -20,11 +20,19 @@ const LANEE_ID = 'rec0OmDN68hlffkTn';
 const STEPHANIE_ID = 'recnnEdYIPcclnPLY';
 const LANEE_COUNTIES = ['jackson', 'cass', 'johnson', 'platte', 'clay', 'lafayette', 'buchanan', 'ray'];
 
-// Canonical organizer mapping — name → Airtable contact record ID
-const ORGANIZER_IDS = {
-  'LaNeé': LANEE_ID,
-  'Stephanie': STEPHANIE_ID,
+// Canonical organizer mapping — keys are LOWERCASE to match what pages send.
+// Always look up via organizerId(name) to normalize case.
+const ORGANIZER_IDS_LC = {
+  'lanee':     LANEE_ID,
+  'laneé':     LANEE_ID,
+  'stephanie': STEPHANIE_ID,
 };
+function organizerId(name) {
+  if (!name) return null;
+  return ORGANIZER_IDS_LC[String(name).toLowerCase().trim()] || null;
+}
+// Backward-compat alias for any code still using ORGANIZER_IDS[name]
+const ORGANIZER_IDS = new Proxy({}, { get: (_, k) => organizerId(k) });
 
 const AUTO_CONFIRM_EMAIL = false;
 const ZOOM_LINK_5_26 = 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1';
