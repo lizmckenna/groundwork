@@ -848,7 +848,7 @@ function renderQueue() {
     // If this contact was already saved this session, restore the Saved state
     if (savedIds.has(c.id)) {
       row.querySelector('.qsave-btn').style.display = 'none';
-      row.querySelector('.qundo-btn').style.display = 'inline-flex';
+      { const _u = row.querySelector('.qundo-btn'); if (_u) _u.style.display = 'inline-flex'; }
       const st = row.querySelector('.qsave-status');
       st.textContent = '✓ Saved';
       st.style.color = 'var(--gw-green)';
@@ -928,7 +928,7 @@ async function submitAdmin(row, adminOutcome) {
     status.textContent = `✓ Marked ${adminOutcome.replace('-', ' ')}`;
     status.style.color = 'var(--gw-green)';
     saveBtn.style.display = 'none';
-    row.querySelector('.qundo-btn').style.display = 'inline-flex';
+    { const _u = row.querySelector('.qundo-btn'); if (_u) _u.style.display = 'inline-flex'; }
     savedIds.add(row.dataset.contactId);
     row.classList.add('row-complete');
     sessionActions.push({ contact_id: row.dataset.contactId, methods: [], outcome: adminOutcome, gridIdx: -1 });
@@ -981,7 +981,7 @@ async function submitRow(row) {
     status.textContent = '✓ Saved';
     status.style.color = 'var(--gw-green)';
     saveBtn.style.display = 'none';
-    row.querySelector('.qundo-btn').style.display = 'inline-flex';
+    { const _u = row.querySelector('.qundo-btn'); if (_u) _u.style.display = 'inline-flex'; }
     savedIds.add(row.dataset.contactId);
     row.classList.add('row-complete');
     // One grid square per person (not per method)
