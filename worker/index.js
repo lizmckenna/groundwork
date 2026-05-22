@@ -107,6 +107,7 @@ export default {
       if (url.pathname === '/admin/dedupe-merge' && request.method === 'POST') return await adminDedupeMerge(request, env);
       if (url.pathname === '/admin/contacts-dump' && request.method === 'GET') return await adminContactsDump(request, env, url);
       if (url.pathname === '/admin/role-append' && request.method === 'POST') return await adminRoleAppend(request, env);
+      if (url.pathname === '/admin/queue-check' && request.method === 'GET') return await adminQueueCheck(request, env, url);
       const sessionToken = request.headers.get('X-Groundwork-Session');
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
@@ -1607,4 +1608,34 @@ async function adminRoleAppend(request, env) {
   }
   await invalidateReadCaches(env);
   return json({ ok: true, count: ids.length, results });
+}
+
+// =========================================================================
+// /admin/queue-check?organizer=lanee — diagnostic: returns the filter formula
+// being used + how many records match + first 5 contact names/IDs. Admin-key gated.
+// =========================================================================
+async function adminQueueCheck(request, env, urlObj) {
+  const key = request.headers.get('X-Admin-Key');
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+  const organizer = urlObj.searchParams.get('organizer') || null;
+  const orgId = organizerId(organizer);
+  const filter = prospectsFilter(organizer);
+  let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=5&fields%5B%5D=Name&fields%5B%5D=assigned_organizer`;
+  const data = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+  // count total (separate request without maxRecords sample)
+  let total = 0; let offset = null;
+  do {
+    let cq = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100&fields%5B%5D=Name`;
+    if (offset) cq += `&offset=${offset}`;
+    const cd = await at(env, `/${BASE}/${CONTACTS_TBL}${cq}`);
+    total += cd.records.length;
+    offset = cd.offset;
+  } while (offset);
+  return json({
+    organizer_param: organizer,
+    organizer_id_resolved: orgId,
+    filter_formula: filter,
+    total_match: total,
+    sample: data.records.map(r => ({ id: r.id, name: r.fields.Name, assigned: r.fields.assigned_organizer || [] })),
+  });
 }
