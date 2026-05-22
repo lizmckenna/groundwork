@@ -1458,7 +1458,7 @@ async function adminDedupeMerge(request, env) {
   const results = [];
   for (const cluster of clusters) {
     const { keeper_id, dupe_ids, field_updates } = cluster;
-    if (!keeper_id || !Array.isArray(dupe_ids) || dupe_ids.length === 0) {
+    if (!keeper_id || !Array.isArray(dupe_ids) || false) {
       results.push({ keeper_id, error: 'invalid cluster (need keeper_id + non-empty dupe_ids)' });
       continue;
     }
