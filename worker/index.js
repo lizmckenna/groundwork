@@ -1133,6 +1133,8 @@ async function getRecentActivity(env, url) {
     const d = r.fields.date;
     if (!d) continue;
     if (r.fields.event === CONFIRM_EVENT) continue;
+    // Exclude system-generated form signups (not outreach work the organizer did)
+    if (r.fields.method === 'Event attendance') continue;
     const cid = (r.fields.contact || [])[0];
     if (!cid) continue;
     if (allowedIds && !allowedIds.has(cid)) continue;
@@ -1739,12 +1741,14 @@ async function adminRecentDebug(request, env, urlObj) {
   let droppedConfirm = 0;
   let droppedNoContact = 0;
   let droppedOrgFilter = 0;
+  let droppedSignupAttribution = 0;
   let kept = 0;
   const byDate = {};
   for (const r of records) {
     const d = r.fields.date;
     if (!d) { droppedNoContact++; continue; }
     if (r.fields.event === CONFIRM_EVENT) { droppedConfirm++; continue; }
+    if (r.fields.method === 'Event attendance') { droppedSignupAttribution++; continue; }
     const cid = (r.fields.contact || [])[0];
     if (!cid) { droppedNoContact++; continue; }
     if (allowedIds && !allowedIds.has(cid)) { droppedOrgFilter++; continue; }
@@ -1766,6 +1770,7 @@ async function adminRecentDebug(request, env, urlObj) {
     confirm_event_constant: CONFIRM_EVENT,
     raw_log_count: totalRecords,
     dropped_confirm: droppedConfirm,
+    dropped_signup_attribution: droppedSignupAttribution,
     dropped_no_contact: droppedNoContact,
     dropped_org_filter: droppedOrgFilter,
     kept: kept,
