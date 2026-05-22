@@ -405,6 +405,19 @@ async function houseMeetingSignup(request, env) {
   return json({ ok: true, contact_id: contactId, commitments_logged: commitments.length });
 }
 
+// Pages the magic link is allowed to land on (open-redirect protection).
+const TRUSTED_REDIRECT_HOSTS = [
+  'https://lizmckenna.github.io/groundwork/',
+  'https://parents4mopublicschools.org/',
+];
+function safeRedirect(url) {
+  if (!url || typeof url !== 'string') return null;
+  for (const h of TRUSTED_REDIRECT_HOSTS) {
+    if (url.startsWith(h)) return url;
+  }
+  return null;
+}
+
 async function authStart(request, env) {
   const body = await request.json();
   const email = (body.email || '').toLowerCase().trim();
@@ -412,7 +425,9 @@ async function authStart(request, env) {
   if (!ALLOWLIST.includes(email)) return json({ ok: true, message: 'check your email' });
   const code = genToken(32);
   await env.KV_BINDING.put(`code:${code}`, email, { expirationTtl: CODE_TTL });
-  const link = `${LOGIN_URL}?token=${code}`;
+  // Use caller's page as redirect target if it's a trusted host; otherwise fall back to LaNeé's dashboard.
+  const target = safeRedirect(body.redirect_url) || LOGIN_URL;
+  const link = `${target}?token=${code}`;
   const emailBody = {
     from: FROM_AUTH,
     to: [email],
