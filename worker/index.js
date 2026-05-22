@@ -94,6 +94,8 @@ export default {
       if (url.pathname === '/house-meeting-hosts' && request.method === 'GET') return await houseMeetingHosts(env);
       if (url.pathname === '/event-detail' && request.method === 'GET') return await eventDetail(env, url);
       if (url.pathname === '/event-rsvp' && request.method === 'POST') return await eventRsvp(request, env);
+      // Admin endpoints — gated by X-Admin-Key header instead of session token
+      if (url.pathname === '/admin/dedupe-merge' && request.method === 'POST') return await adminDedupeMerge(request, env);
       const sessionToken = request.headers.get('X-Groundwork-Session');
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
@@ -1435,4 +1437,89 @@ async function sendRsvpConfirmEmail(env, toEmail, firstName, eventRecord) {
     body: JSON.stringify({ from: FROM_CONFIRM, to: [toEmail], reply_to: REPLY_TO_CONFIRM, subject, html }),
   });
   if (!emailRes.ok) throw new Error(`rsvp email failed: ${await emailRes.text()}`);
+}
+
+// =========================================================================
+// /admin/dedupe-merge — gated by X-Admin-Key header.
+// Body: { dry_run: bool, clusters: [{ keeper_id, dupe_ids: [], field_updates: {} }] }
+// For each cluster: re-link contact_log entries from dupe → keeper, then DELETE dupe.
+// =========================================================================
+async function adminDedupeMerge(request, env) {
+  const key = request.headers.get('X-Admin-Key');
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) {
+    return json({ error: 'forbidden' }, 403);
+  }
+  const body = await request.json();
+  const dryRun = !!body.dry_run;
+  const clusters = body.clusters || [];
+  if (!Array.isArray(clusters)) return json({ error: 'clusters must be array' }, 400);
+
+  const results = [];
+  for (const cluster of clusters) {
+    const { keeper_id, dupe_ids, field_updates } = cluster;
+    if (!keeper_id || !Array.isArray(dupe_ids) || dupe_ids.length === 0) {
+      results.push({ keeper_id, error: 'invalid cluster (need keeper_id + non-empty dupe_ids)' });
+      continue;
+    }
+
+    const r = { keeper_id, dupe_ids, relinked: 0, deleted: 0, errors: [] };
+
+    for (const dupeId of dupe_ids) {
+      try {
+        // Find all contact_log entries linked to this dupe
+        const filter = `FIND('${dupeId}',ARRAYJOIN({contact}))>0`;
+        const logIds = [];
+        let offset = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100&fields%5B%5D=contact`;
+          if (offset) q += `&offset=${offset}`;
+          const data = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+          for (const rec of data.records) logIds.push({ id: rec.id, contact: rec.fields.contact || [] });
+          offset = data.offset;
+        } while (offset);
+
+        // Re-link each log entry: swap dupeId for keeper_id
+        for (const log of logIds) {
+          const newContacts = Array.from(new Set(log.contact.map(c => c === dupeId ? keeper_id : c)));
+          if (!dryRun) {
+            await at(env, `/${BASE}/${CONTACT_LOG_TBL}/${log.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ fields: { contact: newContacts } })
+            });
+          }
+          r.relinked++;
+        }
+
+        // Delete the dupe contact
+        if (!dryRun) {
+          const delUrl = new URL(`https://api.airtable.com/v0/${BASE}/${CONTACTS_TBL}/${dupeId}`);
+          const dr = await fetch(delUrl, { method: 'DELETE', headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}` } });
+          if (dr.ok) r.deleted++;
+          else r.errors.push(`delete ${dupeId} failed: ${dr.status} ${await dr.text()}`);
+        } else {
+          r.deleted++;
+        }
+      } catch (e) {
+        r.errors.push(`dupe ${dupeId}: ${e.message}`);
+      }
+    }
+
+    // Apply field updates to keeper (e.g. Molly's edits to green-row cells)
+    if (field_updates && Object.keys(field_updates).length > 0 && !dryRun) {
+      try {
+        await at(env, `/${BASE}/${CONTACTS_TBL}/${keeper_id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ fields: field_updates, typecast: true })
+        });
+        r.field_updates_applied = true;
+      } catch (e) {
+        r.errors.push(`patch keeper ${keeper_id}: ${e.message}`);
+      }
+    }
+
+    results.push(r);
+  }
+
+  if (!dryRun) await invalidateReadCaches(env);
+  return json({ ok: true, dry_run: dryRun, clusters: results });
 }
