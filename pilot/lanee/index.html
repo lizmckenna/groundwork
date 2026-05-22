@@ -273,17 +273,22 @@
   .queue-row.row-complete .qname { text-decoration: line-through; }
   .queue-row.row-complete .qname::after { content: ' · DONE'; font-size: 10px; color: var(--gw-green); font-weight: 600; letter-spacing: 0.08em; text-decoration: none; vertical-align: 1px; }
 
-  /* Confirm 5/26 — full-row green wash when a person is Confirmed */
+  /* Confirmed — subtle left border only, no green wash */
   .queue-row.row-confirmed {
+    border-left: 4px solid var(--gw-purple);
+  }
+
+  /* Attended on 5/26 — full green wash (the celebratory state) */
+  .queue-row.row-attended {
     background: linear-gradient(180deg, rgba(34,197,94,0.18) 0%, rgba(34,197,94,0.08) 100%);
     border-left: 4px solid var(--gw-green);
     box-shadow: inset 0 0 0 1px rgba(34,197,94,0.18);
   }
-  :root[data-theme="dark"] .queue-row.row-confirmed {
+  :root[data-theme="dark"] .queue-row.row-attended {
     background: linear-gradient(180deg, rgba(34,197,94,0.22) 0%, rgba(34,197,94,0.10) 100%);
   }
-  .queue-row.row-confirmed .qname { color: var(--gw-green); font-weight: 600; }
-  .queue-row.row-confirmed .qname::after { content: ' ✓'; color: var(--gw-green); font-weight: 700; margin-left: 4px; }
+  .queue-row.row-attended .qname { color: var(--gw-green); font-weight: 600; }
+  .queue-row.row-attended .qname::after { content: ' ✓'; color: var(--gw-green); font-weight: 700; margin-left: 4px; }
 
   /* Batch nav */
   .batch-nav {
@@ -538,12 +543,12 @@
       <p class="lede">Before 5/26: contact each signup to confirm. On 5/26: mark who actually showed up and add any walk-ins. After: see who attended.</p>
     </section>
 
-    <div style="display:flex;justify-content:space-between;align-items:center;margin:24px 0 12px;gap:16px;flex-wrap:wrap;">
-      <div class="section-head" style="margin:0;">
-        <h2>5/26 sign-ups</h2>
-        <span class="mono">confirm before · mark attended on the day</span>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin:48px 0 18px;gap:24px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border);">
+      <div>
+        <h2 style="font-size:18px;font-weight:600;letter-spacing:-0.01em;margin:0 0 6px;">5/26 sign-ups</h2>
+        <div class="mono" style="font-size:11px;color:var(--text-tertiary);letter-spacing:0.06em;">Confirm before the event · mark attended on the day</div>
       </div>
-      <button id="walkin-open" style="padding:10px 18px;border-radius:8px;background:var(--gw-purple);color:white;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">+ Add walk-in</button>
+      <button id="walkin-open" style="padding:10px 18px;border-radius:8px;background:var(--gw-purple);color:white;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;">+ Add walk-in</button>
     </div>
 
     <div id="walkin-form" style="display:none;background:var(--bg-elevated);border:1px solid var(--border-hover);border-radius:10px;padding:18px;margin-bottom:18px;">
@@ -1307,7 +1312,7 @@ async function fetchConfirmees() {
       const row = document.createElement('div');
       row.className = 'queue-row';
       if (cf.status === 'Confirmed') row.classList.add('row-confirmed');
-      if (att === 'Attended' || att === 'Walk-in') row.classList.add('row-confirmed');
+      if (att === 'Attended' || att === 'Walk-in') row.classList.add('row-attended');
       row.dataset.contactId = c.id;
       row.innerHTML = `
         <div class="qmain">
@@ -1445,7 +1450,7 @@ async function submitAttendance(row, attended) {
         b.style.color = isThis ? 'white' : 'var(--gw-red)';
       }
     });
-    row.classList.toggle('row-confirmed', attended);
+    row.classList.toggle('row-attended', attended);
   } catch (e) {
     status.textContent = `✕ ${e.message}`;
     status.style.color = 'var(--gw-red)';
