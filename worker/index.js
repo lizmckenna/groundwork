@@ -527,9 +527,11 @@ const EXCLUDED_ROLES = ['Fellow organizer'];
 
 // Organizer NAMES (matches what {assigned_organizer} stringifies to — primary field of Contacts table).
 // Multi-select stringifies as comma-joined names, so name-based FIND is the reliable filter.
+// Try both with/without accent — Airtable's primary field may be either.
+// The filter uses FIND('Bridewell',...) which catches BOTH variants safely.
 const ORGANIZER_NAMES_LC = {
-  'lanee':     'LaNeé Bridewell',
-  'laneé':     'LaNeé Bridewell',
+  'lanee':     'Bridewell',         // partial match — catches "LaNeé Bridewell" or "LaNee Bridewell"
+  'laneé':     'Bridewell',
   'stephanie': 'Stephanie Rittgers',
 };
 function organizerName(name) {
