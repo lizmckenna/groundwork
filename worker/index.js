@@ -342,7 +342,7 @@ async function houseMeetingSignup(request, env) {
 
   // Organizer assignment via city heuristic; fall back to Stephanie.
   const cityLower = (city || '').toLowerCase();
-  const KC_CITIES = ['kansas city', 'independence', 'liberty', 'gladstone', 'raytown', 'grandview', 'lee\'s summit', 'lees summit', 'blue springs', 'belton', 'overland park', 'shawnee', 'olathe'];
+  const KC_CITIES = ['kansas city', 'independence', 'liberty', 'gladstone', 'raytown', 'grandview', 'lee\'s summit', 'lees summit', 'blue springs', 'belton'];
   const isLaneeArea = KC_CITIES.some(c => cityLower.includes(c));
   const organizerId = isLaneeArea ? LANEE_ID : STEPHANIE_ID;
 
@@ -512,8 +512,9 @@ async function authVerify(request, env) {
 // any organizer's call queue. Matches via case-insensitive "contains" so all
 // spelling variants get caught (e.g. "Hale Cook Elementary", "FLA/Holliday").
 const EXCLUDED_SCHOOL_PATTERNS = ['hale cook', 'fla', 'border star', 'bsm'];
-// Anyone tagged with one of these roles is being engaged through their own cohort/role and shouldn't be in a cold-call queue.
 const EXCLUDED_ROLES = ['Fellow organizer'];
+// Kansas signups should never be in a Missouri Public Schools queue.
+const EXCLUDED_STATES = ['ks', 'kansas'];
 
 function prospectsFilter(organizerName) {
   const id = organizerName ? ORGANIZER_IDS[organizerName] : null;
@@ -524,6 +525,9 @@ function prospectsFilter(organizerName) {
   const roleExcl = EXCLUDED_ROLES
     .map(r => `FIND('${r}',ARRAYJOIN({role}&''))=0`)
     .join(',');
+  const stateExcl = EXCLUDED_STATES
+    .map(s => `LOWER({state}&'')<>'${s}'`)
+    .join(',');
   return `AND(
     OR({leader_ladder}='Prospect',{leader_ladder}='Supporter',{leader_ladder}='Leader'),
     OR({last_attempt_date}=BLANK(), DATETIME_DIFF(TODAY(), {last_attempt_date}, 'days') > 7),
@@ -532,7 +536,8 @@ function prospectsFilter(organizerName) {
     NOT({last_attempt_result}='Wrong number'),
     NOT({last_attempt_result}='Do not contact'),
     ${schoolExcl},
-    ${roleExcl}
+    ${roleExcl},
+    ${stateExcl}
     ${orgClause}
   )`.replace(/\s+/g, '');
 }
@@ -1269,7 +1274,7 @@ async function eventRsvp(request, env) {
 
   // Organizer assignment by city heuristic
   const cityLower = (city || '').toLowerCase();
-  const KC_CITIES = ['kansas city', 'independence', 'liberty', 'gladstone', 'raytown', 'grandview', "lee's summit", 'lees summit', 'blue springs', 'belton', 'overland park', 'shawnee', 'olathe'];
+  const KC_CITIES = ['kansas city', 'independence', 'liberty', 'gladstone', 'raytown', 'grandview', "lee's summit", 'lees summit', 'blue springs', 'belton'];
   const isLaneeArea = KC_CITIES.some(c => cityLower.includes(c));
   const organizerId = isLaneeArea ? LANEE_ID : STEPHANIE_ID;
 
@@ -1551,7 +1556,7 @@ async function adminContactsDump(request, env, urlObj) {
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
   const pageSize = Math.min(parseInt(urlObj.searchParams.get('page_size') || '100'), 100);
   const reqOffset = urlObj.searchParams.get('offset') || '';
-  const fields = ['Name','first','last','email','phone','school','district','county','city','zip','street_address','leader_ladder','assigned_organizer','source'];
+  const fields = ['Name','first','last','email','phone','school','district','county','city','state','zip','street_address','leader_ladder','assigned_organizer','source','role'];
   let q = `?pageSize=${pageSize}`;
   for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
   if (reqOffset) q += `&offset=${encodeURIComponent(reqOffset)}`;
