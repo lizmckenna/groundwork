@@ -1,0 +1,1646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="robots" content="noindex,nofollow">
+<title>Groundwork — Stephanie · MOI Pilot</title>
+<link rel="icon" type="image/svg+xml" href="/groundwork/favicon.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Default: LIGHT theme */
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #fafafa;
+    --bg-elevated: #f4f4f5;
+    --bg-hover: #ececef;
+    --gw-purple: #5371ff;
+    --gw-purple-light: #5371ff;
+    --gw-purple-dim: rgba(83,113,255,0.12);
+    --gw-purple-soft: rgba(83,113,255,0.08);
+    --gw-green: #16a34a;
+    --gw-green-soft: rgba(22,163,74,0.12);
+    --gw-red: #dc2626;
+    --gw-red-soft: rgba(220,38,38,0.08);
+    --t-prospect: #71717a;
+    --t-supporter: #d97706;
+    --t-leader: #db2777;
+    --t-core: #5371ff;
+    --dot-empty-border: #d4d4d8;
+    --dot-grey: #a1a1aa;
+    --dot-light-purple: #a78bfa;
+    --dot-purple: var(--gw-purple);
+    --dot-green: var(--gw-green);
+    --text-primary: #18181b;
+    --text-secondary: #3f3f46;
+    --text-tertiary: #52525b;
+    --border: rgba(0,0,0,0.08);
+    --border-hover: rgba(0,0,0,0.16);
+  }
+  /* DARK theme override (opt-in via toggle) */
+  :root[data-theme="dark"] {
+    --bg-primary: #0a0a0b;
+    --bg-secondary: #111113;
+    --bg-elevated: #18181b;
+    --bg-hover: #1f1f23;
+    --gw-purple-light: #818cf8;
+    --gw-purple-dim: rgba(83,113,255,0.18);
+    --gw-green: #22c55e;
+    --gw-green-soft: rgba(34,197,94,0.15);
+    --gw-red: #ef4444;
+    --gw-red-soft: rgba(239,68,68,0.12);
+    --t-prospect: #c5c7cd;
+    --t-supporter: #ffd760;
+    --t-leader: #f29be7;
+    --dot-empty-border: rgba(255,255,255,0.15);
+    --dot-grey: #52525b;
+    --text-primary: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-tertiary: #71717a;
+    --border: rgba(255,255,255,0.06);
+    --border-hover: rgba(255,255,255,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary); color: var(--text-primary);
+    line-height: 1.55; -webkit-font-smoothing: antialiased; min-height: 100vh;
+  }
+  a { color: inherit; text-decoration: none; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-tertiary); }
+
+  header.site {
+    border-bottom: 1px solid var(--border); padding: 16px 0;
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(255,255,255,0.94); backdrop-filter: blur(10px);
+  }
+  :root[data-theme="dark"] header.site { background: rgba(10,10,11,0.92); }
+  .site-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-name { font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
+  .brand-sub { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 2px; }
+  .user-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--gw-purple-soft); color: var(--gw-purple-light); border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; margin-left: 8px; vertical-align: 1px; }
+  .tab-nav { display: flex; gap: 4px; }
+  .tab-nav a {
+    padding: 8px 14px; font-size: 13px; color: var(--text-secondary);
+    border-radius: 6px; transition: all 0.15s;
+  }
+  .tab-nav a:hover { color: var(--text-primary); background: var(--bg-hover); }
+  .tab-nav a.active { color: var(--text-primary); background: var(--gw-purple-soft); }
+
+  .hero { padding: 48px 0 8px; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--gw-purple); margin-bottom: 16px; font-family: 'JetBrains Mono', monospace; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; }
+  .eyebrow::before { content:''; width: 24px; height: 1px; background: var(--gw-purple); }
+  h1 { font-size: clamp(32px, 4vw, 48px); font-weight: 600; letter-spacing: -0.025em; line-height: 1.05; margin-bottom: 12px; }
+  .hero p.lede { font-size: 16px; color: var(--text-secondary); max-width: 640px; }
+
+  .big-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 40px 0 16px; }
+  .big-card {
+    position: relative;
+    background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg-secondary) 100%);
+    border: 1px solid var(--border); border-radius: 16px; padding: 32px 36px; overflow: hidden;
+  }
+  .big-card.signup { border-color: rgba(83,113,255,0.25); }
+  .big-card.oneonone { border-color: rgba(34,197,94,0.25); }
+  .big-card::before {
+    content: ''; position: absolute; top: 0; right: 0;
+    width: 240px; height: 240px; border-radius: 50%; opacity: 0.04; filter: blur(40px);
+    transform: translate(40%, -40%);
+  }
+  .big-card.signup::before { background: var(--gw-purple); }
+  .big-card.oneonone::before { background: var(--gw-green); }
+  .big-card .bc-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 14px;
+  }
+  .big-card.signup .bc-label { color: var(--gw-purple); }
+  .big-card.oneonone .bc-label { color: var(--gw-green); }
+  .big-card .bc-question { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; margin-bottom: 24px; color: var(--text-primary); }
+  .big-card .bc-progress { display: flex; align-items: baseline; gap: 6px; margin-bottom: 16px; }
+  .big-card .bc-current { font-size: 64px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; }
+  .big-card .bc-divider { font-size: 32px; color: var(--text-tertiary); font-weight: 300; }
+  .big-card .bc-target { font-size: 32px; color: var(--text-tertiary); font-weight: 500; letter-spacing: -0.02em; }
+  .big-card .bc-bar { height: 8px; background: var(--bg-primary); border-radius: 4px; overflow: hidden; margin: 18px 0 12px; }
+  .big-card .bc-bar > div { height: 100%; border-radius: 4px; transition: width 0.6s ease-out; }
+  .big-card.signup .bc-bar > div { background: var(--gw-purple); }
+  .big-card.oneonone .bc-bar > div { background: var(--gw-green); }
+  .big-card .bc-foot { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+  .big-card .bc-percent { color: var(--text-primary); font-weight: 600; }
+  .target-note { font-size: 11px; color: var(--text-tertiary); margin-top: 8px; font-style: italic; }
+
+  .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 36px; }
+  .stat-mini {
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .stat-mini .stat-text { display: flex; flex-direction: column; gap: 4px; }
+  .stat-mini .sml { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-tertiary); }
+  .stat-mini .smv { font-size: 20px; font-weight: 600; }
+  .stat-mini .smv em { font-style: normal; color: var(--text-tertiary); font-size: 13px; font-weight: 400; margin-left: 4px; }
+  .stat-mini .smv-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .stat-mini .stat-rate { font-size: 11px; color: var(--gw-purple-light); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.06em; }
+
+  .section-head {
+    margin: 56px 0 18px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .section-head h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+
+  .outreach-grid-wrap {
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 12px; padding: 28px;
+  }
+  .outreach-grid { display: grid; grid-template-columns: repeat(25, 1fr); gap: 5px; margin-bottom: 20px; }
+  /* Cumulative day-row grid */
+  #grid-days { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+  .day-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .day-row .day-label { min-width: 150px; font-size: 12px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em; }
+  .day-row .day-label b { color: var(--text-primary); font-weight: 700; }
+  .day-row .day-squares { display: grid; grid-template-columns: repeat(25, 1fr); gap: 6px; flex: 1; min-width: 0; max-width: 900px; }
+  .day-row .day-squares .dot { width: 100%; aspect-ratio: 1/1; height: auto; }
+  .day-row.future .day-label { color: var(--text-tertiary); }
+  .day-row.future .day-squares .dot { opacity: 0.55; }
+  .day-row.today .day-label { color: var(--gw-purple); font-weight: 700; }
+  .dot {
+    aspect-ratio: 1 / 1; border-radius: 4px;
+    border: 1.5px solid var(--dot-empty-border); background: transparent;
+    transition: transform 0.12s, background 0.2s, border-color 0.2s;
+  }
+  .dot[data-s="attempted"] { background: var(--dot-grey); border-color: var(--dot-grey); }
+  .dot[data-s="connected"] { background: var(--dot-light-purple); border-color: var(--dot-light-purple); }
+  .dot[data-s="signed-up"] { background: var(--dot-purple); border-color: var(--dot-purple); }
+  .dot[data-s="oneonone"] { background: var(--dot-green); border-color: var(--dot-green); }
+  .dot:hover { transform: scale(1.15); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px 20px; font-size: 12px; color: var(--text-secondary); padding-top: 12px; border-top: 1px solid var(--border); }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid var(--dot-empty-border); }
+  .legend-swatch.grey { background: var(--dot-grey); border-color: var(--dot-grey); }
+  .legend-swatch.light-purple { background: var(--dot-light-purple); border-color: var(--dot-light-purple); }
+  .legend-swatch.purple { background: var(--dot-purple); border-color: var(--dot-purple); }
+  .legend-swatch.green { background: var(--dot-green); border-color: var(--dot-green); }
+
+  /* === Queue (NEW with checkboxes + next-step dropdown) === */
+  .queue-wrap { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 0; overflow: hidden; }
+  .queue-row {
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .queue-row:last-child { border-bottom: none; }
+  .queue-row .qmain {
+    display: grid;
+    grid-template-columns: 32px 1fr 220px 1fr;
+    gap: 16px; align-items: center;
+  }
+  .queue-row .qnum { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.08em; }
+  .qperson .qname { font-weight: 500; font-size: 14px; }
+  .qperson .qmeta { font-size: 11.5px; color: var(--text-tertiary); margin-top: 3px; }
+  .qperson .qsignal { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--gw-purple-light); background: var(--gw-purple-soft); padding: 1px 7px; border-radius: 999px; letter-spacing: 0.06em; margin-top: 6px; }
+  .qcontact { font-size: 12.5px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; }
+  .qcontact div + div { margin-top: 4px; }
+  .qchecks-col { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+  .qchecks { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  /* Grouped checks: methods vs outcomes */
+  .qchecks-grouped { display: flex; align-items: stretch; gap: 14px; width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+  .check-group { display: flex; flex-direction: column; gap: 5px; }
+  .check-group-label { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-tertiary); text-align: right; }
+  .check-group-items { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .check-group-divider { width: 1px; background: var(--border); margin: 14px 0 0 0; align-self: stretch; }
+  @media (max-width: 760px) { .check-group-divider { display: none; } }
+  /* Admin actions overflow menu */
+  .qadmin-menu { position: relative; }
+  .qadmin-menu summary { list-style: none; cursor: pointer; padding: 8px 10px; border-radius: 6px; color: var(--text-tertiary); font-size: 18px; line-height: 1; user-select: none; }
+  .qadmin-menu summary::-webkit-details-marker { display: none; }
+  .qadmin-menu summary:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .qadmin-menu[open] summary { background: var(--bg-hover); color: var(--text-primary); }
+  .qadmin-popover { position: absolute; top: calc(100% + 4px); right: 0; background: var(--bg-secondary); border: 1px solid var(--border-hover); border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 2px; min-width: 200px; z-index: 20; box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+  .qadmin-popover .qadmin-btn { padding: 8px 12px; border-radius: 6px; border: none; background: transparent; color: var(--text-secondary); font-size: 12.5px; font-family: inherit; cursor: pointer; text-align: left; }
+  .qadmin-popover .qadmin-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .qsave-row { display: flex; gap: 12px; align-items: center; padding-top: 8px; border-top: 1px dashed var(--border); width: 100%; justify-content: flex-end; }
+  .qsave-btn { padding: 8px 18px; border-radius: 6px; background: var(--gw-purple); color: white; border: none; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .qsave-btn:disabled { background: var(--bg-elevated); color: var(--text-tertiary); cursor: not-allowed; }
+  .qundo-btn { padding: 8px 14px; border-radius: 6px; background: transparent; color: var(--gw-red); border: 1px solid var(--gw-red); font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; }
+  .qundo-btn:hover { background: var(--gw-red-soft); }
+  .qsave-status { font-size: 12px; color: var(--text-tertiary); }
+  .qcheck {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 10px; border-radius: 6px;
+    border: 1px solid var(--border-hover); background: transparent;
+    color: var(--text-secondary); cursor: pointer;
+    font-size: 11px; font-weight: 500; transition: all 0.12s;
+    font-family: inherit; user-select: none;
+  }
+  .qcheck input { margin: 0; cursor: pointer; accent-color: var(--gw-purple); }
+  .qcheck.grey { border-color: rgba(82,82,91,0.5); }
+  .qcheck.grey:has(input:checked) { background: rgba(82,82,91,0.18); border-color: var(--dot-grey); color: var(--text-primary); }
+  .qcheck.light-purple { border-color: rgba(167,139,250,0.4); }
+  .qcheck.light-purple:has(input:checked) { background: rgba(167,139,250,0.15); border-color: var(--dot-light-purple); color: var(--dot-light-purple); }
+  .qcheck.purple { border-color: rgba(83,113,255,0.4); }
+  .qcheck.purple:has(input:checked) { background: var(--gw-purple-soft); border-color: var(--gw-purple); color: var(--gw-purple-light); }
+  .qcheck.green { border-color: rgba(34,197,94,0.4); }
+  .qcheck.green:has(input:checked) { background: var(--gw-green-soft); border-color: var(--gw-green); color: var(--gw-green); }
+
+  /* Next-step row (revealed when Connected+ checked) */
+  .qnextstep {
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    display: none;
+    grid-template-columns: 32px 1fr;
+    gap: 16px;
+  }
+  .qnextstep.show { display: grid; }
+  .qnextstep .qnext-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--gw-purple); letter-spacing: 0.1em; padding-top: 8px; }
+  .qnextstep select, .qnextstep input[type="text"] {
+    background: var(--bg-elevated); border: 1px solid var(--border-hover);
+    color: var(--text-primary); padding: 8px 12px; border-radius: 6px;
+    font-size: 13px; font-family: inherit; width: 100%;
+  }
+  .qnextstep select:focus, .qnextstep input:focus { outline: 2px solid var(--gw-purple); outline-offset: -1px; }
+  .qnextstep .qfree { margin-top: 8px; display: none; }
+  .qnextstep .qfree.show { display: block; }
+  .qmissing-flag { display: none; }
+  .queue-row.warn-no-next { border-left: 3px solid var(--gw-red); }
+  .queue-row.row-complete {
+    opacity: 0.5;
+    background: rgba(34,197,94,0.04);
+    border-left: 3px solid var(--gw-green);
+    cursor: pointer;
+  }
+  .queue-row.row-complete:hover { opacity: 0.8; }
+  .queue-row.row-complete .qname { text-decoration: line-through; }
+  .queue-row.row-complete .qname::after { content: ' · DONE'; font-size: 10px; color: var(--gw-green); font-weight: 600; letter-spacing: 0.08em; text-decoration: none; vertical-align: 1px; }
+
+  /* Confirm 5/26 — full-row green wash when a person is Confirmed */
+  .queue-row.row-confirmed {
+    background: linear-gradient(180deg, rgba(34,197,94,0.18) 0%, rgba(34,197,94,0.08) 100%);
+    border-left: 4px solid var(--gw-green);
+    box-shadow: inset 0 0 0 1px rgba(34,197,94,0.18);
+  }
+  :root[data-theme="dark"] .queue-row.row-confirmed {
+    background: linear-gradient(180deg, rgba(34,197,94,0.22) 0%, rgba(34,197,94,0.10) 100%);
+  }
+  .queue-row.row-confirmed .qname { color: var(--gw-green); font-weight: 600; }
+  .queue-row.row-confirmed .qname::after { content: ' ✓'; color: var(--gw-green); font-weight: 700; margin-left: 4px; }
+
+  /* Batch nav */
+  .batch-nav {
+    display: flex; gap: 12px; justify-content: space-between; align-items: center;
+    margin-top: 16px; padding: 16px 0; border-top: 1px solid var(--border);
+  }
+  .batch-nav button {
+    padding: 10px 18px; border-radius: 8px;
+    background: var(--gw-purple); color: white; border: none;
+    font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;
+  }
+  .batch-nav button:disabled { background: var(--bg-elevated); color: var(--text-tertiary); cursor: not-allowed; }
+  .batch-nav button.secondary { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-hover); }
+  .batch-nav .batch-info { font-size: 12px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; }
+  .queue-row.warn-no-next .qmissing-flag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--gw-red); margin-top: 8px;
+  }
+
+  /* Flag counter at bottom */
+  .flag-counter {
+    margin-top: 24px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 22px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .flag-counter.alert { border-color: rgba(239,68,68,0.4); background: var(--gw-red-soft); }
+  .flag-counter .fl-left { display: flex; align-items: center; gap: 12px; }
+  .flag-counter .fl-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; background: var(--bg-elevated); color: var(--text-tertiary); }
+  .flag-counter.alert .fl-icon { background: var(--gw-red); color: white; }
+  .flag-counter .fl-title { font-size: 14px; font-weight: 600; }
+  .flag-counter .fl-desc { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+  .flag-counter .fl-count { font-size: 28px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-tertiary); }
+  .flag-counter.alert .fl-count { color: var(--gw-red); }
+
+  /* Ladder */
+  .ladder-chart { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; }
+  .ladder-bar { display: flex; gap: 4px; height: 32px; border-radius: 6px; overflow: hidden; margin: 18px 0; }
+  .ladder-bar > div { display: flex; align-items: center; justify-content: flex-start; padding-left: 12px; font-size: 12px; font-weight: 600; color: white; }
+  .ladder-rows { display: grid; gap: 10px; }
+  .ladder-row { display: grid; grid-template-columns: 16px 100px 1fr auto; gap: 14px; align-items: center; font-size: 13px; }
+  .ladder-row .dot-l { width: 12px; height: 12px; border-radius: 50%; aspect-ratio: auto; border: none; }
+  .ladder-row .lname { color: var(--text-secondary); }
+  .ladder-row .lbar { height: 8px; background: var(--bg-elevated); border-radius: 4px; overflow: hidden; }
+  .ladder-row .lbar > div { height: 100%; border-radius: 4px; }
+  .ladder-row .lcount { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-tertiary); letter-spacing: 0.06em; min-width: 56px; text-align: right; }
+
+  .howto { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 28px; }
+  .howto h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+  .howto ol { padding-left: 0; list-style: none; counter-reset: step; }
+  .howto ol li { counter-increment: step; padding: 10px 0 10px 36px; position: relative; color: var(--text-secondary); font-size: 14px; border-top: 1px solid var(--border); }
+  .howto ol li:first-child { border-top: none; }
+  .howto ol li::before { content: counter(step, decimal-leading-zero); position: absolute; left: 0; top: 11px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--gw-purple); letter-spacing: 0.06em; font-weight: 500; }
+  .howto ol li b { color: var(--text-primary); }
+
+  .stats-tba {
+    background: var(--bg-secondary); border: 1px dashed var(--border-hover); border-radius: 12px;
+    padding: 32px; text-align: center; color: var(--text-tertiary);
+  }
+  .stats-tba h3 { color: var(--text-secondary); font-size: 16px; margin-bottom: 12px; }
+  .stats-tba ul { margin-top: 14px; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .stats-tba li { font-size: 12px; padding: 6px 12px; background: var(--bg-elevated); border-radius: 6px; }
+
+  .pilot-banner {
+    background: var(--gw-purple-soft);
+    border: 1px solid rgba(83,113,255,0.25);
+    border-radius: 10px; padding: 14px 20px; margin: 24px 0 0;
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .pilot-banner b { color: var(--gw-purple-light); font-weight: 600; }
+
+  footer { margin-top: 80px; padding: 32px 0 40px; border-top: 1px solid var(--border); color: var(--text-tertiary); font-size: 13px; }
+  footer .container { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  @media (max-width: 900px) {
+    .container { padding: 0 18px; }
+    .big-metrics { grid-template-columns: 1fr; }
+    .big-card .bc-current { font-size: 48px; }
+    .queue-row .qmain { grid-template-columns: 1fr; gap: 10px; }
+    .qchecks { justify-content: flex-start; }
+    .stat-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Login overlay: shown until user has a valid session -->
+<div id="login-overlay" style="display:none;position:fixed;inset:0;background:var(--bg-primary);z-index:9999;align-items:center;justify-content:center;padding:32px;">
+  <div style="max-width:420px;width:100%;padding:40px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:16px;text-align:center;">
+    <svg viewBox="0 0 100 100" width="48" height="48" style="margin-bottom:16px;" aria-hidden="true">
+      <circle cx="50" cy="50" r="6" fill="#5371ff"/>
+      <circle cx="50" cy="25" r="4" fill="#5371ff"/><circle cx="71.65" cy="37.5" r="4" fill="#5371ff"/><circle cx="71.65" cy="62.5" r="4" fill="#5371ff"/>
+      <circle cx="50" cy="75" r="4" fill="#5371ff"/><circle cx="28.35" cy="62.5" r="4" fill="#5371ff"/><circle cx="28.35" cy="37.5" r="4" fill="#5371ff"/>
+      <line x1="50" y1="50" x2="50" y2="25" stroke="#5371ff" stroke-width="1.5"/>
+      <line x1="50" y1="50" x2="71.65" y2="37.5" stroke="#5371ff" stroke-width="1.5"/>
+      <line x1="50" y1="50" x2="71.65" y2="62.5" stroke="#5371ff" stroke-width="1.5"/>
+      <line x1="50" y1="50" x2="50" y2="75" stroke="#5371ff" stroke-width="1.5"/>
+      <line x1="50" y1="50" x2="28.35" y2="62.5" stroke="#5371ff" stroke-width="1.5"/>
+      <line x1="50" y1="50" x2="28.35" y2="37.5" stroke="#5371ff" stroke-width="1.5"/>
+    </svg>
+    <h2 style="font-size:22px;font-weight:600;letter-spacing:-0.015em;margin-bottom:8px;color:var(--text-primary);">Sign in to Groundwork</h2>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:24px;line-height:1.5;">Enter your email — if you're on the allowlist, we'll send you a one-click sign-in link. The link expires in 10 minutes.</p>
+    <input id="login-email" type="email" placeholder="you@example.com" autocomplete="email" style="width:100%;padding:12px 14px;background:var(--bg-elevated);border:1px solid var(--border-hover);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;margin-bottom:12px;">
+    <button id="login-btn" style="width:100%;padding:12px;background:var(--gw-purple);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Send sign-in link</button>
+    <p id="login-msg" style="display:none;margin-top:16px;font-size:13px;color:var(--text-secondary);"></p>
+  </div>
+</div>
+
+<header class="site">
+  <div class="container site-inner">
+    <a class="brand" href="/groundwork/">
+      <svg viewBox="0 0 100 100" width="32" height="32" aria-hidden="true">
+        <circle cx="50" cy="50" r="6" fill="#5371ff"/>
+        <circle cx="50" cy="25" r="4" fill="#5371ff"/><circle cx="71.65" cy="37.5" r="4" fill="#5371ff"/><circle cx="71.65" cy="62.5" r="4" fill="#5371ff"/>
+        <circle cx="50" cy="75" r="4" fill="#5371ff"/><circle cx="28.35" cy="62.5" r="4" fill="#5371ff"/><circle cx="28.35" cy="37.5" r="4" fill="#5371ff"/>
+        <line x1="50" y1="50" x2="50" y2="25" stroke="#5371ff" stroke-width="1.5"/><line x1="50" y1="50" x2="71.65" y2="37.5" stroke="#5371ff" stroke-width="1.5"/>
+        <line x1="50" y1="50" x2="71.65" y2="62.5" stroke="#5371ff" stroke-width="1.5"/><line x1="50" y1="50" x2="50" y2="75" stroke="#5371ff" stroke-width="1.5"/>
+        <line x1="50" y1="50" x2="28.35" y2="62.5" stroke="#5371ff" stroke-width="1.5"/><line x1="50" y1="50" x2="28.35" y2="37.5" stroke="#5371ff" stroke-width="1.5"/>
+      </svg>
+      <div>
+        <span class="brand-name">Groundwork<span class="user-pill">Stephanie</span></span>
+        <small class="brand-sub">MOI Pilot · Missouri</small>
+      </div>
+    </a>
+    <nav class="tab-nav">
+      <a href="#" class="active" data-tab="today">Today</a>
+      <a href="#" data-tab="confirms">Confirm 5/26</a>
+      <a href="#" data-tab="find">Find contact</a>
+      <a href="#" data-tab="stats">More stats</a>
+      <a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9?blocks=hide" target="_blank" rel="noopener" style="color:var(--gw-purple);">Airtable ↗</a>
+      <a href="https://docs.google.com/document/d/1ULcoVcjDRytuP6dVVIep2CistV8OeNFUKzxbSZfCb58/edit?tab=t.0" target="_blank" rel="noopener" style="color:var(--gw-purple);">Feedback ↗</a>
+      <button id="theme-toggle" title="Toggle theme" style="background:transparent;border:1px solid var(--border-hover);border-radius:6px;padding:6px 10px;color:var(--text-secondary);cursor:pointer;font-size:14px;font-family:inherit;margin-left:6px;">☾</button>
+    </nav>
+  </div>
+</header>
+
+<main class="container">
+
+  <div class="tab-pane active" data-pane="today">
+    <section class="hero">
+      <div class="eyebrow">Week of May 18 · Stephanie Rittgers</div>
+      <h1>Two numbers that matter right now.</h1>
+      <p class="lede">Every call, text, and email feeds these two metrics. Everything else is downstream of getting people to the 5/26 Orientation and booking 1-1s.</p>
+    </section>
+
+    <!-- Org-wide 5/26 turnout (everyone: website, FB ads, LaNee, Stephanie) -->
+    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:4px;">5/26 Orientation · org-wide turnout</div>
+          <div style="font-size:24px;font-weight:700;letter-spacing:-0.02em;color:var(--text-primary);"><span id="org-count">—</span> <span style="font-size:14px;font-weight:500;color:var(--text-tertiary);">of <span id="org-target">30</span> RSVPs</span></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;">all sources: web + cold calls + FB ads</div>
+      </div>
+      <div style="height:6px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;">
+        <div id="org-bar" style="height:100%;background:var(--gw-purple);width:0%;transition:width 0.6s;"></div>
+      </div>
+    </div>
+
+    <section class="big-metrics">
+      <div class="big-card signup">
+        <div class="bc-label">Your goal · cold-call signups</div>
+        <div class="bc-question">Sign-ups from your calls</div>
+        <div class="bc-progress">
+          <span class="bc-current" id="m-signup-current">0</span>
+          <span class="bc-divider">/</span>
+          <span class="bc-target" id="m-signup-target">20</span>
+        </div>
+        <div class="bc-bar"><div id="m-signup-bar" style="width:0%"></div></div>
+        <div class="bc-foot">
+          <span>commitments logged</span>
+          <span class="bc-percent" id="m-signup-pct">0% to goal</span>
+        </div>
+      </div>
+
+      <div class="big-card oneonone">
+        <div class="bc-label">Secondary · This week's 1-1s</div>
+        <div class="bc-question">1-1 meetings booked</div>
+        <div class="bc-progress">
+          <span class="bc-current" id="m-oneonone-current">0</span>
+          <span class="bc-divider">/</span>
+          <span class="bc-target" id="m-oneonone-target">1</span>
+        </div>
+        <div class="bc-bar"><div id="m-oneonone-bar" style="width:0%"></div></div>
+        <div class="bc-foot">
+          <span>weekly target ramps to 5/wk by May 25</span>
+          <span class="bc-percent" id="m-oneonone-pct">0% to goal</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="stat-row">
+      <div class="stat-mini">
+        <span class="sml">Attempts today</span>
+        <span class="smv" id="stat-attempts">0<em>/ 50</em></span>
+      </div>
+      <div class="stat-mini">
+        <span class="sml">Conversations today</span>
+        <div class="smv-right">
+          <span class="smv" id="stat-convos">0<em>/ 10</em></span>
+          <span class="stat-rate" id="stat-rate">— contact rate</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-head">
+      <h2>Outreach grid · cumulative</h2>
+      <span class="mono">your effort over time · today on top</span>
+    </div>
+    <div class="outreach-grid-wrap">
+      <div id="grid-days"></div>
+      <!-- Legacy fixed 50-grid kept hidden for backward compat with other code paths -->
+      <div class="outreach-grid" id="grid" style="display:none;"></div>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-swatch"></span>Not yet attempted</span>
+        <span class="legend-item"><span class="legend-swatch grey"></span>Attempted · no answer</span>
+        <span class="legend-item"><span class="legend-swatch light-purple"></span>Connected · conversation</span>
+        <span class="legend-item"><span class="legend-swatch purple"></span>Signed up for 5/26</span>
+        <span class="legend-item"><span class="legend-swatch green"></span>1-1 booked</span>
+      </div>
+    </div>
+
+    <div class="section-head">
+      <h2>Up next · 5 to call</h2>
+      <span class="mono"><span id="queue-total">—</span> total in your queue · warmest leads first</span>
+    </div>
+    <div class="queue-wrap" id="queue"></div>
+
+    <div class="batch-nav">
+      <button id="batch-prev" class="secondary" disabled>← Previous 5</button>
+      <span class="batch-info" id="batch-info">Batch 1 · 0 of 5 done</span>
+      <button id="batch-next" disabled>Next 5 →</button>
+    </div>
+
+    <div class="pilot-banner">
+      <b>Pilot v1.</b> Need to edit a contact's info (missing school, etc.)? Open the
+      <a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9?blocks=hide" target="_blank" rel="noopener" style="color:var(--gw-purple);text-decoration:underline;">Airtable base</a>
+      directly. See something off, missing, or backwards? Drop it in the
+      <a href="https://docs.google.com/document/d/1ULcoVcjDRytuP6dVVIep2CistV8OeNFUKzxbSZfCb58/edit?tab=t.0" target="_blank" rel="noopener" style="color:var(--gw-purple);text-decoration:underline;">feedback doc</a>.
+    </div>
+  </div>
+
+  <div class="tab-pane" data-pane="confirms">
+    <section class="hero">
+      <div class="eyebrow">Confirmation calls · 5/26 Orientation</div>
+      <h1>Lock in who's coming.</h1>
+      <p class="lede">Anyone who signed up for the 5/26 Orientation. Contact them 1-2 days before to confirm. Make sure they remember, answer last-minute questions, and feel expected.</p>
+    </section>
+
+    <div class="section-head">
+      <h2>Confirmed 5/26 sign-ups</h2>
+      <span class="mono">last_attempt_result = Committed · event = 5/26</span>
+    </div>
+    <div class="queue-wrap" id="confirms-queue"></div>
+  </div>
+
+  <div class="tab-pane" data-pane="find">
+    <section class="hero">
+      <div class="eyebrow">Find a contact</div>
+      <h1>Search anyone in the base.</h1>
+      <p class="lede">Looking for someone you already called or texted? Search by name, phone, or email. Click a result to update them like a regular queue row.</p>
+    </section>
+    <div style="margin:24px 0 12px;display:flex;gap:8px;">
+      <input id="find-input" type="text" placeholder="Type a name, phone, or email…" style="flex:1;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:12px 14px;border-radius:8px;font-size:14px;font-family:inherit;">
+      <button id="find-btn" style="padding:12px 22px;border-radius:8px;background:var(--gw-purple);color:white;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Search</button>
+    </div>
+    <div class="queue-wrap" id="find-results">
+      <div style="padding:32px;text-align:center;color:var(--text-tertiary);">Search for someone above.</div>
+    </div>
+  </div>
+
+  <div class="tab-pane" data-pane="stats">
+    <section class="hero">
+      <div class="eyebrow">Stats · base overview</div>
+      <h1>Where the base stands.</h1>
+      <p class="lede">Distribution across the leader ladder, attendance signal, and conversion rates over time.</p>
+    </section>
+
+    <div class="section-head">
+      <h2>Leader ladder distribution</h2>
+      <span class="mono">1,390 total · live in Airtable</span>
+    </div>
+    <div class="ladder-chart">
+      <div class="ladder-bar">
+        <div style="background: var(--t-prospect); width: 43%;">598</div>
+        <div style="background: var(--t-supporter); width: 53%;">734</div>
+        <div style="background: var(--t-leader); width: 3.5%;">49</div>
+        <div style="background: var(--t-core); width: 0.7%;">9</div>
+      </div>
+      <div class="ladder-rows">
+        <div class="ladder-row"><span class="dot-l" style="background: var(--t-prospect);"></span><span class="lname">Prospect</span><span class="lbar"><div style="width:43%; background: var(--t-prospect);"></div></span><span class="lcount">598</span></div>
+        <div class="ladder-row"><span class="dot-l" style="background: var(--t-supporter);"></span><span class="lname">Supporter</span><span class="lbar"><div style="width:53%; background: var(--t-supporter);"></div></span><span class="lcount">734</span></div>
+        <div class="ladder-row"><span class="dot-l" style="background: var(--t-leader);"></span><span class="lname">Leader</span><span class="lbar"><div style="width:3.5%; background: var(--t-leader);"></div></span><span class="lcount">49</span></div>
+        <div class="ladder-row"><span class="dot-l" style="background: var(--t-core);"></span><span class="lname">Core Leader</span><span class="lbar"><div style="width:0.7%; background: var(--t-core);"></div></span><span class="lcount">9</span></div>
+      </div>
+    </div>
+
+    <div class="section-head">
+      <h2>Coming in next iteration</h2>
+      <span class="mono">when the Worker is wired</span>
+    </div>
+    <div class="stats-tba">
+      <h3>Time-series + intelligence layer</h3>
+      <p>Once Airtable data flows live, this section gets:</p>
+      <ul>
+        <li>Attempts + conversions over time</li>
+        <li>Sign-up rate by event</li>
+        <li>Flake rate (committed but no-show)</li>
+        <li>Conversion by leader-ladder tier</li>
+        <li>Network/relational map · who organized whom</li>
+        <li>Profile of "likely to commit"</li>
+      </ul>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div class="container">
+    <div>Groundwork · Stephanie · Missouri pilot · launched May 2026</div>
+    <div><a href="mailto:emckenna@hks.harvard.edu">emckenna@hks.harvard.edu</a></div>
+  </div>
+</footer>
+
+<script>
+// === Render outreach grid: 50 empty squares to start ===
+(function renderGrid() {
+  const grid = document.getElementById('grid');
+  for (let i = 0; i < 50; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    d.dataset.idx = i;
+    grid.appendChild(d);
+  }
+})();
+
+// === Live Airtable wiring via Cloudflare Worker ===
+const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
+const ORGANIZER = 'stephanie'; // server-side filters /prospects, /confirmees, /queue-count by this organizer's contacts
+const authHeaders = (extra = {}) => ({
+  'X-Groundwork-Session': localStorage.getItem('gw-session') || '',
+  ...extra,
+});
+
+// Wraps fetch to bounce to login on 401
+async function authFetch(url, options = {}) {
+  const r = await fetch(url, { ...options, headers: authHeaders(options.headers || {}) });
+  if (r.status === 401) {
+    localStorage.removeItem('gw-session');
+    showLogin('Session expired. Sign in again.');
+    throw new Error('unauthorized');
+  }
+  return r;
+}
+let queue = [];
+const savedIds = new Set();  // contacts logged in this session, don't re-show
+const shownIds = new Set();  // contacts already shown in any batch (saved or not), don't re-show
+const batches = [];           // history of batches she's worked through
+let currentBatchIdx = -1;     // which batch she's currently viewing
+// Persistent across batches so grid + metrics don't zero out
+const sessionActions = []; // [{ contact_id, methods, outcome, gridIdx }]
+let nextGridIdx = 0;
+
+function phoneToTel(p) {
+  const d = (p || '').replace(/\D/g, '');
+  return d.length >= 10 ? `+1${d.slice(-10)}` : '';
+}
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Next-step options conditional on outcome (key matches outcome combo)
+const NEXT_STEP_OPTIONS = {
+  connected: [
+    'Schedule follow-up call within 7 days',
+    'Send info packet about MOI',
+    'Note their key issue + circle back',
+    'Other (write below)',
+  ],
+  'signed-up': [
+    'Send 5/26 calendar invite',
+    'Add to reminder text list for 5/25',
+    'Send personal text day-of 5/26',
+    'Other (write below)',
+  ],
+  oneonone: [
+    'Send calendar invite for the 1-1',
+    'Send day-before confirmation text',
+    'Prep 1-1 questions document',
+    'Other (write below)',
+  ],
+  'signed-up+oneonone': [
+    'Send 5/26 invite + 1-1 calendar invite',
+    'Day-before reminders for both (5/25 + 1-1)',
+    'Send 5/26 calendar invite',
+    'Send calendar invite for the 1-1',
+    'Prep 1-1 questions document',
+    'Other (write below)',
+  ],
+};
+
+const qhost = document.getElementById('queue');
+
+function metaLine(c) {
+  const parts = [];
+  if (c.school) parts.push(c.school);
+  if (c.district) parts.push(c.district);
+  return parts.join(' · ') || '—';
+}
+function signalLine(c) {
+  if (c.log_count >= 5) return `★ ${c.log_count} prior events · warm`;
+  if (c.organized_by_count > 0) return 'in network · organized';
+  if (c.log_count > 0) return `${c.log_count} prior events`;
+  return c.leader_ladder ? c.leader_ladder.toLowerCase() : 'new lead';
+}
+
+// --- Cached counters: paint last-known values from localStorage on boot ---
+const COUNTER_CACHE_KEY = 'gw_stephanie_counter_cache_v1';
+function readCounterCache() {
+  try { return JSON.parse(localStorage.getItem(COUNTER_CACHE_KEY) || '{}'); }
+  catch (e) { return {}; }
+}
+function writeCounterCache(patch) {
+  try {
+    const cur = readCounterCache();
+    localStorage.setItem(COUNTER_CACHE_KEY, JSON.stringify({ ...cur, ...patch, ts: Date.now() }));
+  } catch (e) {}
+}
+function renderCachedCounters() {
+  const c = readCounterCache();
+  if (c.orgCount != null) {
+    const el = document.getElementById('org-count'); if (el) el.textContent = c.orgCount;
+    const t = document.getElementById('org-target'); if (t && c.orgTarget) t.textContent = c.orgTarget;
+    const bar = document.getElementById('org-bar'); if (bar && c.orgTarget) bar.style.width = `${Math.min(100, Math.round((c.orgCount/c.orgTarget)*100))}%`;
+  }
+  if (c.laneeCount != null) {
+    const el = document.getElementById('m-signup-current'); if (el) el.textContent = c.laneeCount;
+    const t = document.getElementById('m-signup-target'); if (t && c.laneeTarget) t.textContent = c.laneeTarget;
+    const bar = document.getElementById('m-signup-bar'); if (bar && c.laneeTarget) bar.style.width = `${Math.min(100, Math.round((c.laneeCount/c.laneeTarget)*100))}%`;
+    const pctEl = document.getElementById('m-signup-pct'); if (pctEl && c.laneeTarget) pctEl.textContent = `${Math.min(100, Math.round((c.laneeCount/c.laneeTarget)*100))}% to goal`;
+  }
+  if (c.queueCount != null) {
+    const el = document.getElementById('queue-total'); if (el) el.textContent = Number(c.queueCount).toLocaleString();
+  }
+}
+
+async function loadQueueCount() {
+  try {
+    const r = await authFetch(`${WORKER}/queue-count?organizer=${ORGANIZER}`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('queue-total');
+    if (el) el.textContent = (d.count || 0).toLocaleString();
+    writeCounterCache({ queueCount: d.count || 0 });
+  } catch (e) {}
+}
+function contactLinks(c) {
+  const tel = phoneToTel(c.phone);
+  const phoneHtml = c.phone
+    ? (tel
+        ? `<div><a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a></div>`
+        : `<div>${c.phone}</div>`)
+    : '';
+  const emailHtml = c.email
+    ? `<div><a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a></div>`
+    : '';
+  return phoneHtml + emailHtml || '<div style="color:var(--text-tertiary)">no contact info</div>';
+}
+
+function renderQueue() {
+  qhost.innerHTML = '';
+  if (queue.length === 0) {
+    qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">No hot prospects available right now.</div>`;
+    return;
+  }
+  queue.forEach((c, i) => {
+    const row = document.createElement('div');
+    row.className = 'queue-row';
+    if (savedIds.has(c.id)) row.classList.add('row-complete');
+    row.dataset.idx = i;
+    row.dataset.contactId = c.id;
+    row.innerHTML = `
+      <div class="qmain">
+        <span class="qnum">${String(i+1).padStart(2,'0')}</span>
+        <div class="qperson">
+          <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit (phone, email, school, etc.)" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${c.name || '(no name)'}</a></div>
+          <div class="qmeta">${metaLine(c)}</div>
+          <span class="qsignal">${signalLine(c)}</span>
+        </div>
+        <div class="qcontact">${contactLinks(c)}</div>
+        <div class="qchecks-col">
+          <div class="qchecks-grouped">
+            <div class="check-group">
+              <div class="check-group-label">How you reached out</div>
+              <div class="check-group-items">
+                <label class="qcheck grey"><input type="checkbox" data-outcome="called"> Called</label>
+                <label class="qcheck grey"><input type="checkbox" data-outcome="texted"> Texted</label>
+                <label class="qcheck grey"><input type="checkbox" data-outcome="emailed"> Emailed</label>
+              </div>
+            </div>
+            <div class="check-group-divider"></div>
+            <div class="check-group">
+              <div class="check-group-label">What happened</div>
+              <div class="check-group-items">
+                <label class="qcheck light-purple"><input type="checkbox" data-outcome="connected"> Connected</label>
+                <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up"> Signed up</label>
+                <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
+              </div>
+            </div>
+          </div>
+          <input type="text" class="qnotes" placeholder="Notes (optional — quick observation, what happened, etc.)" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:12.5px;font-family:inherit;">
+          <div class="qsave-row">
+            <button class="qsave-btn">Save</button>
+            <button class="qundo-btn" style="display:none;">Undo</button>
+            <span class="qsave-status"></span>
+            <details class="qadmin-menu">
+              <summary title="More actions">⋮</summary>
+              <div class="qadmin-popover">
+                <button class="qadmin-btn" data-admin="skipped" title="Take this person out of your queue without an outreach attempt">⊘ Skip</button>
+                <button class="qadmin-btn" data-admin="wrong-number">✕ Wrong number</button>
+                <button class="qadmin-btn" data-admin="do-not-contact" style="color:var(--gw-red);">⊗ Remove from call list</button>
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+      <div class="qnextstep">
+        <span class="qnext-label">Next step</span>
+        <div>
+          <select class="qnext-select">
+            <option value="">Choose a next step...</option>
+          </select>
+          <input type="text" class="qfree" placeholder="Type your own next step...">
+          <div class="qmissing-flag">⚐ A next step is required when you connect</div>
+        </div>
+      </div>
+    `;
+    qhost.appendChild(row);
+    // Wire events for this row
+    row.querySelectorAll('.qcheck input').forEach(input => {
+      input.addEventListener('change', () => updateRow(row));
+    });
+    const select = row.querySelector('.qnext-select');
+    const freebox = row.querySelector('.qfree');
+    select?.addEventListener('change', () => updateRow(row));
+    freebox?.addEventListener('input', () => updateRow(row));
+    row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row));
+    row.querySelector('.qundo-btn').addEventListener('click', () => {
+      if (confirm('Undo this save? This will delete the record from Airtable.')) undoSave(row);
+    });
+    row.querySelectorAll('.qadmin-btn').forEach(btn => {
+      btn.addEventListener('click', () => submitAdmin(row, btn.dataset.admin));
+    });
+    // If this contact was already saved this session, restore the Saved state
+    if (savedIds.has(c.id)) {
+      row.querySelector('.qsave-btn').style.display = 'none';
+      row.querySelector('.qundo-btn').style.display = 'inline-flex';
+      const st = row.querySelector('.qsave-status');
+      st.textContent = '✓ Saved';
+      st.style.color = 'var(--gw-green)';
+    }
+  });
+}
+
+async function fetchNextBatch() {
+  try {
+    qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
+    // Pull a bigger pool, filter client-side (savedIds + shownIds), then take 5
+    const res = await authFetch(`${WORKER}/prospects?n=${20 + shownIds.size}&organizer=${ORGANIZER}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const all = await res.json();
+    const fresh = all
+      .filter(c => !shownIds.has(c.id))  // skip anyone already shown in a prior batch
+      .filter(c => (c.phone && c.phone.trim()) || (c.email && c.email.trim()))
+      .slice(0, 5);
+    fresh.forEach(c => shownIds.add(c.id));  // remember everyone shown this batch
+    batches.push({ contacts: fresh, completed: new Set() });
+    currentBatchIdx = batches.length - 1;
+    queue = fresh;
+    renderQueue();
+    updateBatchNav();
+  } catch (e) {
+    qhost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load: ${e.message}</div>`;
+  }
+}
+
+function showBatch(idx) {
+  if (idx < 0 || idx >= batches.length) return;
+  currentBatchIdx = idx;
+  queue = batches[idx].contacts;
+  renderQueue();
+  updateBatchNav();
+}
+
+function updateBatchNav() {
+  const prev = document.getElementById('batch-prev');
+  const next = document.getElementById('batch-next');
+  const info = document.getElementById('batch-info');
+  if (!prev || !next || !info) return;
+  // Hide Previous on the first batch entirely
+  prev.style.display = currentBatchIdx > 0 ? 'inline-flex' : 'none';
+  prev.disabled = currentBatchIdx <= 0;
+  const current = batches[currentBatchIdx];
+  // Allow paging forward at any time, even if not all saved
+  next.disabled = false;
+  next.textContent = (currentBatchIdx < batches.length - 1) ? 'Forward →' : 'Next 5 →';
+  const doneCount = current ? current.contacts.filter(c => savedIds.has(c.id)).length : 0;
+  const total = current ? current.contacts.length : 0;
+  info.textContent = `Batch ${currentBatchIdx + 1} · ${doneCount} of ${total} done`;
+}
+
+async function submitAdmin(row, adminOutcome) {
+  // Skip / Wrong # / Do-not-contact — pulls the contact out of the queue without an outreach attempt.
+  const confirmText = {
+    'skipped': 'Skip this person (e.g. already a P4KCKids leader)? They will not come back in your queue.',
+    'wrong-number': 'Mark this number as wrong / out of service? They will not come back in your queue.',
+    'do-not-contact': 'Mark this person as "do not contact"? They will be removed from the call list permanently.',
+  };
+  if (!confirm(confirmText[adminOutcome] || 'Apply this action?')) return;
+  const notes = (row.querySelector('.qnotes')?.value || '').trim();
+  const status = row.querySelector('.qsave-status');
+  const saveBtn = row.querySelector('.qsave-btn');
+  status.textContent = 'Saving…';
+  status.style.color = 'var(--text-tertiary)';
+  saveBtn.disabled = true;
+  try {
+    const res = await authFetch(`${WORKER}/log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact_id: row.dataset.contactId, methods: [], outcome: adminOutcome, notes }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    status.textContent = `✓ Marked ${adminOutcome.replace('-', ' ')}`;
+    status.style.color = 'var(--gw-green)';
+    saveBtn.style.display = 'none';
+    row.querySelector('.qundo-btn').style.display = 'inline-flex';
+    savedIds.add(row.dataset.contactId);
+    row.classList.add('row-complete');
+    sessionActions.push({ contact_id: row.dataset.contactId, methods: [], outcome: adminOutcome, gridIdx: -1 });
+    updateBatchNav();
+  } catch (e) {
+    status.textContent = `✕ ${e.message}`;
+    status.style.color = 'var(--gw-red)';
+    saveBtn.disabled = false;
+  }
+}
+
+async function submitRow(row) {
+  const checks = {};
+  row.querySelectorAll('.qcheck input').forEach(i => { checks[i.dataset.outcome] = i.checked; });
+  const methods = ['called','texted','emailed'].filter(m => checks[m]);
+  let outcome = null;
+  if (checks.oneonone) outcome = 'oneonone';
+  else if (checks['signed-up']) outcome = 'signed-up';
+  else if (checks.connected) outcome = 'connected';
+  const select = row.querySelector('.qnext-select');
+  const freebox = row.querySelector('.qfree');
+  const next_step = (select.value && !select.value.startsWith('Other'))
+    ? select.value
+    : (freebox.value || '').trim();
+  const status = row.querySelector('.qsave-status');
+  if (methods.length === 0) {
+    status.textContent = '✕ Check at least one Called/Texted/Emailed';
+    status.style.color = 'var(--gw-red)';
+    return;
+  }
+  if ((outcome === 'connected' || outcome === 'signed-up' || outcome === 'oneonone') && !next_step) {
+    status.textContent = '✕ Next step required for conversations';
+    status.style.color = 'var(--gw-red)';
+    return;
+  }
+  const notes = (row.querySelector('.qnotes')?.value || '').trim();
+  const body = { contact_id: row.dataset.contactId, methods, outcome, next_step, notes };
+  const saveBtn = row.querySelector('.qsave-btn');
+  saveBtn.disabled = true;
+  status.textContent = 'Saving…';
+  status.style.color = 'var(--text-tertiary)';
+  try {
+    const res = await authFetch(`${WORKER}/log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    status.textContent = '✓ Saved';
+    status.style.color = 'var(--gw-green)';
+    saveBtn.style.display = 'none';
+    row.querySelector('.qundo-btn').style.display = 'inline-flex';
+    savedIds.add(row.dataset.contactId);
+    row.classList.add('row-complete');
+    // One grid square per person (not per method)
+    const gridIdx = nextGridIdx;
+    nextGridIdx++;
+    sessionActions.push({ contact_id: row.dataset.contactId, methods, outcome, gridIdx });
+    const dots = document.querySelectorAll('#grid .dot');
+    const dotState = outcome || 'attempted';
+    if (dots[gridIdx]) dots[gridIdx].dataset.s = dotState;
+    recomputeMetrics();
+    updateBatchNav();
+    // If a signup, refresh org-wide counter
+    if (outcome === 'signed-up' || outcome === 'oneonone') loadCounters();
+    loadCumulativeGrid();
+  } catch (e) {
+    status.textContent = `✕ Save failed: ${e.message}`;
+    status.style.color = 'var(--gw-red)';
+    saveBtn.disabled = false;
+  }
+}
+
+// === Auth boot: verify magic-link, check session, or show login ===
+function showLogin(msg) {
+  document.getElementById('login-overlay').style.display = 'flex';
+  if (msg) {
+    const m = document.getElementById('login-msg');
+    m.textContent = msg;
+    m.style.display = 'block';
+    m.style.color = 'var(--gw-red)';
+  }
+}
+function hideLogin() { document.getElementById('login-overlay').style.display = 'none'; }
+
+document.getElementById('login-btn').addEventListener('click', async () => {
+  const emailInput = document.getElementById('login-email');
+  const msg = document.getElementById('login-msg');
+  const btn = document.getElementById('login-btn');
+  const email = emailInput.value.trim();
+  if (!email || !email.includes('@')) {
+    msg.textContent = 'Enter a valid email';
+    msg.style.display = 'block';
+    msg.style.color = 'var(--gw-red)';
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const r = await fetch(`${WORKER}/auth/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, redirect_url: location.origin + location.pathname }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    msg.textContent = `✓ Check ${email} for a sign-in link (expires in 10 min).`;
+    msg.style.display = 'block';
+    msg.style.color = 'var(--gw-green)';
+    btn.textContent = 'Sent — check your email';
+  } catch (e) {
+    msg.textContent = `Couldn't send: ${e.message}`;
+    msg.style.display = 'block';
+    msg.style.color = 'var(--gw-red)';
+    btn.disabled = false; btn.textContent = 'Send sign-in link';
+  }
+});
+
+async function bootAuth() {
+  // 1. If URL has ?token=XXX, verify it (came from magic link)
+  const params = new URLSearchParams(location.search);
+  const tokenFromUrl = params.get('token');
+  if (tokenFromUrl) {
+    try {
+      const r = await fetch(`${WORKER}/auth/verify`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: tokenFromUrl }),
+      });
+      const data = await r.json();
+      if (r.ok && data.session_token) {
+        localStorage.setItem('gw-session', data.session_token);
+        history.replaceState({}, '', location.pathname);
+        return true;
+      } else {
+        showLogin('Link expired or invalid. Enter your email to get a new one.');
+        return false;
+      }
+    } catch (e) {
+      showLogin(`Verification failed: ${e.message}`);
+      return false;
+    }
+  }
+  // 2. Check for existing session
+  if (localStorage.getItem('gw-session')) return true;
+  // 3. No session — show login
+  showLogin();
+  return false;
+}
+
+(async () => {
+  const ok = await bootAuth();
+  if (ok) {
+    hideLogin();
+    // Paint cached counters instantly so the page doesn't flash zeros
+    renderCachedCounters();
+    // Fire everything in parallel — none of these depend on each other
+    Promise.all([
+      loadCounters(),
+      loadTodayStats(),
+      fetchNextBatch(),
+      loadQueueCount(),
+      loadCumulativeGrid(),
+    ]);
+  }
+})();
+
+// Cumulative grid: day-by-day rows of outreach attempts
+async function loadCumulativeGrid() {
+  let byDate = {};
+  try {
+    const r = await authFetch(`${WORKER}/recent-activity?days=14`);
+    if (r.ok) {
+      const data = await r.json();
+      byDate = data.by_date || {};
+    }
+  } catch (e) {}
+  // Fallback: if no history (e.g., endpoint not deployed), at least populate today
+  // from the in-page sessionActions so the user sees their current grid.
+  if (!byDate[(new Date()).toISOString().split('T')[0]]) {
+    const today = (new Date()).toISOString().split('T')[0];
+    try {
+      byDate[today] = (sessionActions || []).map(a => ({
+        contact_id: a.contact_id, methods: a.methods || [], outcome: a.outcome,
+      }));
+    } catch (e) { byDate[today] = []; }
+  }
+  try {
+    const today = (new Date()).toISOString().split('T')[0];
+    const TODAY_GOAL = 50;
+    const wrap = document.getElementById('grid-days');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    // Build list: oldest past days at top, then today, then future days (Thu, Fri) at bottom
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const todayDate = new Date(today + 'T00:00:00');
+    // Add up to 2 future days (chronological: +1, +2)
+    const futureDates = [];
+    for (let i = 1; i <= 2; i++) {
+      const f = new Date(todayDate);
+      f.setDate(todayDate.getDate() + i);
+      futureDates.push(f.toISOString().split('T')[0]);
+    }
+    const pastDates = Object.keys(byDate).filter(d => d !== today).sort(); // oldest first
+    const ordered = [...pastDates, today, ...futureDates];
+    // Spillover: any day's overflow (>TODAY_GOAL) rolls into the next day's row as filled squares
+    let spillover = [];
+    for (let idx = 0; idx < ordered.length; idx++) {
+      const d = ordered[idx];
+      const dayActions = byDate[d] || [];
+      const combined = [...spillover, ...dayActions];
+      const visible = combined.slice(0, TODAY_GOAL);
+      spillover = combined.slice(TODAY_GOAL);
+      const isToday = d === today;
+      const isFuture = d > today;
+      const row = document.createElement('div');
+      row.className = 'day-row' + (isToday ? ' today' : isFuture ? ' future' : '');
+      const dt = new Date(d + 'T00:00:00');
+      const label = document.createElement('div');
+      label.className = 'day-label';
+      label.textContent = `${dayNames[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()}`;
+      row.appendChild(label);
+      const sq = document.createElement('div');
+      sq.className = 'day-squares';
+      for (const a of visible) {
+        const dot = document.createElement('div');
+        dot.className = 'dot';
+        const state = a.outcome === 'oneonone' ? 'oneonone'
+                    : a.outcome === 'signed-up' ? 'signed-up'
+                    : a.outcome === 'connected' ? 'connected'
+                    : 'attempted';
+        dot.dataset.s = state;
+        sq.appendChild(dot);
+      }
+      // Pad to TODAY_GOAL with outline squares so every row aligns at 50
+      for (let i = visible.length; i < TODAY_GOAL; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'dot';
+        sq.appendChild(dot);
+      }
+      row.appendChild(sq);
+      wrap.appendChild(row);
+    }
+  } catch (e) {}
+}
+
+// Fetch + render: org-wide turnout AND LaNee's cumulative cold-call signups (excluding website-source)
+async function loadCounters() {
+  try {
+    const r = await authFetch(`${WORKER}/confirmees?organizer=${ORGANIZER}`);
+    if (!r.ok) return;
+    const list = await r.json();
+    // Org-wide (everyone)
+    const orgCount = list.length;
+    const orgTarget = 30;
+    document.getElementById('org-count').textContent = orgCount;
+    document.getElementById('org-target').textContent = orgTarget;
+    document.getElementById('org-bar').style.width = `${Math.min(100, Math.round((orgCount/orgTarget)*100))}%`;
+    // LaNee's cumulative signups: confirmees whose source is NOT a website signup
+    const laneeCount = list.filter(c => !((c.source || '').toLowerCase().includes('website'))).length;
+    const laneeTarget = 20;
+    const pct = Math.min(100, Math.round((laneeCount / laneeTarget) * 100));
+    document.getElementById('m-signup-current').textContent = laneeCount;
+    document.getElementById('m-signup-target').textContent = laneeTarget;
+    document.getElementById('m-signup-bar').style.width = `${pct}%`;
+    document.getElementById('m-signup-pct').textContent = `${pct}% to goal`;
+    writeCounterCache({ orgCount, orgTarget, laneeCount, laneeTarget });
+  } catch (e) {}
+}
+
+async function loadTodayStats() {
+  try {
+    const res = await authFetch(`${WORKER}/today-stats`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const dots = document.querySelectorAll('#grid .dot');
+    const OUTREACH_METHODS = ['called', 'texted', 'emailed', '1-1'];
+    for (const action of (data.actions || [])) {
+      // Only show actions where LaNee actively called/texted/emailed/1-1'd
+      const hasOutreach = (action.methods || []).some(m => OUTREACH_METHODS.includes(m));
+      if (!hasOutreach) continue;
+      const gridIdx = nextGridIdx;
+      nextGridIdx++;
+      sessionActions.push({ ...action, gridIdx });
+      savedIds.add(action.contact_id);
+      const state = action.outcome || 'attempted';
+      if (dots[gridIdx]) dots[gridIdx].dataset.s = state;
+    }
+    recomputeMetrics();
+  } catch (e) {
+    console.error('Failed to load today stats', e);
+  }
+}
+
+// Batch nav wiring
+document.getElementById('batch-prev').addEventListener('click', () => {
+  if (currentBatchIdx > 0) showBatch(currentBatchIdx - 1);
+});
+document.getElementById('batch-next').addEventListener('click', () => {
+  if (currentBatchIdx < batches.length - 1) showBatch(currentBatchIdx + 1);
+  else fetchNextBatch();
+});
+
+// Click a row-complete row to reopen for editing (re-enable buttons)
+qhost.addEventListener('click', (e) => {
+  const row = e.target.closest('.queue-row.row-complete');
+  if (!row) return;
+  // Ignore clicks on existing links/inputs/buttons
+  if (e.target.closest('a, input, button, select, .qcheck')) return;
+  row.classList.remove('row-complete');
+  const saveBtn = row.querySelector('.qsave-btn');
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+  const status = row.querySelector('.qsave-status');
+  if (status) { status.textContent = 'Reopened — make changes and save again'; status.style.color = 'var(--text-tertiary)'; }
+  savedIds.delete(row.dataset.contactId);
+  updateBatchNav();
+});
+
+// === Confirm 5/26 tab ===
+const chost = document.getElementById('confirms-queue');
+
+function confirmStatusPill(status) {
+  if (!status) return '';
+  const map = {
+    'Confirmed':     { bg: 'var(--gw-green-soft)', color: 'var(--gw-green)' },
+    'Declined':      { bg: 'var(--gw-red-soft)',   color: 'var(--gw-red)' },
+    'Cancelled':     { bg: 'var(--gw-red-soft)',   color: 'var(--gw-red)' },
+    'No answer':     { bg: 'rgba(82,82,91,0.15)',  color: 'var(--text-tertiary)' },
+    'Reminder sent': { bg: 'var(--gw-purple-soft)', color: 'var(--gw-purple-light)' },
+  };
+  const c = map[status] || { bg: 'var(--bg-elevated)', color: 'var(--text-tertiary)' };
+  return `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:${c.bg};color:${c.color};margin-left:6px;">${status}</span>`;
+}
+
+async function fetchConfirmees() {
+  chost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
+  try {
+    const res = await authFetch(`${WORKER}/confirmees?organizer=${ORGANIZER}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const list = await res.json();
+    if (list.length === 0) {
+      chost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">No 5/26 sign-ups yet. Check back after LaNee starts logging.</div>`;
+      return;
+    }
+    chost.innerHTML = '';
+    list.forEach((c, i) => {
+      const tel = phoneToTel(c.phone);
+      const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a>` : c.phone) : '';
+      const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a>` : '';
+      const cf = c.confirm || { email_sent:false, text_sent:false, call_made:false, status:null };
+      const statusOpts = ['', 'Reminder sent', 'Confirmed', 'No answer', 'Cancelled'];
+      const statusSel = statusOpts.map(s => `<option value="${s}"${s===(cf.status||'')?' selected':''}>${s||'No update yet'}</option>`).join('');
+      const row = document.createElement('div');
+      row.className = 'queue-row';
+      if (cf.status === 'Confirmed') row.classList.add('row-confirmed');
+      row.dataset.contactId = c.id;
+      row.innerHTML = `
+        <div class="qmain">
+          <span class="qnum">${String(i+1).padStart(2,'0')}</span>
+          <div class="qperson">
+            <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a>${confirmStatusPill(cf.status)}</div>
+            <div class="qmeta">${escapeHtml([c.school, c.district].filter(Boolean).join(' · ') || '—')}</div>
+            <span class="qsignal" style="background:rgba(82,82,91,0.15);color:var(--text-tertiary);">signed up · ${escapeHtml(c.last_attempt_date || 'unknown date')}</span>
+            ${c.source ? `<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase;">source: ${escapeHtml(c.source)}</div>` : ''}
+          </div>
+          <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
+          <div class="qchecks-col">
+            <div class="qchecks">
+              <label class="qcheck grey"><input type="checkbox" data-cmethod="emailed" ${cf.email_sent?'checked':''}> Emailed Zoom</label>
+              <label class="qcheck grey"><input type="checkbox" data-cmethod="texted" ${cf.text_sent?'checked':''}> Texted</label>
+              <label class="qcheck grey"><input type="checkbox" data-cmethod="called" ${cf.call_made?'checked':''}> Called</label>
+            </div>
+            <div class="qchecks">
+              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;">Status</label>
+              <select class="qconfirm-status" style="background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;">
+                ${statusSel}
+              </select>
+            </div>
+            <div class="qsave-row">
+              <button class="qzoom-btn" title="Send the branded Zoom confirmation email to this person right now" ${c.email ? '' : 'disabled'} style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--gw-purple);border:1px solid var(--gw-purple);font-size:12px;font-weight:600;cursor:${c.email ? 'pointer' : 'not-allowed'};font-family:inherit;opacity:${c.email ? '1' : '0.4'};">✉ Send Zoom email</button>
+              <button class="qsave-btn qconfirm-save">Save</button>
+              <span class="qsave-status"></span>
+            </div>
+          </div>
+        </div>`;
+      chost.appendChild(row);
+      row.querySelector('.qconfirm-save').addEventListener('click', () => submitConfirmRow(row));
+      const zoomBtn = row.querySelector('.qzoom-btn');
+      if (zoomBtn) zoomBtn.addEventListener('click', () => sendZoomEmail(row, c.email));
+    });
+  } catch (e) {
+    chost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load: ${e.message} (worker may need redeploy to add /confirmees endpoint)</div>`;
+  }
+}
+
+async function sendZoomEmail(row, emailAddr) {
+  if (!emailAddr) return;
+  if (!confirm(`Send the Parents for MO Public Schools Zoom email to ${emailAddr} right now?`)) return;
+  const status = row.querySelector('.qsave-status');
+  const btn = row.querySelector('.qzoom-btn');
+  btn.disabled = true;
+  status.textContent = 'Sending…';
+  status.style.color = 'var(--text-tertiary)';
+  try {
+    const res = await authFetch(`${WORKER}/send-zoom-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact_id: row.dataset.contactId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    status.textContent = `✓ Sent to ${data.sent_to}`;
+    status.style.color = 'var(--gw-green)';
+    // Refresh the confirm tab so the new email_sent state shows
+    setTimeout(() => fetchConfirmees(), 1200);
+  } catch (e) {
+    status.textContent = `✕ ${e.message}`;
+    status.style.color = 'var(--gw-red)';
+    btn.disabled = false;
+  }
+}
+
+async function submitConfirmRow(row) {
+  const methods = Array.from(row.querySelectorAll('.qchecks input[data-cmethod]'))
+    .filter(i => i.checked)
+    .map(i => i.dataset.cmethod);
+  const statusVal = row.querySelector('.qconfirm-status').value || null;
+  const status = row.querySelector('.qsave-status');
+  const btn = row.querySelector('.qconfirm-save');
+  if (methods.length === 0 && !statusVal) {
+    status.textContent = '✕ Check at least one box or pick a status';
+    status.style.color = 'var(--gw-red)';
+    return;
+  }
+  btn.disabled = true;
+  status.textContent = 'Saving…';
+  status.style.color = 'var(--text-tertiary)';
+  try {
+    const res = await authFetch(`${WORKER}/confirm-log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact_id: row.dataset.contactId, methods, status: statusVal }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    status.textContent = '✓ Saved';
+    status.style.color = 'var(--gw-green)';
+    btn.disabled = false;
+    // Toggle the full-row green wash when the new status is Confirmed
+    row.classList.toggle('row-confirmed', statusVal === 'Confirmed');
+  } catch (e) {
+    status.textContent = `✕ ${e.message}`;
+    status.style.color = 'var(--gw-red)';
+    btn.disabled = false;
+  }
+}
+
+// Hook tab click to load confirms
+document.querySelector('.tab-nav a[data-tab="confirms"]').addEventListener('click', fetchConfirmees);
+
+// === Find contact tab ===
+const findHost = document.getElementById('find-results');
+async function runSearch() {
+  const q = document.getElementById('find-input').value.trim();
+  if (!q) {
+    findHost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Type a name, phone, or email above.</div>`;
+    return;
+  }
+  findHost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Searching…</div>`;
+  try {
+    const res = await authFetch(`${WORKER}/search?q=${encodeURIComponent(q)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const list = await res.json();
+    if (list.length === 0) {
+      findHost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">No matches.</div>`;
+      return;
+    }
+    // Render with the same queue UI — swap queue/qhost temporarily so renderQueue targets findHost.
+    const prevHost = qhost; // closure-captured, but we'll override by mutating queue + DOM
+    const prevQueue = queue.slice();
+    queue = list;
+    // renderQueue uses the module-level `qhost`. Inline a clone that writes into findHost.
+    findHost.innerHTML = '';
+    list.forEach((c, i) => {
+      const row = document.createElement('div');
+      row.className = 'queue-row';
+      if (savedIds.has(c.id)) row.classList.add('row-complete');
+      row.dataset.idx = i;
+      row.dataset.contactId = c.id;
+      const tel = phoneToTel(c.phone);
+      const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a>` : c.phone) : '';
+      const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a>` : '';
+      const status = c.last_attempt_result ? `<span class="qsignal" style="background:var(--bg-elevated);color:var(--text-tertiary);">${escapeHtml(c.last_attempt_result)} · ${escapeHtml(c.last_attempt_date || '')}</span>` : `<span class="qsignal">${escapeHtml(c.leader_ladder || 'not yet contacted')}</span>`;
+      row.innerHTML = `
+        <div class="qmain">
+          <span class="qnum">${String(i+1).padStart(2,'0')}</span>
+          <div class="qperson">
+            <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a></div>
+            <div class="qmeta">${escapeHtml([c.school, c.district].filter(Boolean).join(' · ') || '—')}</div>
+            ${status}
+          </div>
+          <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
+          <div class="qchecks-col">
+            <div class="qchecks-grouped">
+              <div class="check-group">
+                <div class="check-group-label">How you reached out</div>
+                <div class="check-group-items">
+                  <label class="qcheck grey"><input type="checkbox" data-outcome="called"> Called</label>
+                  <label class="qcheck grey"><input type="checkbox" data-outcome="texted"> Texted</label>
+                  <label class="qcheck grey"><input type="checkbox" data-outcome="emailed"> Emailed</label>
+                </div>
+              </div>
+              <div class="check-group-divider"></div>
+              <div class="check-group">
+                <div class="check-group-label">What happened</div>
+                <div class="check-group-items">
+                  <label class="qcheck light-purple"><input type="checkbox" data-outcome="connected"> Connected</label>
+                  <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up"> Signed up</label>
+                  <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
+                </div>
+              </div>
+            </div>
+            <input type="text" class="qnotes" placeholder="Notes (optional)" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <div class="qsave-row">
+              <button class="qsave-btn">Save</button>
+              <span class="qsave-status"></span>
+              <details class="qadmin-menu">
+                <summary title="More actions">⋮</summary>
+                <div class="qadmin-popover">
+                  <button class="qadmin-btn" data-admin="skipped" title="Take this person out of your queue without an outreach attempt">⊘ Skip</button>
+                  <button class="qadmin-btn" data-admin="wrong-number">✕ Wrong number</button>
+                  <button class="qadmin-btn" data-admin="do-not-contact" style="color:var(--gw-red);">⊗ Remove from call list</button>
+                </div>
+              </details>
+            </div>
+          </div>
+        </div>
+        <div class="qnextstep">
+          <span class="qnext-label">Next step</span>
+          <div>
+            <select class="qnext-select"><option value="">Choose a next step...</option></select>
+            <input type="text" class="qfree" placeholder="Type your own next step...">
+            <div class="qmissing-flag">⚐ A next step is required when you connect</div>
+          </div>
+        </div>`;
+      findHost.appendChild(row);
+      row.querySelectorAll('.qcheck input').forEach(input => input.addEventListener('change', () => updateRow(row)));
+      const sel = row.querySelector('.qnext-select');
+      const fre = row.querySelector('.qfree');
+      sel?.addEventListener('change', () => updateRow(row));
+      fre?.addEventListener('input', () => updateRow(row));
+      row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row));
+      row.querySelectorAll('.qadmin-btn').forEach(b => b.addEventListener('click', () => submitAdmin(row, b.dataset.admin)));
+    });
+    queue = prevQueue; // restore — search rows are self-contained
+  } catch (e) {
+    findHost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Search failed: ${e.message}</div>`;
+  }
+}
+document.getElementById('find-btn').addEventListener('click', runSearch);
+document.getElementById('find-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
+
+// === Interaction logic ===
+function rankOutcome(checks) {
+  // Dot color = highest single outcome (green > purple > light-purple > grey)
+  if (checks.oneonone) return 'oneonone';
+  if (checks['signed-up']) return 'signed-up';
+  if (checks.connected) return 'connected';
+  if (checks.called || checks.texted || checks.emailed) return 'attempted';
+  return null;
+}
+
+function optionsKey(checks) {
+  // Combined-outcome key used to look up next-step options.
+  if (checks['signed-up'] && checks.oneonone) return 'signed-up+oneonone';
+  return rankOutcome(checks);
+}
+
+async function undoSave(row) {
+  const status = row.querySelector('.qsave-status');
+  const saveBtn = row.querySelector('.qsave-btn');
+  status.textContent = 'Undoing…';
+  status.style.color = 'var(--text-tertiary)';
+  try {
+    const res = await authFetch(`${WORKER}/undo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact_id: row.dataset.contactId }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.error || `HTTP ${res.status}`);
+    }
+    row.classList.remove('row-complete');
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save';
+    saveBtn.style.display = 'inline-flex';
+    row.querySelector('.qundo-btn').style.display = 'none';
+    savedIds.delete(row.dataset.contactId);
+    status.textContent = '';
+    status.style.color = 'var(--text-tertiary)';
+    // Full resync from server: clear local state, reload today's truth
+    sessionActions.length = 0;
+    nextGridIdx = 0;
+    savedIds.clear();
+    document.querySelectorAll('#grid .dot').forEach(d => d.removeAttribute('data-s'));
+    await loadTodayStats();
+    await loadCounters();
+    recomputeMetrics();
+    updateBatchNav();
+  } catch (e) {
+    status.textContent = `✕ Undo failed: ${e.message}`;
+    status.style.color = 'var(--gw-red)';
+  }
+}
+
+function updateRow(row) {
+  // If a saved row, ignore checkbox changes — use the explicit Undo button instead
+  if (row.classList.contains('row-complete')) return;
+  const checks = {};
+  row.querySelectorAll('.qcheck input').forEach(input => {
+    checks[input.dataset.outcome] = input.checked;
+  });
+  const top = rankOutcome(checks);
+  const optsKey = optionsKey(checks);
+  // Note: grid dots only fill on Save (persistent), not on pre-save checkbox changes
+  // Next-step dropdown
+  const nsblock = row.querySelector('.qnextstep');
+  const select = row.querySelector('.qnext-select');
+  const freebox = row.querySelector('.qfree');
+  const missing = row.querySelector('.qmissing-flag');
+  const needsNextStep = (top === 'connected' || top === 'signed-up' || top === 'oneonone');
+  nsblock.classList.toggle('show', needsNextStep);
+  if (needsNextStep) {
+    // Only rebuild options if the combo changed, so we don't wipe a user's selection.
+    if (row.dataset.optsKey !== optsKey) {
+      const opts = NEXT_STEP_OPTIONS[optsKey] || [];
+      select.innerHTML = '<option value="">Choose a next step...</option>' + opts.map(o => `<option value="${o}">${o}</option>`).join('');
+      row.dataset.optsKey = optsKey;
+    }
+  } else {
+    row.dataset.optsKey = '';
+  }
+  // Reveal free-text input when "Other" is selected
+  const isOther = select.value && select.value.startsWith('Other');
+  freebox.classList.toggle('show', isOther);
+  // A "next step" is logged if either a non-Other option is picked OR free text is filled
+  const hasNext = (select.value && !select.value.startsWith('Other')) || (freebox.value && freebox.value.trim());
+  const showFlag = needsNextStep && !hasNext;
+  row.classList.toggle('warn-no-next', showFlag);
+  if (missing) missing.style.display = showFlag ? 'inline-flex' : 'none';
+  recomputeMetrics();
+}
+
+function recomputeMetrics() {
+  // Pull from persistent sessionActions so metrics survive batch changes
+  let attempts = 0, convos = 0, signups = 0, oneones = 0;
+  for (const a of sessionActions) {
+    attempts++;  // one attempt per person, regardless of how many methods
+    if (a.outcome === 'connected' || a.outcome === 'signed-up' || a.outcome === 'oneonone') convos++;
+    if (a.outcome === 'signed-up' || a.outcome === 'oneonone') signups++;
+    if (a.outcome === 'oneonone') oneones++;
+  }
+  // Flag counter: count currently-visible rows that need a next step
+  let flagged = 0;
+  document.querySelectorAll('.queue-row.warn-no-next').forEach(() => flagged++);
+  // Mini-stats (just from current queue; in live version this'd be week-total from Airtable)
+  document.getElementById('stat-attempts').innerHTML = `${attempts}<em>/ 50</em>`;
+  document.getElementById('stat-convos').innerHTML = `${convos}<em>/ 10</em>`;
+  // Contact rate = conversations / attempts
+  const rate = attempts > 0 ? Math.round((convos / attempts) * 100) : null;
+  document.getElementById('stat-rate').textContent = rate === null ? '— contact rate' : `${rate}% contact rate`;
+  // Big cards
+  // signup count is owned by loadCounters (cumulative, not session-based)
+  document.getElementById('m-oneonone-current').textContent = oneones;
+  document.getElementById('m-oneonone-bar').style.width = `${Math.min(100, oneones*100)}%`;
+  document.getElementById('m-oneonone-pct').textContent = `${Math.min(100, oneones*100)}% to goal`;
+  // Flag counter element was removed (next-step is required on save), no-op
+}
+
+// Theme toggle (default light, persist in localStorage)
+(function setupTheme() {
+  const stored = localStorage.getItem('gw-theme');
+  if (stored === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  const btn = document.getElementById('theme-toggle');
+  function refreshIcon() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    btn.textContent = isDark ? '☀' : '☾';
+    btn.title = isDark ? 'Switch to light' : 'Switch to dark';
+  }
+  refreshIcon();
+  btn.addEventListener('click', () => {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('gw-theme', 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('gw-theme', 'dark');
+    }
+    refreshIcon();
+  });
+})();
+
+// Tabs
+document.querySelectorAll('.tab-nav a').forEach(a => {
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.tab-nav a').forEach(x => x.classList.remove('active'));
+    a.classList.add('active');
+    const tab = a.dataset.tab;
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === tab));
+    window.scrollTo({top:0, behavior:'smooth'});
+  });
+});
+</script>
+</body>
+</html>

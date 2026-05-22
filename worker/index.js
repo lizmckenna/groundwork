@@ -54,12 +54,16 @@ const SESSION_TTL = 604800;
 const READ_CACHE_TTL = 60; // seconds
 const READ_CACHE_KEYS = [
   'cache:confirmees',
+  'cache:confirmees:lanee',
+  'cache:confirmees:stephanie',
   'cache:today-stats',
   'cache:recent-activity:7',
   'cache:recent-activity:14',
   'cache:recent-activity:30',
   'cache:house-hosts',
   'queue:count',
+  'queue:count:lanee',
+  'queue:count:stephanie',
 ];
 async function cacheGet(env, key) {
   const v = await env.KV_BINDING.get(key);
@@ -90,12 +94,12 @@ export default {
       if (url.pathname === '/prospects') return await getProspects(env, url);
       if (url.pathname === '/log' && request.method === 'POST') return await logOutcome(request, env);
       if (url.pathname === '/undo' && request.method === 'POST') return await undoSave(request, env);
-      if (url.pathname === '/confirmees') return await getConfirmees(env);
+      if (url.pathname === '/confirmees') return await getConfirmees(env, url);
       if (url.pathname === '/confirm-log' && request.method === 'POST') return await confirmLog(request, env);
       if (url.pathname === '/today-stats') return await getTodayStats(env);
       if (url.pathname === '/recent-activity') return await getRecentActivity(env, url);
       if (url.pathname === '/search') return await searchContacts(env, url);
-      if (url.pathname === '/queue-count') return await getQueueCount(env);
+      if (url.pathname === '/queue-count') return await getQueueCount(env, url);
       if (url.pathname === '/send-zoom-email' && request.method === 'POST') return await sendZoomEmailNow(request, env);
       if (url.pathname === '/event-create' && request.method === 'POST') return await createEvent(request, env);
       if (url.pathname === '/events' && request.method === 'GET') return await listEvents(env, url);
@@ -489,19 +493,27 @@ async function authVerify(request, env) {
   return json({ ok: true, session_token: sessionToken, email });
 }
 
-const PROSPECTS_FILTER = `AND(
-  OR({leader_ladder}='Prospect',{leader_ladder}='Supporter',{leader_ladder}='Leader'),
-  OR({last_attempt_date}=BLANK(), DATETIME_DIFF(TODAY(), {last_attempt_date}, 'days') > 7),
-  NOT({last_attempt_result}='Signed up'),
-  NOT({last_attempt_result}='Skipped'),
-  NOT({last_attempt_result}='Wrong number'),
-  NOT({last_attempt_result}='Do not contact')
-)`.replace(/\s+/g, '');
+function prospectsFilter(organizerName) {
+  const id = organizerName ? ORGANIZER_IDS[organizerName] : null;
+  const orgClause = id ? `,FIND('${id}',ARRAYJOIN({assigned_organizer}))>0` : '';
+  return `AND(
+    OR({leader_ladder}='Prospect',{leader_ladder}='Supporter',{leader_ladder}='Leader'),
+    OR({last_attempt_date}=BLANK(), DATETIME_DIFF(TODAY(), {last_attempt_date}, 'days') > 7),
+    NOT({last_attempt_result}='Signed up'),
+    NOT({last_attempt_result}='Skipped'),
+    NOT({last_attempt_result}='Wrong number'),
+    NOT({last_attempt_result}='Do not contact')
+    ${orgClause}
+  )`.replace(/\s+/g, '');
+}
+const PROSPECTS_FILTER = prospectsFilter();  // legacy default — no organizer filter
 
 async function getProspects(env, url) {
   const n = parseInt(url.searchParams.get('n') || '5');
+  const organizer = url.searchParams.get('organizer');
+  const filter = prospectsFilter(organizer);
   const fields = ['Name','first','last','phone','email','school','district','log_count','organized_by','leader_ladder'];
-  let q = `?filterByFormula=${encodeURIComponent(PROSPECTS_FILTER)}&maxRecords=${n}`;
+  let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=${n}`;
   q += `&sort%5B0%5D%5Bfield%5D=log_count&sort%5B0%5D%5Bdirection%5D=desc`;
   for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
   const data = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
@@ -518,14 +530,16 @@ async function getProspects(env, url) {
   })));
 }
 
-async function getQueueCount(env) {
-  const cacheKey = 'queue:count';
+async function getQueueCount(env, urlObj) {
+  const organizer = urlObj ? urlObj.searchParams.get('organizer') : null;
+  const cacheKey = organizer ? `queue:count:${organizer}` : 'queue:count';
   const cached = await env.KV_BINDING.get(cacheKey);
   if (cached) return json({ count: parseInt(cached), cached: true });
+  const filter = prospectsFilter(organizer);
   let count = 0;
   let offset = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(PROSPECTS_FILTER)}&pageSize=100&fields%5B%5D=Name`;
+    let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100&fields%5B%5D=Name`;
     if (offset) q += `&offset=${offset}`;
     const data = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
     count += data.records.length;
@@ -814,11 +828,16 @@ async function undoSave(request, env) {
   return json({ ok: true, deleted });
 }
 
-async function getConfirmees(env) {
-  const cached = await cacheGet(env, 'cache:confirmees');
+async function getConfirmees(env, urlObj) {
+  const organizer = urlObj ? urlObj.searchParams.get('organizer') : null;
+  const cacheKey = organizer ? `cache:confirmees:${organizer}` : 'cache:confirmees';
+  const cached = await cacheGet(env, cacheKey);
   if (cached) return json(cached);
 
-  const filter = "{last_attempt_result}='Signed up'";
+  const orgId = organizer ? ORGANIZER_IDS[organizer] : null;
+  const filter = orgId
+    ? `AND({last_attempt_result}='Signed up',FIND('${orgId}',ARRAYJOIN({assigned_organizer}))>0)`
+    : "{last_attempt_result}='Signed up'";
   const fields = ['Name','first','last','phone','email','school','district','last_attempt_date','source'];
   let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=200`;
   for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
@@ -864,7 +883,7 @@ async function getConfirmees(env) {
     source: r.fields.source || '',
     confirm: stateByContact[r.id] || { email_sent: false, text_sent: false, call_made: false, status: null, last_date: null },
   }));
-  await cachePut(env, 'cache:confirmees', payload);
+  await cachePut(env, cacheKey, payload);
   return json(payload);
 }
 
@@ -1154,11 +1173,13 @@ async function eventRsvp(request, env) {
   if (!event_id || !event_id.startsWith('rec')) return json({ error: 'event_id required' }, 400);
   if (!first || !last || !email) return json({ error: 'first, last, and email are required' }, 400);
 
-  // Get event to know what we're RSVPing to (used in log entry)
+  // Get event to know what we're RSVPing to (used in log entry + email)
   let eventName = '';
+  let eventRecord = null;
   try {
     const evt = await at(env, `/${BASE}/${EVENTS_TBL}/${event_id}`);
-    eventName = evt.fields.Name || '';
+    eventRecord = evt.fields || {};
+    eventName = eventRecord.Name || '';
   } catch (e) {
     return json({ error: 'event not found' }, 404);
   }
@@ -1247,6 +1268,126 @@ async function eventRsvp(request, env) {
     })
   });
 
+  // Send confirmation email (best-effort — don't fail the RSVP if email fails)
+  let email_sent = false;
+  try {
+    await sendRsvpConfirmEmail(env, cEmail, cFirst, eventRecord);
+    email_sent = true;
+  } catch (e) { /* swallow email errors so RSVP still succeeds */ }
+
   await invalidateReadCaches(env);
-  return json({ ok: true, contact_id: contactId, event_name: eventName });
+  return json({ ok: true, contact_id: contactId, event_name: eventName, email_sent });
+}
+
+// =========================================================================
+// RSVP confirmation email — sent automatically after /event-rsvp success.
+// Renders event details (name, date, time, location, host) from the Events record.
+// =========================================================================
+async function sendRsvpConfirmEmail(env, toEmail, firstName, eventRecord) {
+  const name = eventRecord.Name || 'our event';
+  const type = eventRecord.type || 'event';
+  const date = eventRecord.date || '';
+  const time = eventRecord.time || '';
+  const location = eventRecord.location || '';
+  const host = eventRecord.host || '';
+  const notes = eventRecord.notes || '';
+
+  // Format date for humans
+  let dateLabel = date;
+  try {
+    const d = new Date(date + 'T12:00:00');
+    dateLabel = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  } catch (e) {}
+
+  const safeName = firstName ? `, ${escapeHtml(firstName)}` : '';
+  const subject = `You're in — ${name}`;
+  const locationIsZoom = /zoom/i.test(location);
+  const zoomLinkMatch = (location.match(/https?:\/\/\S+/) || [])[0];
+
+  const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>You're in — ${escapeHtml(name)}</title>
+</head>
+<body style="margin:0;padding:0;background:#E9E5CE;font-family:Helvetica,Arial,sans-serif;color:#1A2418">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#E9E5CE">
+  <tr><td align="center" style="padding:32px 16px">
+    <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%">
+
+      <tr><td style="padding:0 0 28px">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td width="44" style="padding-right:14px;vertical-align:middle">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                <td width="44" height="44" bgcolor="#B25048" style="background:#B25048;border-radius:22px" align="center">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                    <td width="32" height="32" bgcolor="#C99633" style="background:#C99633;border-radius:16px" align="center">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                        <td width="16" height="16" bgcolor="#E9E5CE" style="background:#E9E5CE;border-radius:8px"></td>
+                      </tr></table>
+                    </td>
+                  </tr></table>
+                </td>
+              </tr></table>
+            </td>
+            <td style="vertical-align:middle;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:16px;line-height:1.15;text-transform:uppercase;letter-spacing:.01em;color:#1A2418">
+              Parents for Missouri<br/>Public Schools
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+
+      <tr><td style="padding:0 0 20px">
+        <h1 style="margin:0;font-family:Helvetica,Arial,sans-serif;font-weight:800;font-size:44px;line-height:.95;letter-spacing:.005em;text-transform:uppercase;color:#1A2418">You're in.</h1>
+      </td></tr>
+
+      <tr><td style="padding:0 0 18px;font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1A2418">
+        Hi${safeName}, thanks for RSVPing to <strong>${escapeHtml(name)}</strong>. Here are the details.
+      </td></tr>
+
+      <tr><td style="padding:6px 0 22px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#D9D5C0" style="background:#D9D5C0;border:2px solid #1A2418;border-radius:14px">
+          <tr><td style="padding:20px 22px">
+            <div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:#2F5E3D;margin:0 0 8px">${escapeHtml(type)}</div>
+            <div style="font-family:Helvetica,Arial,sans-serif;font-weight:800;font-size:22px;line-height:1.2;text-transform:uppercase;letter-spacing:.01em;color:#1A2418;margin:0 0 10px">${escapeHtml(dateLabel)}</div>
+            ${time ? `<div style="font-family:Helvetica,Arial,sans-serif;font-weight:600;font-size:14px;color:#1A2418;margin:0 0 4px">${escapeHtml(time)}</div>` : ''}
+            ${location ? `<div style="font-family:Helvetica,Arial,sans-serif;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#1A2418;opacity:.7;margin:6px 0 0">${escapeHtml(location)}</div>` : ''}
+            ${host ? `<div style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#1A2418;opacity:.7;margin:6px 0 0">Hosted by ${escapeHtml(host)}</div>` : ''}
+            ${zoomLinkMatch ? `<div style="margin:18px 0 0"><a href="${zoomLinkMatch}" style="display:inline-block;background:#1A2418;color:#E9E5CE;text-decoration:none;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.06em;padding:13px 20px;border-radius:8px">Open Zoom link →</a></div>` : ''}
+          </td></tr>
+        </table>
+      </td></tr>
+
+      ${notes ? `<tr><td style="padding:0 0 18px;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#1A2418">${escapeHtml(notes)}</td></tr>` : ''}
+
+      <tr><td style="padding:0 0 18px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1A2418">
+        We'll send a reminder closer to the date. If something changes and you can't make it, please reply to this email.
+      </td></tr>
+
+      <tr><td style="padding:0 0 18px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1A2418">
+        <strong>Help us reach more parents.</strong> Forward this email to a few people in your circle who care about public schools, and ask them to sign up at <a href="https://parents4mopublicschools.org/" style="color:#1A2418;text-decoration:underline"><strong>parents4mopublicschools.org</strong></a>. Every parent we bring in makes our movement for Missouri's kids stronger.
+      </td></tr>
+
+      <tr><td style="padding-top:18px;border-top:1px dashed rgba(26,36,24,.25);font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.55;color:#1A2418">
+        Parents for Missouri Public Schools<br/>
+        <a href="mailto:${REPLY_TO_CONFIRM}" style="color:#1A2418;text-decoration:underline">${REPLY_TO_CONFIRM}</a>
+      </td></tr>
+
+      <tr><td style="padding:14px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:10px;line-height:1.55;letter-spacing:.12em;text-transform:uppercase;color:#1A2418;opacity:.55">
+        You're receiving this because you RSVPed at parents4mopublicschools.org. Reply to be removed.
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+
+  const emailRes = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${env.RESEND_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM_CONFIRM, to: [toEmail], reply_to: REPLY_TO_CONFIRM, subject, html }),
+  });
+  if (!emailRes.ok) throw new Error(`rsvp email failed: ${await emailRes.text()}`);
 }
