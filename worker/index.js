@@ -108,6 +108,7 @@ export default {
       if (url.pathname === '/admin/contacts-dump' && request.method === 'GET') return await adminContactsDump(request, env, url);
       if (url.pathname === '/admin/role-append' && request.method === 'POST') return await adminRoleAppend(request, env);
       if (url.pathname === '/admin/queue-check' && request.method === 'GET') return await adminQueueCheck(request, env, url);
+      if (url.pathname === '/admin/log-debug' && request.method === 'GET') return await adminLogDebug(request, env, url);
       const sessionToken = request.headers.get('X-Groundwork-Session');
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
@@ -1656,4 +1657,54 @@ async function adminQueueCheck(request, env, urlObj) {
     total_match: total,
     sample: data.records.map(r => ({ id: r.id, name: r.fields.Name, assigned: r.fields.assigned_organizer || [] })),
   });
+}
+
+// =========================================================================
+// /admin/log-debug?days=1 — returns recent contact_log entries with contact name + assigned organizer.
+// Useful for debugging "why are these squares showing up". Admin-key gated.
+// =========================================================================
+async function adminLogDebug(request, env, urlObj) {
+  const key = request.headers.get('X-Admin-Key');
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+  const days = parseInt(urlObj.searchParams.get('days') || '1');
+  const filter = `IS_AFTER({date},DATEADD(TODAY(),-${days},'days'))`;
+  let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100&fields%5B%5D=date&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=event&fields%5B%5D=contact&fields%5B%5D=Summary&fields%5B%5D=notes`;
+  const logs = [];
+  let offset = null;
+  do {
+    let url = `/${BASE}/${CONTACT_LOG_TBL}${q}${offset ? `&offset=${offset}` : ''}`;
+    const data = await at(env, url);
+    logs.push(...data.records);
+    offset = data.offset;
+  } while (offset);
+
+  // For each log, look up the contact's name + assigned_organizer
+  const results = [];
+  for (const log of logs) {
+    const contactIds = log.fields.contact || [];
+    const contactInfo = [];
+    for (const cid of contactIds) {
+      try {
+        const c = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
+        contactInfo.push({
+          id: cid,
+          name: c.fields.Name || `${c.fields.first||''} ${c.fields.last||''}`.trim(),
+          assigned: c.fields.assigned_organizer || [],
+        });
+      } catch (e) {
+        contactInfo.push({ id: cid, error: e.message });
+      }
+    }
+    results.push({
+      log_id: log.id,
+      date: log.fields.date,
+      method: log.fields.method,
+      result: log.fields.result,
+      event: log.fields.event,
+      summary: log.fields.Summary,
+      notes: log.fields.notes,
+      contacts: contactInfo,
+    });
+  }
+  return json({ count: results.length, logs: results });
 }
