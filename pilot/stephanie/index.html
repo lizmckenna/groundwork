@@ -275,17 +275,22 @@
   .queue-row.row-complete .qname { text-decoration: line-through; }
   .queue-row.row-complete .qname::after { content: ' · DONE'; font-size: 10px; color: var(--gw-green); font-weight: 600; letter-spacing: 0.08em; text-decoration: none; vertical-align: 1px; }
 
-  /* Confirm 5/26 — full-row green wash when a person is Confirmed */
+  /* Confirmed — subtle left border only, no green wash */
   .queue-row.row-confirmed {
+    border-left: 4px solid var(--gw-purple);
+  }
+
+  /* Attended on 5/26 — full green wash (the celebratory state) */
+  .queue-row.row-attended {
     background: linear-gradient(180deg, rgba(34,197,94,0.18) 0%, rgba(34,197,94,0.08) 100%);
     border-left: 4px solid var(--gw-green);
     box-shadow: inset 0 0 0 1px rgba(34,197,94,0.18);
   }
-  :root[data-theme="dark"] .queue-row.row-confirmed {
+  :root[data-theme="dark"] .queue-row.row-attended {
     background: linear-gradient(180deg, rgba(34,197,94,0.22) 0%, rgba(34,197,94,0.10) 100%);
   }
-  .queue-row.row-confirmed .qname { color: var(--gw-green); font-weight: 600; }
-  .queue-row.row-confirmed .qname::after { content: ' ✓'; color: var(--gw-green); font-weight: 700; margin-left: 4px; }
+  .queue-row.row-attended .qname { color: var(--gw-green); font-weight: 600; }
+  .queue-row.row-attended .qname::after { content: ' ✓'; color: var(--gw-green); font-weight: 700; margin-left: 4px; }
 
   /* Batch nav */
   .batch-nav {
@@ -417,7 +422,7 @@
     </a>
     <nav class="tab-nav">
       <a href="#" class="active" data-tab="today">Today</a>
-      <a href="#" data-tab="confirms">Confirm 5/26</a>
+      <a href="#" data-tab="confirms">5/26 Event Tracking</a>
       <a href="#" data-tab="find">Find contact</a>
       <a href="#" data-tab="stats">More stats</a>
       <a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9?blocks=hide" target="_blank" rel="noopener" style="color:var(--gw-purple);">Airtable ↗</a>
@@ -536,15 +541,37 @@
 
   <div class="tab-pane" data-pane="confirms">
     <section class="hero">
-      <div class="eyebrow">Confirmation calls · 5/26 Orientation</div>
-      <h1>Lock in who's coming.</h1>
-      <p class="lede">Anyone who signed up for the 5/26 Orientation. Contact them 1-2 days before to confirm. Make sure they remember, answer last-minute questions, and feel expected.</p>
+      <div class="eyebrow">5/26 Orientation · before, during, after</div>
+      <h1>Track the event end-to-end.</h1>
+      <p class="lede">Before 5/26: contact each signup to confirm. On 5/26: mark who actually showed up and add any walk-ins. After: see who attended.</p>
     </section>
 
-    <div class="section-head">
-      <h2>Confirmed 5/26 sign-ups</h2>
-      <span class="mono">last_attempt_result = Committed · event = 5/26</span>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin:48px 0 18px;gap:24px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border);">
+      <div>
+        <h2 style="font-size:18px;font-weight:600;letter-spacing:-0.01em;margin:0 0 6px;">5/26 sign-ups</h2>
+        <div class="mono" style="font-size:11px;color:var(--text-tertiary);letter-spacing:0.06em;">Confirm before the event · mark attended on the day</div>
+      </div>
+      <button id="walkin-open" style="padding:10px 18px;border-radius:8px;background:var(--gw-purple);color:white;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;">+ Add walk-in</button>
     </div>
+
+    <div id="walkin-form" style="display:none;background:var(--bg-elevated);border:1px solid var(--border-hover);border-radius:10px;padding:18px;margin-bottom:18px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:12px;">New walk-in · 5/26 orientation</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <input id="wi-first" placeholder="First name *" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+        <input id="wi-last" placeholder="Last name *" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+        <input id="wi-email" type="email" placeholder="Email" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+        <input id="wi-phone" placeholder="Phone" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+        <input id="wi-school" placeholder="School" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+        <input id="wi-role" placeholder="Role (e.g. Parent, Teacher)" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;align-items:center;">
+        <span id="wi-status" style="font-size:12px;color:var(--text-tertiary);"></span>
+        <button id="wi-cancel" style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--text-secondary);border:1px solid var(--border-hover);font-size:12px;cursor:pointer;font-family:inherit;">Cancel</button>
+        <button id="wi-save" style="padding:8px 16px;border-radius:6px;background:var(--gw-green);color:white;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Save walk-in</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:10px;">Name required. Email or phone strongly preferred. We'll match against existing contacts to avoid duplicates.</div>
+    </div>
+
     <div class="queue-wrap" id="confirms-queue"></div>
   </div>
 
@@ -1285,17 +1312,20 @@ async function fetchConfirmees() {
       const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a>` : c.phone) : '';
       const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a>` : '';
       const cf = c.confirm || { email_sent:false, text_sent:false, call_made:false, status:null };
+      const att = c.attendance || null;
       const statusOpts = ['', 'Reminder sent', 'Confirmed', 'No answer', 'Cancelled'];
       const statusSel = statusOpts.map(s => `<option value="${s}"${s===(cf.status||'')?' selected':''}>${s||'No update yet'}</option>`).join('');
+      const attPill = att === 'Attended' ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-green-soft);color:var(--gw-green);margin-left:6px;">Attended</span>` : att === 'No-show' ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-red-soft);color:var(--gw-red);margin-left:6px;">No-show</span>` : att === 'Walk-in' ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-purple-soft);color:var(--gw-purple-light);margin-left:6px;">Walk-in</span>` : '';
       const row = document.createElement('div');
       row.className = 'queue-row';
       if (cf.status === 'Confirmed') row.classList.add('row-confirmed');
+      if (att === 'Attended' || att === 'Walk-in') row.classList.add('row-attended');
       row.dataset.contactId = c.id;
       row.innerHTML = `
         <div class="qmain">
           <span class="qnum">${String(i+1).padStart(2,'0')}</span>
           <div class="qperson">
-            <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a>${confirmStatusPill(cf.status)}</div>
+            <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a>${confirmStatusPill(cf.status)}${attPill}</div>
             <div class="qmeta">${escapeHtml([c.school, c.district].filter(Boolean).join(' · ') || '—')}</div>
             <span class="qsignal" style="background:rgba(82,82,91,0.15);color:var(--text-tertiary);">signed up · ${escapeHtml(c.last_attempt_date || 'unknown date')}</span>
             ${c.source ? `<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase;">source: ${escapeHtml(c.source)}</div>` : ''}
@@ -1313,6 +1343,12 @@ async function fetchConfirmees() {
                 ${statusSel}
               </select>
             </div>
+            <div class="qchecks" style="border-top:1px dashed var(--border);padding-top:10px;">
+              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;">Day of</label>
+              <button class="att-btn att-attended" data-att="yes" style="padding:6px 12px;border-radius:6px;background:${att==='Attended'?'var(--gw-green)':'transparent'};color:${att==='Attended'?'white':'var(--gw-green)'};border:1px solid var(--gw-green);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✓ Attended</button>
+              <button class="att-btn att-noshow" data-att="no" style="padding:6px 12px;border-radius:6px;background:${att==='No-show'?'var(--gw-red)':'transparent'};color:${att==='No-show'?'white':'var(--gw-red)'};border:1px solid var(--gw-red);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✗ No-show</button>
+              <span class="att-status" style="font-size:11px;color:var(--text-tertiary);"></span>
+            </div>
             <div class="qsave-row">
               <button class="qzoom-btn" title="Send the branded Zoom confirmation email to this person right now" ${c.email ? '' : 'disabled'} style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--gw-purple);border:1px solid var(--gw-purple);font-size:12px;font-weight:600;cursor:${c.email ? 'pointer' : 'not-allowed'};font-family:inherit;opacity:${c.email ? '1' : '0.4'};">✉ Send Zoom email</button>
               <button class="qsave-btn qconfirm-save">Save</button>
@@ -1320,8 +1356,15 @@ async function fetchConfirmees() {
             </div>
           </div>
         </div>`;
+      // Stash current attendance state on the row so handler can detect toggle-off
+      row.dataset.attState = att || '';
       chost.appendChild(row);
       row.querySelector('.qconfirm-save').addEventListener('click', () => submitConfirmRow(row));
+      row.querySelectorAll('.att-btn').forEach(b => b.addEventListener('click', () => {
+        const clicked = b.dataset.att === 'yes' ? 'Attended' : 'No-show';
+        const next = (row.dataset.attState === clicked) ? null : (b.dataset.att === 'yes');
+        submitAttendance(row, next);
+      }));
       const zoomBtn = row.querySelector('.qzoom-btn');
       if (zoomBtn) zoomBtn.addEventListener('click', () => sendZoomEmail(row, c.email));
     });
@@ -1383,7 +1426,7 @@ async function submitConfirmRow(row) {
     status.textContent = '✓ Saved';
     status.style.color = 'var(--gw-green)';
     btn.disabled = false;
-    // Toggle the full-row green wash when the new status is Confirmed
+    // Toggle the subtle purple left-border when the new status is Confirmed
     row.classList.toggle('row-confirmed', statusVal === 'Confirmed');
   } catch (e) {
     status.textContent = `✕ ${e.message}`;
@@ -1391,6 +1434,109 @@ async function submitConfirmRow(row) {
     btn.disabled = false;
   }
 }
+
+async function submitAttendance(row, attended) {
+  // attended: true → Attended, false → No-show, null → clear
+  const status = row.querySelector('.att-status');
+  const btns = row.querySelectorAll('.att-btn');
+  btns.forEach(b => b.disabled = true);
+  status.textContent = 'Saving…';
+  status.style.color = 'var(--text-tertiary)';
+  try {
+    const res = await authFetch(`${WORKER}/attendance-log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact_id: row.dataset.contactId, attended }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    status.textContent = data.result ? `✓ ${data.result}` : '✓ Cleared';
+    status.style.color = attended === null ? 'var(--text-tertiary)' : 'var(--gw-green)';
+    btns.forEach(b => {
+      b.disabled = false;
+      const isYes = b.dataset.att === 'yes';
+      const isActive = (attended === true && isYes) || (attended === false && !isYes);
+      if (isYes) {
+        b.style.background = isActive ? 'var(--gw-green)' : 'transparent';
+        b.style.color = isActive ? 'white' : 'var(--gw-green)';
+      } else {
+        b.style.background = isActive ? 'var(--gw-red)' : 'transparent';
+        b.style.color = isActive ? 'white' : 'var(--gw-red)';
+      }
+    });
+    row.dataset.attState = attended === true ? 'Attended' : attended === false ? 'No-show' : '';
+    row.classList.toggle('row-attended', attended === true);
+    const nameEl = row.querySelector('.qname');
+    if (nameEl) {
+      nameEl.querySelectorAll('span').forEach(s => {
+        if (s.textContent === 'Attended' || s.textContent === 'No-show' || s.textContent === 'Walk-in') s.remove();
+      });
+      if (attended === true) {
+        nameEl.insertAdjacentHTML('beforeend', `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-green-soft);color:var(--gw-green);margin-left:6px;">Attended</span>`);
+      } else if (attended === false) {
+        nameEl.insertAdjacentHTML('beforeend', `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-red-soft);color:var(--gw-red);margin-left:6px;">No-show</span>`);
+      }
+    }
+  } catch (e) {
+    status.textContent = `✕ ${e.message}`;
+    status.style.color = 'var(--gw-red)';
+    btns.forEach(b => b.disabled = false);
+  }
+}
+
+// === Walk-in form ===
+const walkinOpen = document.getElementById('walkin-open');
+const walkinForm = document.getElementById('walkin-form');
+const walkinCancel = document.getElementById('wi-cancel');
+const walkinSave = document.getElementById('wi-save');
+walkinOpen.addEventListener('click', () => {
+  walkinForm.style.display = walkinForm.style.display === 'none' ? 'block' : 'none';
+});
+walkinCancel.addEventListener('click', () => {
+  walkinForm.style.display = 'none';
+  ['wi-first','wi-last','wi-email','wi-phone','wi-school','wi-role'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('wi-status').textContent = '';
+});
+walkinSave.addEventListener('click', async () => {
+  const first = document.getElementById('wi-first').value.trim();
+  const last = document.getElementById('wi-last').value.trim();
+  const email = document.getElementById('wi-email').value.trim();
+  const phone = document.getElementById('wi-phone').value.trim();
+  const school = document.getElementById('wi-school').value.trim();
+  const role = document.getElementById('wi-role').value.trim();
+  const status = document.getElementById('wi-status');
+  if (!first || !last) {
+    status.textContent = '✕ First and last name required';
+    status.style.color = 'var(--gw-red)';
+    return;
+  }
+  walkinSave.disabled = true;
+  status.textContent = 'Saving…';
+  status.style.color = 'var(--text-tertiary)';
+  try {
+    const res = await authFetch(`${WORKER}/walkin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ first, last, email, phone, school, role, organizer: ORGANIZER }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const msg = data.matched_existing ? `✓ Matched existing: ${data.existing_name}` : '✓ New walk-in added';
+    status.textContent = msg;
+    status.style.color = 'var(--gw-green)';
+    setTimeout(() => {
+      walkinForm.style.display = 'none';
+      ['wi-first','wi-last','wi-email','wi-phone','wi-school','wi-role'].forEach(id => document.getElementById(id).value = '');
+      status.textContent = '';
+      fetchConfirmees();
+    }, 1200);
+  } catch (e) {
+    status.textContent = `✕ ${e.message}`;
+    status.style.color = 'var(--gw-red)';
+  } finally {
+    walkinSave.disabled = false;
+  }
+});
 
 // Hook tab click to load confirms
 document.querySelector('.tab-nav a[data-tab="confirms"]').addEventListener('click', fetchConfirmees);
