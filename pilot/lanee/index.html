@@ -1349,9 +1349,16 @@ async function fetchConfirmees() {
             </div>
           </div>
         </div>`;
+      // Stash current attendance state on the row so handler can detect toggle-off
+      row.dataset.attState = att || '';
       chost.appendChild(row);
       row.querySelector('.qconfirm-save').addEventListener('click', () => submitConfirmRow(row));
-      row.querySelectorAll('.att-btn').forEach(b => b.addEventListener('click', () => submitAttendance(row, b.dataset.att === 'yes')));
+      row.querySelectorAll('.att-btn').forEach(b => b.addEventListener('click', () => {
+        const clicked = b.dataset.att === 'yes' ? 'Attended' : 'No-show';
+        // If clicking the already-active state, clear it (send null)
+        const next = (row.dataset.attState === clicked) ? null : (b.dataset.att === 'yes');
+        submitAttendance(row, next);
+      }));
       const zoomBtn = row.querySelector('.qzoom-btn');
       if (zoomBtn) zoomBtn.addEventListener('click', () => sendZoomEmail(row, c.email));
     });
@@ -1423,6 +1430,7 @@ async function submitConfirmRow(row) {
 }
 
 async function submitAttendance(row, attended) {
+  // attended: true → Attended, false → No-show, null → clear
   const status = row.querySelector('.att-status');
   const btns = row.querySelectorAll('.att-btn');
   btns.forEach(b => b.disabled = true);
@@ -1436,21 +1444,36 @@ async function submitAttendance(row, attended) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    status.textContent = `✓ ${data.result}`;
-    status.style.color = 'var(--gw-green)';
-    // Update button states + row class
+    status.textContent = data.result ? `✓ ${data.result}` : '✓ Cleared';
+    status.style.color = attended === null ? 'var(--text-tertiary)' : 'var(--gw-green)';
+    // Update each button: solid if it matches current state, ghost otherwise
     btns.forEach(b => {
       b.disabled = false;
-      const isThis = (b.dataset.att === 'yes') === attended;
-      if (b.dataset.att === 'yes') {
-        b.style.background = isThis ? 'var(--gw-green)' : 'transparent';
-        b.style.color = isThis ? 'white' : 'var(--gw-green)';
+      const isYes = b.dataset.att === 'yes';
+      const isActive = (attended === true && isYes) || (attended === false && !isYes);
+      if (isYes) {
+        b.style.background = isActive ? 'var(--gw-green)' : 'transparent';
+        b.style.color = isActive ? 'white' : 'var(--gw-green)';
       } else {
-        b.style.background = isThis ? 'var(--gw-red)' : 'transparent';
-        b.style.color = isThis ? 'white' : 'var(--gw-red)';
+        b.style.background = isActive ? 'var(--gw-red)' : 'transparent';
+        b.style.color = isActive ? 'white' : 'var(--gw-red)';
       }
     });
-    row.classList.toggle('row-attended', attended);
+    // Update the row state + green wash + the inline pill next to the name
+    row.dataset.attState = attended === true ? 'Attended' : attended === false ? 'No-show' : '';
+    row.classList.toggle('row-attended', attended === true);
+    // Remove the existing pill (if any) and re-render
+    const nameEl = row.querySelector('.qname');
+    if (nameEl) {
+      nameEl.querySelectorAll('span').forEach(s => {
+        if (s.textContent === 'Attended' || s.textContent === 'No-show' || s.textContent === 'Walk-in') s.remove();
+      });
+      if (attended === true) {
+        nameEl.insertAdjacentHTML('beforeend', `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-green-soft);color:var(--gw-green);margin-left:6px;">Attended</span>`);
+      } else if (attended === false) {
+        nameEl.insertAdjacentHTML('beforeend', `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-red-soft);color:var(--gw-red);margin-left:6px;">No-show</span>`);
+      }
+    }
   } catch (e) {
     status.textContent = `✕ ${e.message}`;
     status.style.color = 'var(--gw-red)';

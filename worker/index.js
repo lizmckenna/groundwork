@@ -1978,9 +1978,11 @@ async function attendanceLog(request, env) {
   const body = await request.json();
   const { contact_id, attended } = body;
   if (!contact_id) return json({ error: 'contact_id required' }, 400);
-  if (typeof attended !== 'boolean') return json({ error: 'attended (bool) required' }, 400);
+  // attended: true → Attended, false → No-show, null → clear (delete only)
+  if (attended !== true && attended !== false && attended !== null) {
+    return json({ error: 'attended must be true, false, or null' }, 400);
+  }
   const date = todayCT();
-  const result = attended ? 'Attended' : 'No-show';
 
   // Delete any prior attendance log for this contact for the 5/26 event
   const dupFilter = `AND({event}='Orientation 5/26',{method}='Event attendance',OR({result}='Attended',{result}='No-show'))`;
@@ -2001,7 +2003,13 @@ async function attendanceLog(request, env) {
     await fetch(u, { method: 'DELETE', headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}` } });
   }
 
-  // Create the new attendance log
+  // If clearing, just stop after the delete
+  if (attended === null) {
+    await invalidateReadCaches(env);
+    return json({ ok: true, contact_id, result: null });
+  }
+
+  const result = attended ? 'Attended' : 'No-show';
   await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
     method: 'POST',
     body: JSON.stringify({
