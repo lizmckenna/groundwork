@@ -507,16 +507,25 @@ async function authVerify(request, env) {
   return json({ ok: true, session_token: sessionToken, email });
 }
 
+// Schools whose parents are organized by their own school teams — exclude from
+// any organizer's call queue. Matches via case-insensitive "contains" so all
+// spelling variants get caught (e.g. "Hale Cook Elementary", "FLA/Holliday").
+const EXCLUDED_SCHOOL_PATTERNS = ['hale cook', 'fla', 'border star', 'bsm'];
+
 function prospectsFilter(organizerName) {
   const id = organizerName ? ORGANIZER_IDS[organizerName] : null;
   const orgClause = id ? `,FIND('${id}',ARRAYJOIN({assigned_organizer}))>0` : '';
+  const schoolExcl = EXCLUDED_SCHOOL_PATTERNS
+    .map(p => `FIND('${p}',LOWER({school}&''))=0`)
+    .join(',');
   return `AND(
     OR({leader_ladder}='Prospect',{leader_ladder}='Supporter',{leader_ladder}='Leader'),
     OR({last_attempt_date}=BLANK(), DATETIME_DIFF(TODAY(), {last_attempt_date}, 'days') > 7),
     NOT({last_attempt_result}='Signed up'),
     NOT({last_attempt_result}='Skipped'),
     NOT({last_attempt_result}='Wrong number'),
-    NOT({last_attempt_result}='Do not contact')
+    NOT({last_attempt_result}='Do not contact'),
+    ${schoolExcl}
     ${orgClause}
   )`.replace(/\s+/g, '');
 }
