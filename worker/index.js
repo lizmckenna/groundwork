@@ -96,6 +96,7 @@ export default {
       if (url.pathname === '/event-rsvp' && request.method === 'POST') return await eventRsvp(request, env);
       // Admin endpoints — gated by X-Admin-Key header instead of session token
       if (url.pathname === '/admin/dedupe-merge' && request.method === 'POST') return await adminDedupeMerge(request, env);
+      if (url.pathname === '/admin/contacts-dump' && request.method === 'GET') return await adminContactsDump(request, env, url);
       const sessionToken = request.headers.get('X-Groundwork-Session');
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
@@ -1522,4 +1523,24 @@ async function adminDedupeMerge(request, env) {
 
   if (!dryRun) await invalidateReadCaches(env);
   return json({ ok: true, dry_run: dryRun, clusters: results });
+}
+
+// =========================================================================
+// /admin/contacts-dump — admin-key gated. Paginated dump of all contacts.
+// Query params: ?page_size=100&offset=...  Returns: { records, offset }
+// =========================================================================
+async function adminContactsDump(request, env, urlObj) {
+  const key = request.headers.get('X-Admin-Key');
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+  const pageSize = Math.min(parseInt(urlObj.searchParams.get('page_size') || '100'), 100);
+  const reqOffset = urlObj.searchParams.get('offset') || '';
+  const fields = ['Name','first','last','email','phone','school','district','county','city','zip','street_address','leader_ladder','assigned_organizer','source'];
+  let q = `?pageSize=${pageSize}`;
+  for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+  if (reqOffset) q += `&offset=${encodeURIComponent(reqOffset)}`;
+  const data = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+  return json({
+    records: data.records.map(r => ({ id: r.id, ...r.fields })),
+    offset: data.offset || null,
+  });
 }
