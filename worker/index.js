@@ -111,6 +111,38 @@ export default {
       if (url.pathname === '/admin/log-debug' && request.method === 'GET') return await adminLogDebug(request, env, url);
       if (url.pathname === '/admin/recent-debug' && request.method === 'GET') return await adminRecentDebug(request, env, url);
       if (url.pathname === '/admin/bulk-reassign' && request.method === 'POST') return await adminBulkReassign(request, env);
+      if (url.pathname === '/admin/reassign-website-signups' && request.method === 'POST') return await adminReassignWebsiteSignups(request, env);
+      if (url.pathname === '/admin/org-set' && request.method === 'GET') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const org = url.searchParams.get('organizer');
+        const orgFullName = organizerName(org);
+        if (!orgFullName) return json({ error: 'unknown organizer' }, 400);
+        const filter = `FIND('${orgFullName}',{assigned_organizer}&'')>0`;
+        const ids = [];
+        let offset = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100&fields%5B%5D=Name&fields%5B%5D=assigned_organizer&fields%5B%5D=last_attempt_result&fields%5B%5D=source`;
+          if (offset) q += `&offset=${offset}`;
+          const data = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          for (const r of data.records) ids.push({ id: r.id, name: r.fields.Name, assigned: r.fields.assigned_organizer, last_result: r.fields.last_attempt_result, source: r.fields.source });
+          offset = data.offset;
+        } while (offset);
+        return json({ organizer: org, filter, count: ids.length, contacts: ids });
+      }
+      if (url.pathname === '/admin/cache-flush' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        await invalidateReadCaches(env);
+        return json({ ok: true, flushed: READ_CACHE_KEYS.length });
+      }
+      if (url.pathname.startsWith('/admin/contact/') && request.method === 'GET') {
+        const cid = url.pathname.split('/').pop();
+        const key2 = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || key2 !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const data = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
+        return json({ id: data.id, ...data.fields });
+      }
       const sessionToken = request.headers.get('X-Groundwork-Session');
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
@@ -119,6 +151,8 @@ export default {
       if (url.pathname === '/undo' && request.method === 'POST') return await undoSave(request, env);
       if (url.pathname === '/confirmees') return await getConfirmees(env, url);
       if (url.pathname === '/confirm-log' && request.method === 'POST') return await confirmLog(request, env);
+      if (url.pathname === '/attendance-log' && request.method === 'POST') return await attendanceLog(request, env);
+      if (url.pathname === '/walkin' && request.method === 'POST') return await walkinSignup(request, env);
       if (url.pathname === '/today-stats') return await getTodayStats(env, url);
       if (url.pathname === '/recent-activity') return await getRecentActivity(env, url);
       if (url.pathname === '/search') return await searchContacts(env, url);
@@ -916,6 +950,26 @@ async function getConfirmees(env, urlObj) {
     offset = d.offset;
   } while (offset);
 
+  // Attendance logs (Orientation 5/26 + method='Event attendance' + result='Attended' or 'No-show')
+  const attendanceByContact = {};
+  const af = `AND({event}='Orientation 5/26',{method}='Event attendance',OR({result}='Attended',{result}='No-show',{result}='Walk-in'))`;
+  offset = null;
+  do {
+    let aq = `?filterByFormula=${encodeURIComponent(af)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=result&fields%5B%5D=date`;
+    if (offset) aq += `&offset=${offset}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${aq}`);
+    for (const r of d.records) {
+      const cid = (r.fields.contact || [])[0];
+      if (!cid) continue;
+      // Keep most-recent attendance result
+      const prev = attendanceByContact[cid];
+      if (!prev || (r.fields.date && r.fields.date > prev.date)) {
+        attendanceByContact[cid] = { result: r.fields.result, date: r.fields.date };
+      }
+    }
+    offset = d.offset;
+  } while (offset);
+
   const stateByContact = {};
   const rank = { 'Confirmed': 5, 'Cancelled': 4, 'Declined': 3, 'No answer': 2, 'Reminder sent': 1 };
   for (const r of confirmLogs) {
@@ -944,6 +998,7 @@ async function getConfirmees(env, urlObj) {
     last_attempt_date: r.fields.last_attempt_date || '',
     source: r.fields.source || '',
     confirm: stateByContact[r.id] || { email_sent: false, text_sent: false, call_made: false, status: null, last_date: null },
+    attendance: attendanceByContact[r.id]?.result || null,
   }));
   await cachePut(env, cacheKey, payload);
   return json(payload);
@@ -1130,12 +1185,14 @@ async function getRecentActivity(env, url) {
   const allowedIds = organizer ? await organizerContactIds(env, organizer) : null;
 
   const byDate = {};
+  // Only count actual organizer outreach methods. Skip system events (Event attendance,
+  // RSVP, Commitment) and auto-generated confirmation emails (Confirm 5/26).
+  const OUTREACH_METHODS = new Set(['Call','Text','Email']);
   for (const r of records) {
     const d = r.fields.date;
     if (!d) continue;
     if (r.fields.event === CONFIRM_EVENT) continue;
-    // Exclude system-generated form signups (not outreach work the organizer did)
-    if (r.fields.method === 'Event attendance') continue;
+    if (!OUTREACH_METHODS.has(r.fields.method)) continue;
     const cid = (r.fields.contact || [])[0];
     if (!cid) continue;
     if (allowedIds && !allowedIds.has(cid)) continue;
@@ -1742,14 +1799,15 @@ async function adminRecentDebug(request, env, urlObj) {
   let droppedConfirm = 0;
   let droppedNoContact = 0;
   let droppedOrgFilter = 0;
-  let droppedSignupAttribution = 0;
+  let droppedNotOutreach = 0;
   let kept = 0;
   const byDate = {};
+  const OUTREACH_METHODS = new Set(['Call','Text','Email']);
   for (const r of records) {
     const d = r.fields.date;
     if (!d) { droppedNoContact++; continue; }
     if (r.fields.event === CONFIRM_EVENT) { droppedConfirm++; continue; }
-    if (r.fields.method === 'Event attendance') { droppedSignupAttribution++; continue; }
+    if (!OUTREACH_METHODS.has(r.fields.method)) { droppedNotOutreach++; continue; }
     const cid = (r.fields.contact || [])[0];
     if (!cid) { droppedNoContact++; continue; }
     if (allowedIds && !allowedIds.has(cid)) { droppedOrgFilter++; continue; }
@@ -1771,7 +1829,7 @@ async function adminRecentDebug(request, env, urlObj) {
     confirm_event_constant: CONFIRM_EVENT,
     raw_log_count: totalRecords,
     dropped_confirm: droppedConfirm,
-    dropped_signup_attribution: droppedSignupAttribution,
+    dropped_not_outreach: droppedNotOutreach,
     dropped_no_contact: droppedNoContact,
     dropped_org_filter: droppedOrgFilter,
     kept: kept,
@@ -1830,4 +1888,225 @@ async function adminBulkReassign(request, env) {
   }
   await invalidateReadCaches(env);
   return json({ dry_run: false, filter, match_count: matches.length, updated_count: updated.length, errors });
+}
+
+// =========================================================================
+// /admin/reassign-website-signups — admin-key gated.
+// Body: { from: 'lanee', to: 'stephanie', dry_run: bool }
+// Find all contacts currently assigned to `from` that have a log entry with
+// method='Event attendance' (signaling they signed up via the website form),
+// then reassign them to `to`.
+// =========================================================================
+async function adminReassignWebsiteSignups(request, env) {
+  const key = request.headers.get('X-Admin-Key');
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+  const body = await request.json();
+  const fromName = organizerName(body.from);
+  const toId = organizerId(body.to);
+  const dryRun = !!body.dry_run;
+  if (!fromName) return json({ error: 'unknown from organizer' }, 400);
+  if (!toId) return json({ error: 'unknown to organizer' }, 400);
+
+  // Step 1: get all logs with method='Event attendance' — these are website signups
+  const logFilter = `{method}='Event attendance'`;
+  const signupContactIds = new Set();
+  let offset = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(logFilter)}&pageSize=100&fields%5B%5D=contact`;
+    if (offset) q += `&offset=${offset}`;
+    const data = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of data.records) {
+      const cid = (r.fields.contact || [])[0];
+      if (cid) signupContactIds.add(cid);
+    }
+    offset = data.offset;
+  } while (offset);
+
+  // Step 2: get all contacts currently assigned to `from`
+  const orgFilter = `FIND('${fromName}',{assigned_organizer}&'')>0`;
+  const fromContacts = [];
+  offset = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(orgFilter)}&pageSize=100&fields%5B%5D=Name`;
+    if (offset) q += `&offset=${offset}`;
+    const data = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of data.records) fromContacts.push({ id: r.id, name: r.fields.Name });
+    offset = data.offset;
+  } while (offset);
+
+  // Step 3: intersect — website signups assigned to `from`
+  const matches = fromContacts.filter(c => signupContactIds.has(c.id));
+
+  if (dryRun) {
+    return json({
+      dry_run: true,
+      total_website_signups: signupContactIds.size,
+      total_from_contacts: fromContacts.length,
+      match_count: matches.length,
+      sample: matches.slice(0, 10),
+    });
+  }
+
+  // Step 4: batch reassign (10 per PATCH)
+  const updated = [];
+  const errors = [];
+  for (let i = 0; i < matches.length; i += 10) {
+    const batch = matches.slice(i, i + 10);
+    const records = batch.map(m => ({ id: m.id, fields: { assigned_organizer: [toId] } }));
+    try {
+      await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ records, typecast: true })
+      });
+      for (const m of batch) updated.push({ id: m.id, name: m.name });
+    } catch (e) {
+      errors.push({ batch_start: i, error: e.message });
+    }
+  }
+  await invalidateReadCaches(env);
+  return json({ dry_run: false, match_count: matches.length, updated_count: updated.length, sample: updated.slice(0, 10), errors });
+}
+
+// =========================================================================
+// /attendance-log — mark a contact as Attended or No-show for the 5/26 event.
+// Body: { contact_id, attended: true|false }
+// Creates a contact_log entry with method='Event attendance',
+// event='Orientation 5/26', result='Attended' or 'No-show'.
+// Deletes any prior attendance log for this contact today (idempotent).
+// =========================================================================
+async function attendanceLog(request, env) {
+  const body = await request.json();
+  const { contact_id, attended } = body;
+  if (!contact_id) return json({ error: 'contact_id required' }, 400);
+  if (typeof attended !== 'boolean') return json({ error: 'attended (bool) required' }, 400);
+  const date = todayCT();
+  const result = attended ? 'Attended' : 'No-show';
+
+  // Delete any prior attendance log for this contact for the 5/26 event
+  const dupFilter = `AND({event}='Orientation 5/26',{method}='Event attendance',OR({result}='Attended',{result}='No-show'))`;
+  const dupes = [];
+  let offset = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(dupFilter)}&pageSize=100&fields%5B%5D=contact`;
+    if (offset) q += `&offset=${offset}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    dupes.push(...d.records);
+    offset = d.offset;
+  } while (offset);
+  const dupIds = dupes.filter(r => (r.fields.contact || []).includes(contact_id)).map(r => r.id);
+  for (let i = 0; i < dupIds.length; i += 10) {
+    const batch = dupIds.slice(i, i + 10);
+    const u = new URL(`https://api.airtable.com/v0/${BASE}/${CONTACT_LOG_TBL}`);
+    for (const id of batch) u.searchParams.append('records[]', id);
+    await fetch(u, { method: 'DELETE', headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}` } });
+  }
+
+  // Create the new attendance log
+  await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      records: [{ fields: {
+        Summary: `${date} — ${result} (5/26 orientation)`,
+        date,
+        method: 'Event attendance',
+        result,
+        event: 'Orientation 5/26',
+        contact: [contact_id],
+      }}],
+      typecast: true,
+    }),
+  });
+  await invalidateReadCaches(env);
+  return json({ ok: true, contact_id, result });
+}
+
+// =========================================================================
+// /walkin — add a walk-in attendee. Dedupes against existing contacts (email/phone).
+// Body: { first, last, email, phone, school, district, county, city, role, organizer }
+// If existing contact found → just creates attendance log + marks Signed up.
+// If new → creates contact (assigned to specified organizer) + attendance log.
+// =========================================================================
+async function walkinSignup(request, env) {
+  const body = await request.json();
+  const { first, last, email, phone, school, district, county, city, role, organizer } = body;
+  if (!first || !last) return json({ error: 'first and last name required' }, 400);
+  const orgId = organizerId(organizer) || STEPHANIE_ID;
+  const date = todayCT();
+
+  const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
+  const cFirst = clean(first);
+  const cLast = clean(last);
+
+  // Dedupe: email first, then phone
+  let existingId = null;
+  let existingName = null;
+  if (email) {
+    const e = String(email).toLowerCase().trim();
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${e}'`)}&maxRecords=1`);
+    if (r.records.length > 0) { existingId = r.records[0].id; existingName = r.records[0].fields.Name; }
+  }
+  if (!existingId && phone) {
+    const digits = String(phone).replace(/\D/g, '').slice(-10);
+    if (digits.length === 10) {
+      const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+      if (r.records.length > 0) { existingId = r.records[0].id; existingName = r.records[0].fields.Name; }
+    }
+  }
+
+  let contactId;
+  let created = false;
+  if (existingId) {
+    contactId = existingId;
+    // Mark them as signed up too (they might not have been in the DB yet as a signup)
+    await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ fields: {
+        last_attempt_date: date,
+        last_attempt_result: 'Signed up',
+      }, typecast: true }),
+    });
+  } else {
+    const fields = {
+      first: cFirst,
+      last: cLast,
+      leader_ladder: 'Prospect',
+      assigned_organizer: [orgId],
+      source: 'walk-in 5/26',
+      last_attempt_date: date,
+      last_attempt_result: 'Signed up',
+    };
+    if (email) fields.email = String(email).toLowerCase().trim();
+    if (phone) fields.phone = String(phone).trim();
+    if (school) fields.school = String(school).trim();
+    if (district) fields.district = String(district).trim();
+    if (county) fields.county = String(county).trim();
+    if (city) fields.city = String(city).trim();
+    if (role) fields.role = Array.isArray(role) ? role : [role];
+    const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+      method: 'POST',
+      body: JSON.stringify({ records: [{ fields }], typecast: true }),
+    });
+    contactId = c.records[0].id;
+    created = true;
+  }
+
+  // Always create the attendance log marked Attended (walk-ins by definition attended)
+  await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      records: [{ fields: {
+        Summary: `${date} — Walk-in (5/26 orientation)`,
+        date,
+        method: 'Event attendance',
+        result: 'Attended',
+        event: 'Orientation 5/26',
+        contact: [contactId],
+        notes: created ? 'New walk-in contact' : `Walk-in (matched existing: ${existingName || contactId})`,
+      }}],
+      typecast: true,
+    }),
+  });
+
+  await invalidateReadCaches(env);
+  return json({ ok: true, contact_id: contactId, created, matched_existing: !created, existing_name: existingName });
 }
