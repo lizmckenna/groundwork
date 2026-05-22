@@ -534,7 +534,8 @@ function prospectsFilter(organizerName) {
     .map(r => `FIND('${r}',ARRAYJOIN({role}&''))=0`)
     .join(',');
   return `AND(
-    OR({leader_ladder}='Prospect',{leader_ladder}='Supporter',{leader_ladder}='Leader'),
+    NOT({leader_ladder}='Core Leader'),
+    NOT({leader_ladder}='Not a prospect'),
     OR({last_attempt_date}=BLANK(), DATETIME_DIFF(TODAY(), {last_attempt_date}, 'days') > 7),
     NOT({last_attempt_result}='Signed up'),
     NOT({last_attempt_result}='Skipped'),
