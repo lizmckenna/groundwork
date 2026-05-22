@@ -82,6 +82,8 @@ export default {
       if (url.pathname === '/signup' && request.method === 'POST') return await signup(request, env);
       if (url.pathname === '/house-meeting-signup' && request.method === 'POST') return await houseMeetingSignup(request, env);
       if (url.pathname === '/house-meeting-hosts' && request.method === 'GET') return await houseMeetingHosts(env);
+      if (url.pathname === '/event-detail' && request.method === 'GET') return await eventDetail(env, url);
+      if (url.pathname === '/event-rsvp' && request.method === 'POST') return await eventRsvp(request, env);
       const sessionToken = request.headers.get('X-Groundwork-Session');
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
@@ -97,6 +99,7 @@ export default {
       if (url.pathname === '/send-zoom-email' && request.method === 'POST') return await sendZoomEmailNow(request, env);
       if (url.pathname === '/event-create' && request.method === 'POST') return await createEvent(request, env);
       if (url.pathname === '/events' && request.method === 'GET') return await listEvents(env, url);
+      // Note: /event-detail and /event-rsvp are below in the public route block
       return json({ error: 'not found' }, 404);
     } catch (e) {
       return json({ error: e.message }, 500);
@@ -1084,6 +1087,7 @@ async function createEvent(request, env) {
     ok: true,
     event_id: eventId,
     name: eventName,
+    rsvp_url: `https://parents4mopublicschools.org/rsvp/?event=${eventId}`,
     sign_in_url: `https://parents4mopublicschools.org/house-meeting/?event=${eventId}`,
   });
 }
@@ -1106,4 +1110,143 @@ async function listEvents(env, url) {
     host: r.fields.host || '',
     location: r.fields.location || '',
   })));
+}
+
+// =========================================================================
+// /event-detail — public lookup of a single event by id, for the RSVP form.
+// Returns minimal fields needed to render "RSVP to [name] on [date]".
+// =========================================================================
+async function eventDetail(env, url) {
+  const id = url.searchParams.get('id');
+  if (!id || !id.startsWith('rec')) return json({ error: 'invalid event id' }, 400);
+  try {
+    const data = await at(env, `/${BASE}/${EVENTS_TBL}/${id}`);
+    const f = data.fields || {};
+    return json({
+      id: data.id,
+      name: f.Name || '',
+      type: f.type || '',
+      date: f.date || '',
+      time: f.time || '',
+      host: f.host || '',
+      location: f.location || '',
+      notes: f.notes || '',
+    });
+  } catch (e) {
+    return json({ error: 'event not found' }, 404);
+  }
+}
+
+// =========================================================================
+// /event-rsvp — public RSVP submission. Dedupes by email/phone, creates a
+// contact_log row linked to the event with method=RSVP, result=RSVPd.
+// =========================================================================
+async function eventRsvp(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:rsvp:${ip}`;
+  const count = parseInt(await env.KV_BINDING.get(rlKey) || '0');
+  if (count >= 20) return json({ error: 'too many requests, try again later' }, 429, { 'Retry-After': '300' });
+  await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 });
+
+  const body = await request.json();
+  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+  const { event_id, first, last, phone, email, school, district, city, zip, notes } = body;
+  if (!event_id || !event_id.startsWith('rec')) return json({ error: 'event_id required' }, 400);
+  if (!first || !last || !email) return json({ error: 'first, last, and email are required' }, 400);
+
+  // Get event to know what we're RSVPing to (used in log entry)
+  let eventName = '';
+  try {
+    const evt = await at(env, `/${BASE}/${EVENTS_TBL}/${event_id}`);
+    eventName = evt.fields.Name || '';
+  } catch (e) {
+    return json({ error: 'event not found' }, 404);
+  }
+
+  const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
+  const cFirst = clean(first);
+  const cLast = clean(last);
+  const cEmail = String(email).toLowerCase().trim();
+  const cPhone = phone ? String(phone).trim() : '';
+
+  // Dedupe by email then phone
+  let existingId = null;
+  const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+  if (r.records.length > 0) existingId = r.records[0].id;
+  if (!existingId && cPhone) {
+    const digits = cPhone.replace(/\D/g, '').slice(-10);
+    if (digits.length === 10) {
+      const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+      if (r2.records.length > 0) existingId = r2.records[0].id;
+    }
+  }
+
+  // Organizer assignment by city heuristic
+  const cityLower = (city || '').toLowerCase();
+  const KC_CITIES = ['kansas city', 'independence', 'liberty', 'gladstone', 'raytown', 'grandview', "lee's summit", 'lees summit', 'blue springs', 'belton', 'overland park', 'shawnee', 'olathe'];
+  const isLaneeArea = KC_CITIES.some(c => cityLower.includes(c));
+  const organizerId = isLaneeArea ? LANEE_ID : STEPHANIE_ID;
+
+  let contactId;
+  const baseFields = {
+    first: cFirst,
+    last: cLast,
+    email: cEmail,
+    source: `event RSVP: ${eventName}`,
+  };
+  if (cPhone) baseFields.phone = cPhone;
+  if (school) baseFields.school = String(school).trim();
+  if (district) baseFields.district = String(district).trim();
+  if (city) baseFields.city = String(city).trim();
+  if (zip) baseFields.zip = String(zip).trim();
+
+  if (existingId) {
+    contactId = existingId;
+    // Don't blow away existing data — only patch fields that were provided
+    const patch = {};
+    if (school) patch.school = baseFields.school;
+    if (district) patch.district = baseFields.district;
+    if (city) patch.city = baseFields.city;
+    if (zip) patch.zip = baseFields.zip;
+    if (Object.keys(patch).length > 0) {
+      await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: patch, typecast: true })
+      });
+    }
+  } else {
+    const fields = {
+      ...baseFields,
+      leader_ladder: 'Prospect',
+      assigned_organizer: [organizerId],
+    };
+    const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+      method: 'POST',
+      body: JSON.stringify({ records: [{ fields }], typecast: true })
+    });
+    contactId = created.records[0].id;
+  }
+
+  // Log the RSVP — link to event via the contact_log linked field on Events table
+  const date = new Date().toISOString().split('T')[0];
+  await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      records: [{
+        fields: {
+          Summary: `${date} — RSVP: ${eventName}`,
+          date,
+          method: 'RSVP',
+          result: 'RSVPd',
+          event: 'Other event',
+          contact: [contactId],
+          notes: notes ? `RSVPd via shared link to: ${eventName}\n\n${notes}` : `RSVPd via shared link to: ${eventName}`,
+        }
+      }],
+      typecast: true
+    })
+  });
+
+  await invalidateReadCaches(env);
+  return json({ ok: true, contact_id: contactId, event_name: eventName });
 }

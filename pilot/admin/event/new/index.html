@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <title>Create event · Groundwork admin</title>
 <link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -238,19 +240,37 @@
       <h1 id="created-name"></h1>
 
       <div class="card">
-        <h2>Sign-in URL</h2>
-        <div class="url-box" id="url-box"></div>
+        <h2 style="margin-top:0">Share this link to recruit attendees</h2>
+        <p style="font-size:14px;line-height:1.5;color:var(--muted);margin:0 0 14px;">Text it, email it, post it, print the QR. People who click it will see the event and RSVP.</p>
+        <div class="url-box" id="rsvp-url-box"></div>
 
         <div class="qr-box">
-          <img id="qr-img" alt="QR code">
-          <div class="qr-caption">Scan to sign in</div>
+          <img id="rsvp-qr-img" alt="QR code">
+          <div class="qr-caption">Scan to RSVP</div>
         </div>
 
         <div class="actions">
-          <button id="copy-btn">Copy URL</button>
-          <a id="download-qr" class="download-qr" download>Download QR (PNG)</a>
-          <button id="new-event-btn">Create another</button>
+          <button id="copy-rsvp-btn">Copy RSVP link</button>
+          <a id="download-rsvp-qr" class="download-qr" download>Download QR (PNG)</a>
         </div>
+      </div>
+
+      <details style="margin-top:18px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 18px;">
+        <summary style="cursor:pointer;font-family:'Archivo Narrow',sans-serif;font-size:12px;text-transform:uppercase;letter-spacing:0.1em;font-weight:700;color:var(--muted);">In-event commitment sign-in link (for the host to use AT the meeting) ↓</summary>
+        <p style="font-size:13px;line-height:1.5;color:var(--muted);margin:12px 0 10px;">During the meeting, project this QR (or text the link to attendees) so they can record commitments at the end. Different form, more questions, optimized for in-person capture.</p>
+        <div class="url-box" id="signin-url-box"></div>
+        <div class="qr-box">
+          <img id="signin-qr-img" alt="Sign-in QR code">
+          <div class="qr-caption">Scan to commit</div>
+        </div>
+        <div class="actions">
+          <button id="copy-signin-btn">Copy sign-in link</button>
+          <a id="download-signin-qr" class="download-qr" download>Download QR (PNG)</a>
+        </div>
+      </details>
+
+      <div style="margin-top:18px;display:flex;justify-content:center;">
+        <button id="new-event-btn" class="primary" style="background:transparent;color:var(--ink);border:2px solid var(--ink);padding:11px 22px;">Create another event</button>
       </div>
     </div>
   </div>
@@ -394,18 +414,35 @@ function showCreated(data) {
   document.getElementById('form-view').style.display = 'none';
   document.getElementById('created').classList.add('show');
   document.getElementById('created-name').textContent = data.name;
-  document.getElementById('url-box').textContent = data.sign_in_url;
 
-  const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(data.sign_in_url)}&size=300&format=png&margin=2`;
-  document.getElementById('qr-img').src = qrUrl;
-  const dl = document.getElementById('download-qr');
-  dl.href = qrUrl;
-  dl.download = `qr-${data.event_id}.png`;
+  // RSVP URL (primary)
+  const rsvpUrl = data.rsvp_url;
+  const rsvpQr = `https://quickchart.io/qr?text=${encodeURIComponent(rsvpUrl)}&size=300&format=png&margin=2`;
+  document.getElementById('rsvp-url-box').textContent = rsvpUrl;
+  document.getElementById('rsvp-qr-img').src = rsvpQr;
+  const dlRsvp = document.getElementById('download-rsvp-qr');
+  dlRsvp.href = rsvpQr;
+  dlRsvp.download = `rsvp-qr-${data.event_id}.png`;
+  document.getElementById('copy-rsvp-btn').onclick = async () => {
+    await navigator.clipboard.writeText(rsvpUrl);
+    const btn = document.getElementById('copy-rsvp-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy RSVP link'; }, 2000);
+  };
 
-  document.getElementById('copy-btn').onclick = async () => {
-    await navigator.clipboard.writeText(data.sign_in_url);
-    document.getElementById('copy-btn').textContent = 'Copied!';
-    setTimeout(() => { document.getElementById('copy-btn').textContent = 'Copy URL'; }, 2000);
+  // Sign-in URL (secondary, inside <details>)
+  const signinUrl = data.sign_in_url;
+  const signinQr = `https://quickchart.io/qr?text=${encodeURIComponent(signinUrl)}&size=300&format=png&margin=2`;
+  document.getElementById('signin-url-box').textContent = signinUrl;
+  document.getElementById('signin-qr-img').src = signinQr;
+  const dlSignin = document.getElementById('download-signin-qr');
+  dlSignin.href = signinQr;
+  dlSignin.download = `signin-qr-${data.event_id}.png`;
+  document.getElementById('copy-signin-btn').onclick = async () => {
+    await navigator.clipboard.writeText(signinUrl);
+    const btn = document.getElementById('copy-signin-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy sign-in link'; }, 2000);
   };
 
   document.getElementById('new-event-btn').onclick = () => location.reload();
