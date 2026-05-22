@@ -98,6 +98,7 @@ export default {
       // Admin endpoints — gated by X-Admin-Key header instead of session token
       if (url.pathname === '/admin/dedupe-merge' && request.method === 'POST') return await adminDedupeMerge(request, env);
       if (url.pathname === '/admin/contacts-dump' && request.method === 'GET') return await adminContactsDump(request, env, url);
+      if (url.pathname === '/admin/role-append' && request.method === 'POST') return await adminRoleAppend(request, env);
       const sessionToken = request.headers.get('X-Groundwork-Session');
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
@@ -511,12 +512,17 @@ async function authVerify(request, env) {
 // any organizer's call queue. Matches via case-insensitive "contains" so all
 // spelling variants get caught (e.g. "Hale Cook Elementary", "FLA/Holliday").
 const EXCLUDED_SCHOOL_PATTERNS = ['hale cook', 'fla', 'border star', 'bsm'];
+// Anyone tagged with one of these roles is being engaged through their own cohort/role and shouldn't be in a cold-call queue.
+const EXCLUDED_ROLES = ['Fellow organizer'];
 
 function prospectsFilter(organizerName) {
   const id = organizerName ? ORGANIZER_IDS[organizerName] : null;
   const orgClause = id ? `,FIND('${id}',ARRAYJOIN({assigned_organizer}))>0` : '';
   const schoolExcl = EXCLUDED_SCHOOL_PATTERNS
     .map(p => `FIND('${p}',LOWER({school}&''))=0`)
+    .join(',');
+  const roleExcl = EXCLUDED_ROLES
+    .map(r => `FIND('${r}',ARRAYJOIN({role}&''))=0`)
     .join(',');
   return `AND(
     OR({leader_ladder}='Prospect',{leader_ladder}='Supporter',{leader_ladder}='Leader'),
@@ -525,7 +531,8 @@ function prospectsFilter(organizerName) {
     NOT({last_attempt_result}='Skipped'),
     NOT({last_attempt_result}='Wrong number'),
     NOT({last_attempt_result}='Do not contact'),
-    ${schoolExcl}
+    ${schoolExcl},
+    ${roleExcl}
     ${orgClause}
   )`.replace(/\s+/g, '');
 }
@@ -1553,4 +1560,41 @@ async function adminContactsDump(request, env, urlObj) {
     records: data.records.map(r => ({ id: r.id, ...r.fields })),
     offset: data.offset || null,
   });
+}
+
+// =========================================================================
+// /admin/role-append — admin-key gated. Append a role value to multiple
+// contacts' multi-select `role` field without overwriting existing values.
+// Body: { record_ids: [...], role_value: "Fellow organizer" }
+// =========================================================================
+async function adminRoleAppend(request, env) {
+  const key = request.headers.get('X-Admin-Key');
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+  const body = await request.json();
+  const ids = body.record_ids || [];
+  const value = body.role_value;
+  if (!Array.isArray(ids) || ids.length === 0) return json({ error: 'record_ids required' }, 400);
+  if (!value) return json({ error: 'role_value required' }, 400);
+
+  const results = [];
+  for (const id of ids) {
+    try {
+      const data = await at(env, `/${BASE}/${CONTACTS_TBL}/${id}`);
+      const current = Array.isArray(data.fields.role) ? data.fields.role : (data.fields.role ? [data.fields.role] : []);
+      if (current.includes(value)) {
+        results.push({ id, status: 'already-tagged', role: current });
+        continue;
+      }
+      const next = [...current, value];
+      await at(env, `/${BASE}/${CONTACTS_TBL}/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: { role: next }, typecast: true })
+      });
+      results.push({ id, status: 'updated', role: next });
+    } catch (e) {
+      results.push({ id, status: 'error', error: e.message });
+    }
+  }
+  await invalidateReadCaches(env);
+  return json({ ok: true, count: ids.length, results });
 }
