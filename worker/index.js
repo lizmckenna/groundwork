@@ -350,7 +350,7 @@ async function houseMeetingSignup(request, env) {
 
   // Organizer assignment via city heuristic; fall back to Stephanie.
   const cityLower = (city || '').toLowerCase();
-  const KC_CITIES = ['kansas city', 'independence', 'liberty', 'gladstone', 'raytown', 'grandview', 'lee\'s summit', 'lees summit', 'blue springs', 'belton'];
+  const KC_CITIES = ['kansas city', 'independence', 'liberty', 'gladstone', 'raytown', 'grandview', 'lee\'s summit', 'lees summit', 'blue springs', 'belton', 'overland park', 'shawnee', 'olathe', 'lenexa', 'leawood', 'mission', 'merriam'];
   const isLaneeArea = KC_CITIES.some(c => cityLower.includes(c));
   const organizerId = isLaneeArea ? LANEE_ID : STEPHANIE_ID;
 
@@ -521,8 +521,8 @@ async function authVerify(request, env) {
 // spelling variants get caught (e.g. "Hale Cook Elementary", "FLA/Holliday").
 const EXCLUDED_SCHOOL_PATTERNS = ['hale cook', 'fla', 'border star', 'bsm'];
 const EXCLUDED_ROLES = ['Fellow organizer'];
-// Kansas signups should never be in a Missouri Public Schools queue.
-const EXCLUDED_STATES = ['ks', 'kansas'];
+// Note: no state-based exclusion. KC-metro includes KS counties (Johnson, Wyandotte) — those are LaNeé's.
+// Stephanie's queue is just whatever's assigned to her; we manage assignments rather than filter geography.
 
 function prospectsFilter(organizerName) {
   const id = organizerName ? ORGANIZER_IDS[organizerName] : null;
@@ -533,9 +533,6 @@ function prospectsFilter(organizerName) {
   const roleExcl = EXCLUDED_ROLES
     .map(r => `FIND('${r}',ARRAYJOIN({role}&''))=0`)
     .join(',');
-  const stateExcl = EXCLUDED_STATES
-    .map(s => `LOWER({state}&'')<>'${s}'`)
-    .join(',');
   return `AND(
     OR({leader_ladder}='Prospect',{leader_ladder}='Supporter',{leader_ladder}='Leader'),
     OR({last_attempt_date}=BLANK(), DATETIME_DIFF(TODAY(), {last_attempt_date}, 'days') > 7),
@@ -544,8 +541,7 @@ function prospectsFilter(organizerName) {
     NOT({last_attempt_result}='Wrong number'),
     NOT({last_attempt_result}='Do not contact'),
     ${schoolExcl},
-    ${roleExcl},
-    ${stateExcl}
+    ${roleExcl}
     ${orgClause}
   )`.replace(/\s+/g, '');
 }
@@ -1282,7 +1278,7 @@ async function eventRsvp(request, env) {
 
   // Organizer assignment by city heuristic
   const cityLower = (city || '').toLowerCase();
-  const KC_CITIES = ['kansas city', 'independence', 'liberty', 'gladstone', 'raytown', 'grandview', "lee's summit", 'lees summit', 'blue springs', 'belton'];
+  const KC_CITIES = ['kansas city', 'independence', 'liberty', 'gladstone', 'raytown', 'grandview', "lee's summit", 'lees summit', 'blue springs', 'belton', 'overland park', 'shawnee', 'olathe', 'lenexa', 'leawood', 'mission', 'merriam'];
   const isLaneeArea = KC_CITIES.some(c => cityLower.includes(c));
   const organizerId = isLaneeArea ? LANEE_ID : STEPHANIE_ID;
 
