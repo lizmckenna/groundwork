@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Create event · Groundwork admin</title>
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #E9E5CE; --paper-2: #D9D5C0; --ink: #1A2418;
+    --rose: #B25048; --sun: #C99633; --teal: #2F5E3D;
+    --plum: #3E4F6E; --sky: #335A78; --tangerine: #B05A2C;
+    --card: #FAF6E0; --input: #FFFCEB;
+    --muted: rgba(26,36,24,0.6); --line: rgba(26,36,24,0.2);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    background-image:
+      radial-gradient(rgba(42,42,58,.05) 1px, transparent 1.4px),
+      radial-gradient(rgba(42,42,58,.035) 1px, transparent 1.2px);
+    background-size: 7px 7px, 13px 13px;
+    background-position: 0 0, 3px 3px;
+    color: var(--ink);
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    font-size: 16px; line-height: 1.55;
+    min-height: 100vh; padding: 28px 16px 64px;
+  }
+  .wrap { max-width: 600px; margin: 0 auto; }
+
+  header.brand { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+  .logo { width: 44px; height: 44px; background: var(--ink); border-radius: 22px; display: flex; align-items: center; justify-content: center; }
+  .logo .ring { width: 30px; height: 30px; background: var(--sun); border-radius: 15px; display: flex; align-items: center; justify-content: center; }
+  .logo .dot { width: 14px; height: 14px; background: var(--paper); border-radius: 7px; }
+  .brand-name {
+    font-family: 'Archivo Narrow', sans-serif;
+    font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .brand-name small { display: block; color: var(--muted); font-size: 11px; letter-spacing: 0.08em; margin-top: 2px; }
+
+  h1 { font-family: 'Archivo Narrow', sans-serif; font-weight: 700; font-size: 32px;
+       letter-spacing: 0.01em; text-transform: uppercase; margin: 0 0 8px; color: var(--ink); }
+  .eyebrow { font-family: 'Archivo Narrow', sans-serif; font-size: 11px;
+             text-transform: uppercase; letter-spacing: 0.18em; font-weight: 700;
+             color: var(--rose); margin: 0 0 8px; }
+  .lede { font-size: 14px; line-height: 1.55; color: var(--muted); margin: 0 0 24px; }
+
+  /* Card */
+  .card { background: var(--card); border: 2px solid var(--ink); border-radius: 14px;
+          padding: 22px 20px; margin-top: 18px; }
+
+  /* Form */
+  form { display: flex; flex-direction: column; gap: 14px; }
+  label.f { display: flex; flex-direction: column; gap: 6px;
+            font-family: 'Archivo Narrow', sans-serif;
+            font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
+  label.f .req-star { color: var(--rose); margin-left: 3px; }
+  input, select, textarea {
+    font-family: 'DM Sans', sans-serif; font-size: 16px;
+    padding: 12px 14px; border-radius: 8px;
+    border: 1.5px solid var(--line);
+    background: var(--input); color: var(--ink);
+    -webkit-appearance: none; appearance: none;
+    text-transform: none; letter-spacing: normal; font-weight: 400;
+    width: 100%; min-width: 0;
+  }
+  textarea { min-height: 70px; resize: vertical; }
+  select { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%231A2418' d='M0 0l6 8 6-8z'/></svg>");
+           background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--rose); background: white;
+    box-shadow: 0 0 0 3px rgba(178,80,72,0.15);
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  button.primary {
+    margin-top: 8px; padding: 14px 20px; background: var(--ink); color: var(--paper);
+    border: none; border-radius: 8px; cursor: pointer;
+    font-family: 'Archivo Narrow', sans-serif;
+    font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  button.primary:hover { background: var(--rose); }
+  button.primary:disabled { opacity: 0.5; cursor: wait; }
+
+  .status { padding: 12px 14px; border-radius: 8px; font-size: 14px; margin-top: 12px; display: none; }
+  .status.show { display: block; }
+  .status.err { background: rgba(178,80,72,0.12); color: var(--rose); border: 1px solid var(--rose); }
+
+  /* Success state */
+  .created { display: none; }
+  .created.show { display: block; }
+  .created h2 { font-family: 'Archivo Narrow', sans-serif; text-transform: uppercase;
+                font-size: 22px; margin: 0 0 16px; color: var(--teal); }
+  .url-box { background: var(--input); border: 1px solid var(--line); border-radius: 8px;
+             padding: 12px 14px; font-family: monospace; font-size: 13px;
+             word-break: break-all; margin: 8px 0 14px; }
+  .qr-box { text-align: center; padding: 16px; background: white; border-radius: 10px;
+            border: 1.5px solid var(--line); margin: 14px 0; }
+  .qr-box img { display: block; margin: 0 auto; max-width: 240px; height: auto; }
+  .qr-caption { font-family: 'Archivo Narrow', sans-serif; font-size: 11px;
+                text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);
+                margin-top: 10px; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .actions button, .actions a {
+    flex: 1; min-width: 130px; padding: 11px 14px; border-radius: 8px; cursor: pointer;
+    font-family: 'Archivo Narrow', sans-serif; font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em; text-align: center;
+    border: 1.5px solid var(--ink); background: transparent; color: var(--ink);
+    text-decoration: none;
+  }
+  .actions button:hover, .actions a:hover { background: var(--ink); color: var(--paper); }
+  .actions .download-qr { background: var(--sun); border-color: var(--sun); color: var(--ink); }
+  .actions .download-qr:hover { background: var(--ink); color: var(--paper); }
+
+  /* Login overlay */
+  .login { display: none; flex-direction: column; gap: 14px; max-width: 380px; margin: 60px auto; padding: 30px;
+           background: var(--card); border: 2px solid var(--ink); border-radius: 14px; }
+  .login.show { display: flex; }
+  .login h2 { font-family: 'Archivo Narrow', sans-serif; text-transform: uppercase;
+              font-size: 22px; margin: 0; color: var(--ink); }
+  .login p { font-size: 14px; color: var(--muted); margin: 0; }
+
+  .signed-in-as { font-family: 'Archivo Narrow', sans-serif; font-size: 11px;
+                  text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);
+                  margin: 0 0 16px; padding: 8px 12px; background: var(--paper-2);
+                  border-radius: 6px; display: inline-block; }
+  .signed-in-as button { background: none; border: none; color: var(--rose); cursor: pointer;
+                         font-family: inherit; font-size: 11px; text-transform: uppercase;
+                         letter-spacing: 0.1em; margin-left: 10px; padding: 0; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="brand">
+    <div class="logo"><div class="ring"><div class="dot"></div></div></div>
+    <div class="brand-name">Groundwork<small>Admin · Create event</small></div>
+  </header>
+
+  <!-- Login overlay -->
+  <div id="login" class="login">
+    <h2>Sign in</h2>
+    <p>Enter your email to get a sign-in link.</p>
+    <label class="f">Email
+      <input type="email" id="login-email" autocomplete="email" placeholder="you@example.com">
+    </label>
+    <button class="primary" id="login-btn">Send magic link</button>
+    <div class="status" id="login-status"></div>
+  </div>
+
+  <!-- Main app -->
+  <div id="app" style="display:none">
+    <p class="signed-in-as" id="signed-in-as"></p>
+
+    <div id="form-view">
+      <p class="eyebrow">New event</p>
+      <h1>Create event</h1>
+      <p class="lede">Fill in the event details. We'll generate a sign-in URL and QR code automatically. Attendees who scan it get added to the database, linked to this event.</p>
+
+      <div class="card">
+        <form id="event-form">
+          <label class="f"><span>Event type<span class="req-star">*</span></span>
+            <select name="type" required>
+              <option value="">— pick one —</option>
+              <option value="House meeting">House meeting</option>
+              <option value="House meeting training">House meeting training</option>
+              <option value="Amplifier training">Amplifier training</option>
+              <option value="Know Your Neighbor canvass">Know Your Neighbor canvass</option>
+              <option value="Orientation">Orientation</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
+
+          <div class="row2">
+            <label class="f"><span>Date<span class="req-star">*</span></span>
+              <input type="date" name="date" required>
+            </label>
+            <label class="f"><span>Time</span>
+              <input type="text" name="time" placeholder="e.g. 7:00 PM CT">
+            </label>
+          </div>
+
+          <label class="f">Custom event name <span style="text-transform:none;font-weight:400;color:var(--muted)">(optional — defaults to "[type] — [date]")</span>
+            <input type="text" name="name" placeholder="Auto-generated if blank">
+          </label>
+
+          <label class="f">Host <span style="text-transform:none;font-weight:400;color:var(--muted)">(person leading the meeting)</span>
+            <input type="text" name="host" placeholder="e.g. Catherine Evans">
+          </label>
+
+          <label class="f">Location
+            <input type="text" name="location" placeholder="Address or 'Zoom'">
+          </label>
+
+          <label class="f">Assigned organizer
+            <select name="assigned_organizer">
+              <option value="">— none —</option>
+              <option value="LaNeé">LaNeé Bridewell</option>
+              <option value="Stephanie">Stephanie Rittgers</option>
+            </select>
+          </label>
+
+          <label class="f">Notes
+            <textarea name="notes" placeholder="Any logistics or context"></textarea>
+          </label>
+
+          <button type="submit" class="primary" id="submit-btn">Create event →</button>
+          <div class="status" id="status"></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Success state -->
+    <div id="created" class="created">
+      <p class="eyebrow" style="color:var(--teal)">Event created</p>
+      <h1 id="created-name"></h1>
+
+      <div class="card">
+        <h2>Sign-in URL</h2>
+        <div class="url-box" id="url-box"></div>
+
+        <div class="qr-box">
+          <img id="qr-img" alt="QR code">
+          <div class="qr-caption">Scan to sign in</div>
+        </div>
+
+        <div class="actions">
+          <button id="copy-btn">Copy URL</button>
+          <a id="download-qr" class="download-qr" download>Download QR (PNG)</a>
+          <button id="new-event-btn">Create another</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
+const SESSION_KEY = 'gw_session_token';
+const EMAIL_KEY = 'gw_session_email';
+
+// ===== Auth flow =====
+async function authedFetch(path, opts = {}) {
+  const token = localStorage.getItem(SESSION_KEY);
+  if (!token) { showLogin(); throw new Error('not authed'); }
+  const headers = { ...(opts.headers || {}), 'X-Groundwork-Session': token };
+  const res = await fetch(`${WORKER}${path}`, { ...opts, headers });
+  if (res.status === 401) {
+    localStorage.removeItem(SESSION_KEY); localStorage.removeItem(EMAIL_KEY);
+    showLogin();
+    throw new Error('session expired');
+  }
+  return res;
+}
+
+function showLogin() {
+  document.getElementById('login').classList.add('show');
+  document.getElementById('app').style.display = 'none';
+}
+function showApp() {
+  document.getElementById('login').classList.remove('show');
+  document.getElementById('app').style.display = 'block';
+  const email = localStorage.getItem(EMAIL_KEY) || '';
+  document.getElementById('signed-in-as').innerHTML = `Signed in as <strong>${email}</strong> <button id="signout">sign out</button>`;
+  document.getElementById('signout').addEventListener('click', () => {
+    localStorage.removeItem(SESSION_KEY); localStorage.removeItem(EMAIL_KEY);
+    showLogin();
+  });
+}
+
+async function bootAuth() {
+  const url = new URL(location.href);
+  const codeFromLink = url.searchParams.get('token');
+  if (codeFromLink) {
+    history.replaceState({}, '', url.pathname);
+    const res = await fetch(`${WORKER}/auth/verify`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: codeFromLink }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem(SESSION_KEY, data.session_token);
+      localStorage.setItem(EMAIL_KEY, data.email);
+      return true;
+    }
+  }
+  return !!localStorage.getItem(SESSION_KEY);
+}
+
+(async () => {
+  if (await bootAuth()) showApp(); else showLogin();
+})();
+
+// Login button
+document.getElementById('login-btn').addEventListener('click', async () => {
+  const email = document.getElementById('login-email').value.trim();
+  const status = document.getElementById('login-status');
+  status.className = 'status';
+  if (!email) { status.textContent = 'enter your email'; status.classList.add('show', 'err'); return; }
+  try {
+    const res = await fetch(`${WORKER}/auth/start`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    status.textContent = data.message || 'check your email for the link';
+    status.classList.add('show');
+    status.style.background = 'rgba(47,94,61,0.12)';
+    status.style.color = 'var(--teal)';
+    status.style.border = '1px solid var(--teal)';
+  } catch (e) {
+    status.textContent = 'something went wrong, try again';
+    status.classList.add('show', 'err');
+  }
+});
+
+// Default date to today
+document.querySelector('input[name="date"]').valueAsDate = new Date();
+
+// ===== Form submit =====
+const form = document.getElementById('event-form');
+const btn = document.getElementById('submit-btn');
+const status = document.getElementById('status');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  btn.disabled = true; btn.textContent = 'Creating…';
+  status.className = 'status'; status.textContent = '';
+
+  const fd = new FormData(form);
+  const payload = {
+    name: (fd.get('name') || '').trim(),
+    type: fd.get('type'),
+    date: fd.get('date'),
+    time: (fd.get('time') || '').trim(),
+    host: (fd.get('host') || '').trim(),
+    location: (fd.get('location') || '').trim(),
+    assigned_organizer: fd.get('assigned_organizer'),
+    notes: (fd.get('notes') || '').trim(),
+  };
+
+  try {
+    const res = await authedFetch('/event-create', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      status.textContent = data.error || 'failed to create event';
+      status.classList.add('show', 'err');
+      btn.disabled = false; btn.textContent = 'Create event →';
+      return;
+    }
+    showCreated(data);
+  } catch (err) {
+    status.textContent = 'network error';
+    status.classList.add('show', 'err');
+    btn.disabled = false; btn.textContent = 'Create event →';
+  }
+});
+
+function showCreated(data) {
+  document.getElementById('form-view').style.display = 'none';
+  document.getElementById('created').classList.add('show');
+  document.getElementById('created-name').textContent = data.name;
+  document.getElementById('url-box').textContent = data.sign_in_url;
+
+  const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(data.sign_in_url)}&size=300&format=png&margin=2`;
+  document.getElementById('qr-img').src = qrUrl;
+  const dl = document.getElementById('download-qr');
+  dl.href = qrUrl;
+  dl.download = `qr-${data.event_id}.png`;
+
+  document.getElementById('copy-btn').onclick = async () => {
+    await navigator.clipboard.writeText(data.sign_in_url);
+    document.getElementById('copy-btn').textContent = 'Copied!';
+    setTimeout(() => { document.getElementById('copy-btn').textContent = 'Copy URL'; }, 2000);
+  };
+
+  document.getElementById('new-event-btn').onclick = () => location.reload();
+  window.scrollTo(0, 0);
+}
+</script>
+</body>
+</html>

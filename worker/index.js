@@ -12,12 +12,19 @@
 const BASE = 'appQdixHbuttPldx6';
 const CONTACTS_TBL = 'tblJeHqz13AOvq71A';
 const CONTACT_LOG_TBL = 'tblXQXzxf8z1oht7z';
+const EVENTS_TBL = 'tblHJG5AJagnOr33U';
 const METHOD_MAP = { called: 'Call', texted: 'Text', emailed: 'Email' };
 const METHOD_REVERSE = { Call: 'called', Text: 'texted', Email: 'emailed' };
 const CONFIRM_EVENT = 'Confirm 5/26';
 const LANEE_ID = 'rec0OmDN68hlffkTn';
 const STEPHANIE_ID = 'recnnEdYIPcclnPLY';
 const LANEE_COUNTIES = ['jackson', 'cass', 'johnson', 'platte', 'clay', 'lafayette', 'buchanan', 'ray'];
+
+// Canonical organizer mapping — name → Airtable contact record ID
+const ORGANIZER_IDS = {
+  'LaNeé': LANEE_ID,
+  'Stephanie': STEPHANIE_ID,
+};
 
 const AUTO_CONFIRM_EMAIL = false;
 const ZOOM_LINK_5_26 = 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1';
@@ -88,6 +95,8 @@ export default {
       if (url.pathname === '/search') return await searchContacts(env, url);
       if (url.pathname === '/queue-count') return await getQueueCount(env);
       if (url.pathname === '/send-zoom-email' && request.method === 'POST') return await sendZoomEmailNow(request, env);
+      if (url.pathname === '/event-create' && request.method === 'POST') return await createEvent(request, env);
+      if (url.pathname === '/events' && request.method === 'GET') return await listEvents(env, url);
       return json({ error: 'not found' }, 404);
     } catch (e) {
       return json({ error: e.message }, 500);
@@ -1021,4 +1030,65 @@ async function getRecentActivity(env, url) {
   const payload = { by_date: out };
   await cachePut(env, cacheKey, payload);
   return json(payload);
+}
+
+// =========================================================================
+// /event-create — admin endpoint to create a new event in the Events table.
+// Auth required.
+// =========================================================================
+async function createEvent(request, env) {
+  const body = await request.json();
+  const { name, type, date, time, host, location, assigned_organizer, notes } = body;
+  if (!type || !date) {
+    return json({ error: 'type and date are required' }, 400);
+  }
+
+  // Auto-generate name if not provided: "House meeting training — 2026-06-04"
+  const eventName = (name && name.trim()) || `${type} — ${date}`;
+
+  const fields = {
+    Name: eventName,
+    type,
+    date,
+  };
+  if (time && time.trim()) fields.time = time.trim();
+  if (host && host.trim()) fields.host = host.trim();
+  if (location && location.trim()) fields.location = location.trim();
+  if (notes && notes.trim()) fields.notes = notes.trim();
+  if (assigned_organizer && ORGANIZER_IDS[assigned_organizer]) {
+    fields.assigned_organizer = [ORGANIZER_IDS[assigned_organizer]];
+  }
+
+  const created = await at(env, `/${BASE}/${EVENTS_TBL}`, {
+    method: 'POST',
+    body: JSON.stringify({ records: [{ fields }], typecast: true })
+  });
+
+  const eventId = created.records[0].id;
+  return json({
+    ok: true,
+    event_id: eventId,
+    name: eventName,
+    sign_in_url: `https://parents4mopublicschools.org/house-meeting/?event=${eventId}`,
+  });
+}
+
+// =========================================================================
+// /events — list recent events (most-recent first). Auth required.
+// =========================================================================
+async function listEvents(env, url) {
+  const limit = parseInt(url.searchParams.get('limit') || '50');
+  const fields = ['Name', 'type', 'date', 'time', 'host', 'location'];
+  let q = `?maxRecords=${limit}&sort%5B0%5D%5Bfield%5D=date&sort%5B0%5D%5Bdirection%5D=desc`;
+  for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+  const data = await at(env, `/${BASE}/${EVENTS_TBL}${q}`);
+  return json(data.records.map(r => ({
+    id: r.id,
+    name: r.fields.Name || '',
+    type: r.fields.type || '',
+    date: r.fields.date || '',
+    time: r.fields.time || '',
+    host: r.fields.host || '',
+    location: r.fields.location || '',
+  })));
 }
