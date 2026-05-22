@@ -1,4 +1,4 @@
-// Groundwork pilot worker — v3.6, 2026-05-21
+// Groundwork pilot worker — v3.7-org-filter-fix, 2026-05-22
 // Merge of Liz's deployed copy edits + missing house-meeting endpoints.
 // Preserves her edits to the confirmation email:
 //   - "three other parents" (was "two")
