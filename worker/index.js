@@ -110,6 +110,7 @@ export default {
       if (url.pathname === '/admin/queue-check' && request.method === 'GET') return await adminQueueCheck(request, env, url);
       if (url.pathname === '/admin/log-debug' && request.method === 'GET') return await adminLogDebug(request, env, url);
       if (url.pathname === '/admin/recent-debug' && request.method === 'GET') return await adminRecentDebug(request, env, url);
+      if (url.pathname === '/admin/bulk-reassign' && request.method === 'POST') return await adminBulkReassign(request, env);
       const sessionToken = request.headers.get('X-Groundwork-Session');
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
@@ -1776,4 +1777,57 @@ async function adminRecentDebug(request, env, urlObj) {
     kept: kept,
     grid_squares_per_date: summary,
   });
+}
+
+// =========================================================================
+// /admin/bulk-reassign — admin-key gated. Reassign contacts matching a filter
+// from one organizer to another.
+// Body: { from: 'lanee', to: 'stephanie', source_contains: 'website signup', dry_run: bool }
+// Matches contacts currently assigned to `from` whose source field contains the substring.
+// =========================================================================
+async function adminBulkReassign(request, env) {
+  const key = request.headers.get('X-Admin-Key');
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+  const body = await request.json();
+  const fromName = organizerName(body.from);
+  const toId = organizerId(body.to);
+  const sourceContains = body.source_contains || '';
+  const dryRun = !!body.dry_run;
+  if (!fromName) return json({ error: 'unknown from organizer' }, 400);
+  if (!toId) return json({ error: 'unknown to organizer' }, 400);
+  if (!sourceContains) return json({ error: 'source_contains required' }, 400);
+
+  const filter = `AND(FIND('${fromName}',{assigned_organizer}&'')>0,FIND(LOWER('${sourceContains}'),LOWER({source}&''))>0)`;
+  const matches = [];
+  let offset = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100&fields%5B%5D=Name&fields%5B%5D=source&fields%5B%5D=assigned_organizer`;
+    if (offset) q += `&offset=${offset}`;
+    const data = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of data.records) matches.push({ id: r.id, name: r.fields.Name, source: r.fields.source });
+    offset = data.offset;
+  } while (offset);
+
+  if (dryRun) {
+    return json({ dry_run: true, filter, match_count: matches.length, sample: matches.slice(0, 10), total: matches.length });
+  }
+
+  // Batch updates — Airtable allows 10 records per PATCH
+  const updated = [];
+  const errors = [];
+  for (let i = 0; i < matches.length; i += 10) {
+    const batch = matches.slice(i, i + 10);
+    const records = batch.map(m => ({ id: m.id, fields: { assigned_organizer: [toId] } }));
+    try {
+      await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ records, typecast: true })
+      });
+      for (const m of batch) updated.push(m.id);
+    } catch (e) {
+      errors.push({ batch_start: i, error: e.message });
+    }
+  }
+  await invalidateReadCaches(env);
+  return json({ dry_run: false, filter, match_count: matches.length, updated_count: updated.length, errors });
 }
