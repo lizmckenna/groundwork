@@ -629,6 +629,7 @@
 
 // === Live Airtable wiring via Cloudflare Worker ===
 const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
+function todayCT() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date()); }
 const ORGANIZER = 'stephanie'; // server-side filters /prospects, /confirmees, /queue-count by this organizer's contacts
 const authHeaders = (extra = {}) => ({
   'X-Groundwork-Session': localStorage.getItem('gw-session') || '',
@@ -1105,8 +1106,8 @@ async function loadCumulativeGrid() {
   } catch (e) {}
   // Fallback: if no history (e.g., endpoint not deployed), at least populate today
   // from the in-page sessionActions so the user sees their current grid.
-  if (!byDate[(new Date()).toISOString().split('T')[0]]) {
-    const today = (new Date()).toISOString().split('T')[0];
+  if (!byDate[todayCT()]) {
+    const today = todayCT();
     try {
       byDate[today] = (sessionActions || []).map(a => ({
         contact_id: a.contact_id, methods: a.methods || [], outcome: a.outcome,
@@ -1114,7 +1115,7 @@ async function loadCumulativeGrid() {
     } catch (e) { byDate[today] = []; }
   }
   try {
-    const today = (new Date()).toISOString().split('T')[0];
+    const today = todayCT();
     const TODAY_GOAL = 50;
     const wrap = document.getElementById('grid-days');
     if (!wrap) return;

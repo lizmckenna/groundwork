@@ -143,6 +143,10 @@ function genToken(length = 32) {
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+// All "today" timestamps anchored to Central Time so dates match how organizers experience them.
+function todayCT() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
+}
 
 async function signup(request, env) {
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
@@ -179,7 +183,7 @@ async function signup(request, env) {
   const cLower = (county || '').toLowerCase();
   const isLanee = LANEE_COUNTIES.some(c => cLower.includes(c));
   const organizerId = isLanee ? LANEE_ID : STEPHANIE_ID;
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayCT();
 
   let contactId;
   let contactEmail = email ? String(email).toLowerCase().trim() : null;
@@ -577,7 +581,7 @@ async function logOutcome(request, env) {
   const body = await request.json();
   const { contact_id, methods = [], outcome, next_step, notes } = body;
   if (!contact_id) return json({ error: 'contact_id required' }, 400);
-  const date = new Date().toISOString().split('T')[0];
+  const date = todayCT();
   const { result, event } = resolveOutcome(outcome, methods.length);
 
   const ADMIN_OUTCOMES = ['skipped','wrong-number','do-not-contact'];
@@ -648,7 +652,7 @@ async function logOutcome(request, env) {
 }
 
 async function sendConfirmationEmail(env, toEmail, firstName, contactId) {
-  const date = new Date().toISOString().split('T')[0];
+  const date = todayCT();
   const safeName = firstName ? firstName : '';
   const greetingComma = safeName ? `, ${escapeHtml(safeName)}` : '';
   const subject = `You're in — Emergency Meeting on Public School Funding · Tue 5/26 7:30 PM CT`;
@@ -797,7 +801,7 @@ async function undoSave(request, env) {
   const body = await request.json();
   const { contact_id } = body;
   if (!contact_id) return json({ error: 'contact_id required' }, 400);
-  const date = new Date().toISOString().split('T')[0];
+  const date = todayCT();
   const filter = `{date}=DATETIME_PARSE('${date}')`;
   const allToday = [];
   let offset = null;
@@ -894,7 +898,7 @@ async function confirmLog(request, env) {
   const ALLOWED_STATUSES = [null, '', 'Confirmed', 'No answer', 'Declined', 'Cancelled', 'Reminder sent'];
   if (!ALLOWED_STATUSES.includes(status)) return json({ error: 'invalid status' }, 400);
   if (!methods.length && !status) return json({ error: 'no methods or status' }, 400);
-  const date = new Date().toISOString().split('T')[0];
+  const date = todayCT();
   const result = status || 'Reminder sent';
 
   const dupFilter = `AND({date}=DATETIME_PARSE('${date}'),{event}='${CONFIRM_EVENT}')`;
@@ -970,7 +974,7 @@ async function getTodayStats(env) {
   const cached = await cacheGet(env, 'cache:today-stats');
   if (cached) return json(cached);
 
-  const date = new Date().toISOString().split('T')[0];
+  const date = todayCT();
   const filter = `{date}=DATETIME_PARSE('${date}')`;
   const fields = ['contact','method','result','event','date'];
   let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100`;
@@ -1249,7 +1253,7 @@ async function eventRsvp(request, env) {
   }
 
   // Log the RSVP — link to event via the contact_log linked field on Events table
-  const date = new Date().toISOString().split('T')[0];
+  const date = todayCT();
   await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
     method: 'POST',
     body: JSON.stringify({
