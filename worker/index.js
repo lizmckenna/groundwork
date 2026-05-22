@@ -42,6 +42,7 @@ const ALLOWLIST = [
   'mcflemi@gmail.com',
   'tianyi@statepowerfund.org',
   'joymcushman@gmail.com',
+  'kathryn@rootedstrategy.com',
 ];
 
 const LOGIN_URL = 'https://lizmckenna.github.io/groundwork/pilot/lanee/';
