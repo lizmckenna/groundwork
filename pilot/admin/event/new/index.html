@@ -199,8 +199,26 @@
           <label class="f">Assigned organizer
             <select name="assigned_organizer">
               <option value="">— none —</option>
-              <option value="LaNeé">LaNeé Bridewell</option>
-              <option value="Stephanie">Stephanie Rittgers</option>
+              <option value="AJ">AJ</option>
+              <option value="Amber">Amber</option>
+              <option value="Ashley S">Ashley S</option>
+              <option value="Benjamin">Benjamin</option>
+              <option value="Brianna">Brianna</option>
+              <option value="David">David</option>
+              <option value="Ellen G">Ellen G</option>
+              <option value="Ellen S">Ellen S</option>
+              <option value="Jamie">Jamie</option>
+              <option value="Judy">Judy</option>
+              <option value="Kathryn">Kathryn</option>
+              <option value="Kendra">Kendra</option>
+              <option value="LaNeé">LaNeé</option>
+              <option value="Latrice">Latrice</option>
+              <option value="Melissa">Melissa</option>
+              <option value="Molly">Molly</option>
+              <option value="Nina">Nina</option>
+              <option value="Sarah">Sarah</option>
+              <option value="Sierra">Sierra</option>
+              <option value="Stephanie">Stephanie</option>
             </select>
           </label>
 
@@ -332,6 +350,15 @@ form.addEventListener('submit', async (e) => {
   status.className = 'status'; status.textContent = '';
 
   const fd = new FormData(form);
+  // Only LaNeé + Stephanie are linked-record mapped in the worker so far.
+  // For everyone else, prepend "Assigned: NAME" to notes so the assignment isn't lost.
+  const LINKED_ORGANIZERS = ['LaNeé', 'Stephanie'];
+  const organizer = fd.get('assigned_organizer') || '';
+  const rawNotes = (fd.get('notes') || '').trim();
+  let notes = rawNotes;
+  if (organizer && !LINKED_ORGANIZERS.includes(organizer)) {
+    notes = `Assigned: ${organizer}${rawNotes ? '\n\n' + rawNotes : ''}`;
+  }
   const payload = {
     name: (fd.get('name') || '').trim(),
     type: fd.get('type'),
@@ -339,8 +366,8 @@ form.addEventListener('submit', async (e) => {
     time: (fd.get('time') || '').trim(),
     host: (fd.get('host') || '').trim(),
     location: (fd.get('location') || '').trim(),
-    assigned_organizer: fd.get('assigned_organizer'),
-    notes: (fd.get('notes') || '').trim(),
+    assigned_organizer: organizer,
+    notes,
   };
 
   try {
