@@ -136,6 +136,83 @@ export default {
         await invalidateReadCaches(env);
         return json({ ok: true, flushed: READ_CACHE_KEYS.length });
       }
+      if (url.pathname === '/admin/setup-status-fields' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const out = { fields_created: [], errors: [] };
+        const fieldDefs = [
+          { name: 'confirm_5_26_status', type: 'singleSelect', options: { choices: [
+            { name: 'Confirmed', color: 'greenBright' },
+            { name: 'Declined', color: 'redBright' },
+            { name: 'Cancelled', color: 'redLight2' },
+            { name: 'No answer', color: 'grayLight2' },
+            { name: 'Reminder sent', color: 'purpleLight2' },
+          ]}},
+          { name: 'attendance_5_26_status', type: 'singleSelect', options: { choices: [
+            { name: 'Attended', color: 'greenBright' },
+            { name: 'No-show', color: 'redBright' },
+            { name: 'Walk-in', color: 'purpleBright' },
+          ]}},
+        ];
+        for (const f of fieldDefs) {
+          const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables/${CONTACTS_TBL}/fields`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(f),
+          });
+          if (r.ok) out.fields_created.push(f.name);
+          else out.errors.push({ field: f.name, status: r.status, body: await r.text() });
+        }
+        return json(out);
+      }
+      if (url.pathname === '/admin/backfill-statuses' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const confirmByContact = {};
+        const attendByContact = {};
+        const rank = { 'Confirmed': 5, 'Cancelled': 4, 'Declined': 3, 'No answer': 2, 'Reminder sent': 1 };
+        let offset = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`OR({event}='${CONFIRM_EVENT}',{event}='Orientation 5/26')`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=event&fields%5B%5D=date`;
+          if (offset) q += `&offset=${offset}`;
+          const data = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+          for (const r of data.records) {
+            const cid = (r.fields.contact || [])[0];
+            if (!cid) continue;
+            const res = r.fields.result;
+            if (r.fields.event === CONFIRM_EVENT && res) {
+              const prev = confirmByContact[cid];
+              if (!prev || (rank[res] || 0) > (rank[prev.result] || 0)) {
+                confirmByContact[cid] = { result: res, date: r.fields.date };
+              }
+            }
+            if (r.fields.event === 'Orientation 5/26' && r.fields.method === 'Event attendance' && res && ['Attended','No-show','Walk-in'].includes(res)) {
+              const prev = attendByContact[cid];
+              if (!prev || (r.fields.date && r.fields.date > prev.date)) {
+                attendByContact[cid] = { result: res, date: r.fields.date };
+              }
+            }
+          }
+          offset = data.offset;
+        } while (offset);
+        const updates = {};
+        for (const [cid, v] of Object.entries(confirmByContact)) (updates[cid] = updates[cid] || {}).confirm_5_26_status = v.result;
+        for (const [cid, v] of Object.entries(attendByContact)) (updates[cid] = updates[cid] || {}).attendance_5_26_status = v.result;
+        const ids = Object.keys(updates);
+        let ok = 0; const errors = [];
+        for (let i = 0; i < ids.length; i += 10) {
+          const batch = ids.slice(i, i + 10).map(id => ({ id, fields: updates[id] }));
+          try {
+            await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ records: batch, typecast: true }),
+            });
+            ok += batch.length;
+          } catch (e) { errors.push({ batch_start: i, error: e.message }); }
+        }
+        await invalidateReadCaches(env);
+        return json({ updated_contacts: ok, total: ids.length, errors });
+      }
       if (url.pathname.startsWith('/admin/contact/') && request.method === 'GET') {
         const cid = url.pathname.split('/').pop();
         const key2 = request.headers.get('X-Admin-Key');
@@ -1048,6 +1125,15 @@ async function confirmLog(request, env) {
     method: 'POST',
     body: JSON.stringify({ records, typecast: true })
   });
+  // Also patch the contact's denormalized status field so views show it
+  if (status) {
+    try {
+      await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: { confirm_5_26_status: status }, typecast: true }),
+      });
+    } catch (e) { /* field may not exist yet — non-fatal */ }
+  }
   await invalidateReadCaches(env);
   return json({ ok: true, created_count: created.records.length, status: result });
 }
@@ -2003,8 +2089,14 @@ async function attendanceLog(request, env) {
     await fetch(u, { method: 'DELETE', headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}` } });
   }
 
-  // If clearing, just stop after the delete
+  // If clearing, just stop after the delete + clear the contact's denormalized status
   if (attended === null) {
+    try {
+      await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: { attendance_5_26_status: null }, typecast: true }),
+      });
+    } catch (e) {}
     await invalidateReadCaches(env);
     return json({ ok: true, contact_id, result: null });
   }
@@ -2024,6 +2116,13 @@ async function attendanceLog(request, env) {
       typecast: true,
     }),
   });
+  // Patch the denormalized status field too
+  try {
+    await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ fields: { attendance_5_26_status: result }, typecast: true }),
+    });
+  } catch (e) {}
   await invalidateReadCaches(env);
   return json({ ok: true, contact_id, result });
 }
@@ -2114,6 +2213,13 @@ async function walkinSignup(request, env) {
       typecast: true,
     }),
   });
+  // Patch the denormalized status field
+  try {
+    await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ fields: { attendance_5_26_status: 'Walk-in' }, typecast: true }),
+    });
+  } catch (e) {}
 
   await invalidateReadCaches(env);
   return json({ ok: true, contact_id: contactId, created, matched_existing: !created, existing_name: existingName });
