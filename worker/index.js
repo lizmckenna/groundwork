@@ -136,6 +136,77 @@ export default {
         await invalidateReadCaches(env);
         return json({ ok: true, flushed: READ_CACHE_KEYS.length });
       }
+      if (url.pathname === '/admin/setup-hm-fields' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const out = { fields_created: [], errors: [] };
+        const defs = [
+          { name: 'house_meeting_date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+          { name: 'house_meeting_host', type: 'singleLineText' },
+          { name: 'house_meeting_commitments', type: 'multilineText' },
+        ];
+        for (const f of defs) {
+          const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables/${CONTACTS_TBL}/fields`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(f),
+          });
+          if (r.ok) out.fields_created.push(f.name);
+          else out.errors.push({ field: f.name, status: r.status, body: await r.text() });
+        }
+        return json(out);
+      }
+      if (url.pathname === '/admin/backfill-house-meetings' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        // Read all House meeting + Commitment logs grouped by contact, then patch contact
+        const dataByContact = {};
+        let offset = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`OR({method}='House meeting',{method}='Commitment')`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=method&fields%5B%5D=event&fields%5B%5D=date&fields%5B%5D=notes`;
+          if (offset) q += `&offset=${offset}`;
+          const data = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+          for (const r of data.records) {
+            const cid = (r.fields.contact || [])[0];
+            if (!cid) continue;
+            if (!dataByContact[cid]) dataByContact[cid] = { date: null, host: null, commitments: [] };
+            const d = dataByContact[cid];
+            if (r.fields.method === 'House meeting') {
+              if (!d.date || (r.fields.date && r.fields.date > d.date)) {
+                d.date = r.fields.date;
+                const notes = r.fields.notes || '';
+                const m = notes.match(/Host:\s*([^·]+)/);
+                if (m) d.host = m[1].trim();
+              }
+            }
+            if (r.fields.method === 'Commitment' && r.fields.event) {
+              if (!d.commitments.includes(r.fields.event)) d.commitments.push(r.fields.event);
+            }
+          }
+          offset = data.offset;
+        } while (offset);
+        const ids = Object.keys(dataByContact);
+        let ok = 0; const errors = [];
+        for (let i = 0; i < ids.length; i += 10) {
+          const batch = ids.slice(i, i + 10).map(id => {
+            const d = dataByContact[id];
+            const fields = {};
+            if (d.date) fields.house_meeting_date = d.date;
+            if (d.host) fields.house_meeting_host = d.host;
+            if (d.commitments.length) fields.house_meeting_commitments = d.commitments.join(' · ');
+            return { id, fields };
+          });
+          try {
+            await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ records: batch, typecast: true }),
+            });
+            ok += batch.length;
+          } catch (e) { errors.push({ batch_start: i, error: e.message }); }
+        }
+        await invalidateReadCaches(env);
+        return json({ updated_contacts: ok, total: ids.length, errors });
+      }
       if (url.pathname === '/admin/setup-status-fields' && request.method === 'POST') {
         const k = request.headers.get('X-Admin-Key');
         if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
@@ -483,23 +554,32 @@ async function houseMeetingSignup(request, env) {
   if (district) baseFields.district = String(district).trim();
   if (school) baseFields.school = String(school).trim();
 
+  // House-meeting denormalized fields (so Kathryn's view is self-contained)
+  const hmCommitmentsStr = (commitments || []).filter(c => c && c !== 'Other').join(' · ');
+  const hmFields = {
+    house_meeting_date: date,
+    house_meeting_host: host_name,
+  };
+  if (hmCommitmentsStr) hmFields.house_meeting_commitments = hmCommitmentsStr;
+
   if (existingId) {
     contactId = existingId;
-    const patch = {};
+    const patch = { ...hmFields };
     if (street_address) patch.street_address = baseFields.street_address;
     if (city) patch.city = baseFields.city;
     if (zip) patch.zip = baseFields.zip;
     if (district) patch.district = baseFields.district;
     if (school) patch.school = baseFields.school;
-    if (Object.keys(patch).length > 0) {
+    try {
       await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
         method: 'PATCH',
         body: JSON.stringify({ fields: patch, typecast: true })
       });
-    }
+    } catch (e) { /* hm fields may not exist yet — non-fatal */ }
   } else {
     const fields = {
       ...baseFields,
+      ...hmFields,
       leader_ladder: 'Prospect',
       assigned_organizer: [organizerId],
     };
