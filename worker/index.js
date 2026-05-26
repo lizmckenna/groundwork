@@ -40,6 +40,14 @@ const EVENT_NAME = 'Emergency Meeting on Public School Funding in Missouri';
 const EVENT_DATE_LABEL = 'Tuesday, May 26 · 7:30 PM CST';
 const FROM_CONFIRM = 'Parents for MO Kids <groundwork@civicpowerlab.us>';
 const REPLY_TO_CONFIRM = 'lanee4kckids@gmail.com';
+// Per-organizer reply-to override. Lookup key is the lowercase organizer slug
+// the dashboard sends (e.g. 'lanee', 'stephanie'). If not present, falls back
+// to REPLY_TO_CONFIRM above.
+const ORGANIZER_REPLY_TO = {
+  'lanee':     'lanee4kckids@gmail.com',
+  'laneé':     'lanee4kckids@gmail.com',
+  'stephanie': 'srttgrs+civicwork@gmail.com',
+};
 
 const ALLOWLIST = [
   'laneebridewell@gmail.com',
@@ -826,13 +834,13 @@ async function getQueueCount(env, urlObj) {
 
 async function sendZoomEmailNow(request, env) {
   const body = await request.json();
-  const { contact_id } = body;
+  const { contact_id, organizer } = body;
   if (!contact_id) return json({ error: 'contact_id required' }, 400);
   const contact = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`);
   const cEmail = contact.fields.email;
   const cFirst = contact.fields.first || '';
   if (!cEmail) return json({ error: 'contact has no email on file' }, 400);
-  await sendConfirmationEmail(env, cEmail, cFirst, contact_id);
+  await sendConfirmationEmail(env, cEmail, cFirst, contact_id, organizer);
   return json({ ok: true, sent_to: cEmail });
 }
 
@@ -922,10 +930,11 @@ async function logOutcome(request, env) {
   return json({ ok: true, created_count: created.records.length, confirmation_email_sent });
 }
 
-async function sendConfirmationEmail(env, toEmail, firstName, contactId) {
+async function sendConfirmationEmail(env, toEmail, firstName, contactId, organizer) {
   const date = todayCT();
   const safeName = firstName ? firstName : '';
   const greetingComma = safeName ? `, ${escapeHtml(safeName)}` : '';
+  const replyTo = ORGANIZER_REPLY_TO[String(organizer || '').toLowerCase()] || REPLY_TO_CONFIRM;
   const subject = `You're in — Emergency Meeting on Public School Funding · Tue 5/26 7:30 PM CT`;
   const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -1027,7 +1036,7 @@ Emergency Meeting on Public School Funding · Tue May 26 · 7:30 PM CT · Zoom
 
         <tr><td style="padding-top:18px;border-top:1px dashed rgba(26,36,24,.25);font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.55;color:#1A2418">
           Parents for Missouri Public Schools<br/>
-          <a href="mailto:${REPLY_TO_CONFIRM}" style="color:#1A2418;text-decoration:underline">${REPLY_TO_CONFIRM}</a>
+          <a href="mailto:${replyTo}" style="color:#1A2418;text-decoration:underline">${replyTo}</a>
         </td></tr>
 
         <tr><td style="padding:14px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:10px;line-height:1.55;letter-spacing:.12em;text-transform:uppercase;color:#1A2418;opacity:.55">
@@ -1045,7 +1054,7 @@ Emergency Meeting on Public School Funding · Tue May 26 · 7:30 PM CT · Zoom
   const emailRes = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${env.RESEND_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: FROM_CONFIRM, to: [toEmail], reply_to: REPLY_TO_CONFIRM, subject, html }),
+    body: JSON.stringify({ from: FROM_CONFIRM, to: [toEmail], reply_to: replyTo, subject, html }),
   });
   if (!emailRes.ok) throw new Error(`email send failed: ${await emailRes.text()}`);
 

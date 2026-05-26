@@ -1388,7 +1388,7 @@ async function sendZoomEmail(row, emailAddr) {
     const res = await authFetch(`${WORKER}/send-zoom-email`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact_id: row.dataset.contactId }),
+      body: JSON.stringify({ contact_id: row.dataset.contactId, organizer: 'lanee' }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
