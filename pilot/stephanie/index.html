@@ -766,7 +766,7 @@ function signalLine(c) {
 }
 
 // --- Cached counters: paint last-known values from localStorage on boot ---
-const COUNTER_CACHE_KEY = 'gw_stephanie_counter_cache_v1';
+const COUNTER_CACHE_KEY = 'gw_stephanie_counter_cache_v2';
 function readCounterCache() {
   try { return JSON.parse(localStorage.getItem(COUNTER_CACHE_KEY) || '{}'); }
   catch (e) { return {}; }

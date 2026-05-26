@@ -1398,9 +1398,20 @@ async function getConfirmees(env, urlObj) {
     ? `AND(${signupClause},FIND('${orgFullName}',{assigned_organizer}&'')>0)`
     : signupClause;
   const fields = ['Name','first','last','phone','email','school','district','last_attempt_date','source','signup_6_9_status'];
-  let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=200`;
-  for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
-  const contactsData = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+  // Paginate fully — no hard cap. Each page = 100 records.
+  const allContacts = [];
+  {
+    let coffset = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100`;
+      for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+      if (coffset) q += `&offset=${encodeURIComponent(coffset)}`;
+      const page = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      allContacts.push(...page.records);
+      coffset = page.offset;
+    } while (coffset);
+  }
+  const contactsData = { records: allContacts };
 
   const confirmLogs = [];
   let offset = null;
