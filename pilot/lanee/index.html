@@ -1336,6 +1336,15 @@ async function fetchConfirmees() {
                 ${statusSel}
               </select>
             </div>
+            <div class="qchecks">
+              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gw-orange,#f59e0b);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;" title="Same Zoom link as 5/26">6/9 Mtg</label>
+              <select class="q69-status" style="background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;">
+                <option value=""${!c.signup_6_9?' selected':''}>—</option>
+                <option value="Signed up"${c.signup_6_9==='Signed up'?' selected':''}>Signed up</option>
+                <option value="Maybe"${c.signup_6_9==='Maybe'?' selected':''}>Maybe</option>
+                <option value="Not interested"${c.signup_6_9==='Not interested'?' selected':''}>Not interested</option>
+              </select>
+            </div>
             <div class="qchecks" style="border-top:1px dashed var(--border);padding-top:10px;">
               <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;">Day of</label>
               <button class="att-btn att-attended" data-att="yes" style="padding:6px 12px;border-radius:6px;background:${att==='Attended'?'var(--gw-green)':'transparent'};color:${att==='Attended'?'white':'var(--gw-green)'};border:1px solid var(--gw-green);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✓ Attended</button>
@@ -1399,10 +1408,11 @@ async function submitConfirmRow(row) {
     .filter(i => i.checked)
     .map(i => i.dataset.cmethod);
   const statusVal = row.querySelector('.qconfirm-status').value || null;
+  const sixNineVal = row.querySelector('.q69-status').value || null;
   const status = row.querySelector('.qsave-status');
   const btn = row.querySelector('.qconfirm-save');
-  if (methods.length === 0 && !statusVal) {
-    status.textContent = '✕ Check at least one box or pick a status';
+  if (methods.length === 0 && !statusVal && !sixNineVal) {
+    status.textContent = '✕ Check a box, pick a status, or set 6/9';
     status.style.color = 'var(--gw-red)';
     return;
   }
@@ -1413,7 +1423,7 @@ async function submitConfirmRow(row) {
     const res = await authFetch(`${WORKER}/confirm-log`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact_id: row.dataset.contactId, methods, status: statusVal }),
+      body: JSON.stringify({ contact_id: row.dataset.contactId, methods, status: statusVal, signup_6_9: sixNineVal }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);

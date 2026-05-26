@@ -136,6 +136,28 @@ export default {
         await invalidateReadCaches(env);
         return json({ ok: true, flushed: READ_CACHE_KEYS.length });
       }
+      if (url.pathname === '/admin/setup-6-9-field' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const out = { fields_created: [], errors: [] };
+        const f = {
+          name: 'signup_6_9_status',
+          type: 'singleSelect',
+          options: { choices: [
+            { name: 'Signed up', color: 'greenBright' },
+            { name: 'Maybe', color: 'yellowBright' },
+            { name: 'Not interested', color: 'redLight2' },
+          ]},
+        };
+        const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables/${CONTACTS_TBL}/fields`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(f),
+        });
+        if (r.ok) out.fields_created.push(f.name);
+        else out.errors.push({ field: f.name, status: r.status, body: await r.text() });
+        return json(out);
+      }
       if (url.pathname === '/admin/setup-hm-fields' && request.method === 'POST') {
         const k = request.headers.get('X-Admin-Key');
         if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
@@ -1091,7 +1113,7 @@ async function getConfirmees(env, urlObj) {
   const filter = orgFullName
     ? `AND({last_attempt_result}='Signed up',FIND('${orgFullName}',{assigned_organizer}&'')>0)`
     : "{last_attempt_result}='Signed up'";
-  const fields = ['Name','first','last','phone','email','school','district','last_attempt_date','source'];
+  const fields = ['Name','first','last','phone','email','school','district','last_attempt_date','source','signup_6_9_status'];
   let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=200`;
   for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
   const contactsData = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
@@ -1156,6 +1178,7 @@ async function getConfirmees(env, urlObj) {
     source: r.fields.source || '',
     confirm: stateByContact[r.id] || { email_sent: false, text_sent: false, call_made: false, status: null, last_date: null },
     attendance: attendanceByContact[r.id]?.result || null,
+    signup_6_9: r.fields.signup_6_9_status || null,
   }));
   await cachePut(env, cacheKey, payload);
   return json(payload);
@@ -1163,11 +1186,13 @@ async function getConfirmees(env, urlObj) {
 
 async function confirmLog(request, env) {
   const body = await request.json();
-  const { contact_id, methods = [], status = null, notes = '' } = body;
+  const { contact_id, methods = [], status = null, notes = '', signup_6_9 = null } = body;
   if (!contact_id) return json({ error: 'contact_id required' }, 400);
   const ALLOWED_STATUSES = [null, '', 'Confirmed', 'No answer', 'Declined', 'Cancelled', 'Reminder sent'];
   if (!ALLOWED_STATUSES.includes(status)) return json({ error: 'invalid status' }, 400);
-  if (!methods.length && !status) return json({ error: 'no methods or status' }, 400);
+  const ALLOWED_6_9 = [null, '', 'Signed up', 'Maybe', 'Not interested'];
+  if (!ALLOWED_6_9.includes(signup_6_9)) return json({ error: 'invalid signup_6_9' }, 400);
+  if (!methods.length && !status && !signup_6_9) return json({ error: 'no methods or status' }, 400);
   const date = todayCT();
   const result = status || 'Reminder sent';
 
@@ -1214,8 +1239,32 @@ async function confirmLog(request, env) {
       });
     } catch (e) { /* field may not exist yet — non-fatal */ }
   }
+  // 6/9 emergency meeting tracking
+  if (signup_6_9) {
+    try {
+      await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: { signup_6_9_status: signup_6_9 }, typecast: true }),
+      });
+      // Log it as an outreach record so we have history
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          records: [{ fields: {
+            Summary: `${date} — 6/9 invite: ${signup_6_9}`,
+            date,
+            method: 'Other',
+            result: signup_6_9,
+            event: '6/9 Emergency Meeting',
+            contact: [contact_id],
+          }}],
+          typecast: true,
+        }),
+      });
+    } catch (e) { /* non-fatal */ }
+  }
   await invalidateReadCaches(env);
-  return json({ ok: true, created_count: created.records.length, status: result });
+  return json({ ok: true, created_count: created.records.length, status: result, signup_6_9 });
 }
 
 async function searchContacts(env, url) {
