@@ -784,7 +784,7 @@ function renderCachedCounters() {
     const el = document.getElementById('m-signup-current'); if (el) el.textContent = c.laneeCount;
     const t = document.getElementById('m-signup-target'); if (t && c.laneeTarget) t.textContent = c.laneeTarget;
     const bar = document.getElementById('m-signup-bar'); if (bar && c.laneeTarget) bar.style.width = `${Math.min(100, Math.round((c.laneeCount/c.laneeTarget)*100))}%`;
-    const pctEl = document.getElementById('m-signup-pct'); if (pctEl && c.laneeTarget) pctEl.textContent = `${Math.min(100, Math.round((c.laneeCount/c.laneeTarget)*100))}% to goal`;
+    const pctEl = document.getElementById('m-signup-pct'); if (pctEl && c.laneeTarget) pctEl.textContent = `${Math.round((c.laneeCount/c.laneeTarget)*100)}% to goal`;
   }
   if (c.queueCount != null) {
     const el = document.getElementById('queue-total'); if (el) el.textContent = Number(c.queueCount).toLocaleString();
@@ -1244,14 +1244,22 @@ async function loadCounters() {
     const orgTarget = 30;
     document.getElementById('org-count').textContent = orgCount;
     document.getElementById('org-target').textContent = orgTarget;
-    document.getElementById('org-bar').style.width = `${Math.min(100, Math.round((orgCount/orgTarget)*100))}%`;
+    // Bar maxes at 100% visually but the number shown is true %
+    const orgPct = Math.round((orgCount/orgTarget)*100);
+    document.getElementById('org-bar').style.width = `${Math.min(100, orgPct)}%`;
 
-    const laneeCount = mineList.filter(c => !((c.source || '').toLowerCase().includes('website'))).length;
+    // Exclude any form-based signup (Google Form import, website form, walk-in)
+    // from the personal cold-call goal — those aren't from her outreach.
+    const FORM_SOURCES = ['website','form','google','walk-in'];
+    const laneeCount = mineList.filter(c => {
+      const src = (c.source || '').toLowerCase();
+      return !FORM_SOURCES.some(s => src.includes(s));
+    }).length;
     const laneeTarget = 20;
-    const pct = Math.min(100, Math.round((laneeCount / laneeTarget) * 100));
+    const pct = Math.round((laneeCount / laneeTarget) * 100);
     document.getElementById('m-signup-current').textContent = laneeCount;
     document.getElementById('m-signup-target').textContent = laneeTarget;
-    document.getElementById('m-signup-bar').style.width = `${pct}%`;
+    document.getElementById('m-signup-bar').style.width = `${Math.min(100, pct)}%`;
     document.getElementById('m-signup-pct').textContent = `${pct}% to goal`;
     writeCounterCache({ orgCount, orgTarget, laneeCount, laneeTarget });
   } catch (e) {}
