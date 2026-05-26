@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Amendment 5 Commitment Sign-Up · Parents for MO Public Schools</title>
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Parents for Missouri Public Schools — live site palette */
+    --paper:        #E9E5CE;
+    --paper-2:      #D9D5C0;
+    --ink:          #1A2418;
+    --rose:         #B25048;  /* burgundy */
+    --sun:          #C99633;  /* gold */
+    --teal:         #2F5E3D;  /* green */
+    --plum:         #3E4F6E;
+    --sky:          #335A78;
+    --tangerine:    #B05A2C;
+
+    --card-bg:      #F4F0DA;  /* lighter than paper for the form surface */
+    --input-bg:     #FFFCEB;  /* near-white input fields */
+    --muted:        rgba(26,36,24,0.6);
+    --line:         rgba(26,36,24,0.18);
+    --line-strong:  rgba(26,36,24,0.5);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background-color: var(--paper);
+    background-image:
+      radial-gradient(rgba(42,42,58,.05) 1px, transparent 1.4px),
+      radial-gradient(rgba(42,42,58,.035) 1px, transparent 1.2px);
+    background-size: 7px 7px, 13px 13px;
+    background-position: 0 0, 3px 3px;
+    color: var(--ink);
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+    font-size: 16px; line-height: 1.55;
+    min-height: 100vh; padding: 28px 16px 64px;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; }
+
+  /* Header brand */
+  header.brand { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
+  .logo {
+    width: 48px; height: 48px; background: var(--rose);
+    border-radius: 24px; display: flex; align-items: center; justify-content: center;
+  }
+  .logo .ring {
+    width: 34px; height: 34px; background: var(--sun);
+    border-radius: 17px; display: flex; align-items: center; justify-content: center;
+  }
+  .logo .dot { width: 16px; height: 16px; background: var(--paper); border-radius: 8px; }
+  .brand-name {
+    font-family: 'Archivo Narrow', sans-serif;
+    font-weight: 700; font-size: 15px; line-height: 1.15;
+    text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink);
+  }
+
+  /* Hero */
+  .hero { margin-bottom: 22px; }
+  .eyebrow {
+    font-family: 'Archivo Narrow', sans-serif;
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em;
+    font-weight: 600; color: var(--teal); margin: 0 0 10px;
+  }
+  h1 {
+    font-family: 'Archivo Narrow', sans-serif;
+    font-weight: 700; font-size: 42px; line-height: 1;
+    letter-spacing: 0.01em; text-transform: uppercase;
+    margin: 0 0 14px; color: var(--ink);
+  }
+  .lede {
+    font-size: 15px; line-height: 1.6; margin: 0;
+    color: var(--ink);
+  }
+  .lede b { color: var(--rose); font-weight: 600; }
+
+  /* Card surface */
+  .card {
+    background: var(--card-bg); border-radius: 14px;
+    padding: 24px 20px; margin-top: 20px;
+    border: 2px solid var(--ink);
+  }
+
+  /* Form */
+  form { display: flex; flex-direction: column; gap: 4px; }
+  fieldset {
+    border: none; padding: 18px 0; margin: 0;
+    display: flex; flex-direction: column; gap: 14px;
+    border-top: 1px dashed rgba(26,36,24,0.25);
+  }
+  fieldset:first-of-type { border-top: none; padding-top: 4px; }
+  legend {
+    display: flex; align-items: center; gap: 10px;
+    font-family: 'Archivo Narrow', sans-serif;
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em;
+    font-weight: 700; padding: 0; width: 100%;
+    margin-bottom: 4px;
+  }
+  legend .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 13px;
+    color: var(--paper); font-size: 12px; font-weight: 700; letter-spacing: 0;
+    font-family: 'Archivo Narrow', sans-serif;
+  }
+  fieldset.s-meeting legend { color: var(--rose); }
+  fieldset.s-meeting legend .num { background: var(--rose); }
+  fieldset.s-you legend { color: var(--teal); }
+  fieldset.s-you legend .num { background: var(--teal); }
+  fieldset.s-addr legend { color: var(--sky); }
+  fieldset.s-addr legend .num { background: var(--sky); }
+  fieldset.s-school legend { color: var(--tangerine); }
+  fieldset.s-school legend .num { background: var(--tangerine); }
+  fieldset.s-commit legend { color: var(--plum); }
+  fieldset.s-commit legend .num { background: var(--plum); }
+
+  /* Commitment checkboxes */
+  .commits { display: flex; flex-direction: column; gap: 10px; }
+  .commit {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px 14px; background: var(--input-bg);
+    border: 1.5px solid var(--line); border-radius: 10px;
+    cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  }
+  .commit:hover { border-color: var(--rose); }
+  .commit input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none;
+    width: 22px; height: 22px; min-width: 22px;
+    margin: 1px 0 0; border: 2px solid var(--ink);
+    border-radius: 5px; background: white; cursor: pointer; position: relative;
+    flex-shrink: 0;
+  }
+  .commit input[type="checkbox"]:checked {
+    background: var(--rose); border-color: var(--rose);
+  }
+  .commit input[type="checkbox"]:checked::after {
+    content: ""; position: absolute; left: 5px; top: 1px;
+    width: 6px; height: 12px; border: solid white;
+    border-width: 0 2.5px 2.5px 0; transform: rotate(45deg);
+  }
+  .commit:has(input:checked) { border-color: var(--rose); background: #FFFCEB; }
+  .commit-text { flex: 1; font-family: 'DM Sans', sans-serif; font-size: 14px; line-height: 1.4; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .commit-text b { display: block; font-family: 'Archivo Narrow', sans-serif; text-transform: uppercase; font-size: 12px; letter-spacing: 0.08em; font-weight: 700; margin-bottom: 2px; color: var(--ink); }
+  .commit-text span { color: var(--muted); font-size: 13px; }
+  #other-text { display: none; }
+  #other-text.show { display: block; margin-top: 8px; }
+
+  label.f {
+    display: flex; flex-direction: column; gap: 6px;
+    font-family: 'Archivo Narrow', sans-serif;
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
+    font-weight: 600; color: var(--ink);
+  }
+  label.f .req-star { color: var(--rose); margin-left: 3px; }
+  input[type="text"], input[type="email"], input[type="tel"], input[type="date"] {
+    font-family: 'DM Sans', sans-serif; font-size: 16px;
+    padding: 13px 14px; border-radius: 8px;
+    border: 1.5px solid var(--line-strong);
+    background: var(--input-bg); color: var(--ink);
+    -webkit-appearance: none; appearance: none;
+    text-transform: none; letter-spacing: normal;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    width: 100%; min-width: 0; max-width: 100%;
+  }
+  input:focus {
+    outline: none; border-color: var(--rose);
+    background: #FFFCE8;
+    box-shadow: 0 0 0 3px rgba(178,80,72,0.15);
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 440px) {
+    .row3 { grid-template-columns: 1fr; }
+  }
+
+  /* Host helper */
+  .host-help {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px; color: var(--muted); margin: 0;
+    text-transform: none; letter-spacing: 0;
+    font-weight: 400; line-height: 1.45;
+  }
+
+  /* Submit */
+  button.submit {
+    margin-top: 22px; padding: 16px 22px;
+    background: var(--ink); color: var(--paper);
+    border: none; border-radius: 8px; cursor: pointer;
+    font-family: 'Archivo Narrow', sans-serif;
+    font-size: 15px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    transition: transform 0.08s, background 0.15s;
+  }
+  button.submit:hover { background: var(--rose); }
+  button.submit:active { transform: scale(0.985); }
+  button.submit:disabled { opacity: 0.55; cursor: wait; }
+
+  /* Status */
+  .status {
+    padding: 14px 16px; border-radius: 8px;
+    font-size: 14px; margin-top: 14px; display: none;
+  }
+  .status.show { display: block; }
+  .status.err {
+    background: rgba(178,80,72,0.12); color: var(--rose);
+    border: 1px solid var(--rose);
+  }
+
+  /* Success state */
+  .thanks { display: none; text-align: center; padding: 48px 24px; }
+  .thanks.show { display: block; }
+  .thanks h2 {
+    font-family: 'Archivo Narrow', sans-serif;
+    font-size: 40px; text-transform: uppercase; font-weight: 700;
+    margin: 16px 0 12px; letter-spacing: 0.01em; color: var(--ink);
+  }
+  .thanks p { font-size: 15px; line-height: 1.6; color: var(--ink); margin: 0 0 8px; }
+  .check {
+    width: 72px; height: 72px; border-radius: 36px;
+    background: var(--teal); display: inline-flex; align-items: center; justify-content: center;
+    margin-bottom: 8px;
+  }
+  .check::after {
+    content: ""; width: 18px; height: 32px; border: solid var(--paper);
+    border-width: 0 5px 5px 0; transform: rotate(45deg); margin-top: -6px;
+  }
+
+  /* Required note */
+  .req-note {
+    font-family: 'Archivo Narrow', sans-serif;
+    font-size: 11px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.12em; margin: 16px 0 0; text-align: right; font-weight: 600;
+  }
+  .req-note .star { color: var(--rose); font-weight: 700; }
+
+  /* Honeypot */
+  .hp { position: absolute; left: -9999px; width: 1px; height: 1px; }
+
+  /* Footer */
+  footer.f {
+    margin-top: 32px; padding-top: 20px;
+    border-top: 1px dashed rgba(26,36,24,0.25);
+    font-family: 'Archivo Narrow', sans-serif;
+    font-size: 11px; color: var(--muted); text-align: center;
+    letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600;
+  }
+  footer.f a { color: var(--rose); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="brand">
+    <div class="logo"><div class="ring"><div class="dot"></div></div></div>
+    <div class="brand-name">Parents for Missouri<br>Public Schools</div>
+  </header>
+
+  <div id="form-view">
+    <div class="hero">
+      <p class="eyebrow">Welcome — get involved</p>
+      <h1>Amendment 5 Commitment Sign-Up</h1>
+      <p class="lede">Add your info so we can follow up after the meeting. Takes about a minute.</p>
+    </div>
+
+    <div class="card">
+      <form id="signin">
+        <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off">
+
+        <fieldset class="s-you">
+          <legend><span class="num">1</span> You</legend>
+          <div class="row2">
+            <label class="f"><span class="lbl">First name<span class="req-star">*</span></span>
+              <input type="text" name="first" autocomplete="given-name" required>
+            </label>
+            <label class="f"><span class="lbl">Last name<span class="req-star">*</span></span>
+              <input type="text" name="last" autocomplete="family-name" required>
+            </label>
+          </div>
+          <label class="f"><span class="lbl">Phone<span class="req-star">*</span></span>
+            <input type="tel" name="phone" autocomplete="tel" placeholder="555-555-5555" required>
+          </label>
+          <label class="f"><span class="lbl">Email<span class="req-star">*</span></span>
+            <input type="email" name="email" autocomplete="email" required>
+          </label>
+        </fieldset>
+
+        <fieldset class="s-addr">
+          <legend><span class="num">2</span> Where you live</legend>
+          <label class="f">Street address
+            <input type="text" name="street_address" autocomplete="street-address">
+          </label>
+          <div class="row3">
+            <label class="f">City
+              <input type="text" name="city" autocomplete="address-level2">
+            </label>
+            <label class="f">State
+              <input type="text" name="state" value="MO" autocomplete="address-level1">
+            </label>
+            <label class="f"><span class="lbl">Zip<span class="req-star">*</span></span>
+              <input type="text" name="zip" inputmode="numeric" autocomplete="postal-code" required pattern="[0-9]{5}">
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="s-school">
+          <legend><span class="num">3</span> Your school</legend>
+          <label class="f">School district
+            <input type="text" name="district" id="district-input" list="district-list" placeholder="Start typing your district…" autocomplete="off">
+            <datalist id="district-list"></datalist>
+          </label>
+          <label class="f">School
+            <input type="text" name="school" placeholder="e.g. Border Star Montessori">
+          </label>
+        </fieldset>
+
+        <fieldset class="s-commit">
+          <legend><span class="num">4</span> What you're up for (check any)</legend>
+          <div class="commits">
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Amplifier">
+              <span class="commit-text"><b>Amplifier</b><span>Talk to 5–10 people and ask them to vote no on Amendment 5</span></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Host house meeting">
+              <span class="commit-text"><b>Host my own house meeting</b><span>Gather a few people in your circle for a conversation like this one</span></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Write your testimony">
+              <span class="commit-text"><b>Write my testimony</b><span>Share with my legislator or as a letter to the editor</span></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Join parent team at my school">
+              <span class="commit-text"><b>Join the parent team at my school</b></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Start parent team at my school">
+              <span class="commit-text"><b>Start a parent team at my own school</b></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Parent Power Camp training">
+              <span class="commit-text"><b>Attend Parent Power Camp training</b></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Regional MO launch">
+              <span class="commit-text"><b>Attend the Regional Parents for MO Public Schools launch</b><span>Date and location to come</span></span>
+            </label>
+            <label class="commit">
+              <input type="checkbox" name="commitments" value="Other" id="other-check">
+              <span class="commit-text" style="flex:1">
+                <b>Other</b>
+                <input type="text" id="other-text" name="other_text" placeholder="Tell us what you're up for" style="margin-top:6px;">
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
+        <p class="req-note"><span class="star">*</span> required</p>
+
+        <button type="submit" class="submit" id="submit-btn">Count me in →</button>
+        <div class="status" id="status"></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="thanks-view" class="thanks">
+    <div class="check"></div>
+    <h2>You're in.</h2>
+    <p>Thanks for signing up and making your commitments. We'll be in touch with what's next.</p>
+    <p style="color:var(--muted);font-size:13px;margin-top:14px;">Enjoy the meeting.</p>
+  </div>
+
+  <footer class="f">
+    <a href="https://parents4mopublicschools.org">parents4mopublicschools.org</a>
+  </footer>
+</div>
+
+<script>
+const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
+
+// MO public school districts (sourced from Wikipedia)
+const MO_DISTRICTS = ["Adrian R-II","Advance R-IV","Affton","Albany R-III","Altenburg 48","Alton R-IV","Appleton City R-II","Arcadia Valley R-II","Archie RV","Ash Grove R-IV","Aurora R-VIII","Ava R-I","Avenue City R-IX","Avilla R-XIII","Bakersfield R-IV","Ballard R-II","Bayless","Bell City R-II","Belleview R-III","Belton 124","Bernie R-XIII","Billings R-IV","Bismarck R-V","Blackwater R-II","Blair Oaks R-II","Bloomfield R-XIV","Blue Eye R-V","Blue Springs R-IV","Bolivar R-I","Boonville R-I","Bosworth R-V","Bradleyville R-I","Branson R-IV","Braymer C-4","Breckenridge R-I","Brentwood","Bronaugh R-VII","Buchanan County R-IV","Bunker R-III","Butler R-V","Cabool R-IV","Cainsville R-I","Calhoun R-VIII","Camdenton R-III","Cameron R-I","Campbell R-II","Cape Girardeau 63","Carl Junction R-I","Carrollton R-VII","Carthage R-IX","Caruthersville 18","Cass Midway R-1","Cassville R-IV","Center 58","Centerville R-I","Central R-III","Centralia R-VI","Chadwick R-I","Chaffee R-II","Charleston R-I","Chilhowee R-IV","Chillicothe R-II","Clarksburg C-2","Clarkton C-4","Clayton","Clearwater R-I","Clever R-V","Climax Springs R-IV","Clinton County R-III","Clinton School District","Cole Camp R-I","Cole County R-I","Cole County R-V","Columbia 78 School District","Community R-VI","Concordia R-II","Cooper County R-IV","Cooter R-IV","Couch R-I","Cowgill R-VI","Craig R-III","Crane R-III","Crawford County R-I","Crawford County R-II","Crocker R-II","Crystal City 47","Dadeville R-II","Dallas R-I County","Davis R-XII","DeSoto 73","Delta C-7","Delta R-5","Dent-Phelps R-III","Dexter R-XI","Diamond R-IV","Dixon R-I","Doniphan R-I","Dora R-III","Drexel R-IV","Dunklin R-V","East Buchanan County C-1","East Carter County R-II","East Lynne 40","East Newton County R-VI","East Prairie R-II","El Dorado Springs R-II","Eldon R-1","Elsberry R-II","Eminence R-I","Everton R-III","Excelsior Springs 40","Exeter R-VI","Fair Grove R-X","Fair Play R-II","Fairfax R-III","Fairview R-XI","Farmington R-VII","Fayette R-III","Ferguson-Florissant R-II","Festus R-VI","Fordland R-III","Forsyth R-III","Fort Osage R-1","Fort Zumwalt R-II","Fox C-VI","Francis Howell R-III","Franklin Co. R-II","Fredericktown R-1","Fulton 58","Gainesville School District","Galena R-II","Gallatin R-V","Gasconade C-IV","Gasconade County R-I","Gasconade County R-II","Gideon 37","Gilliam C-IV","Gilman City R-IV","Glasgow School District","Glenwood R-VIII","Golden City R-III","Grain Valley R-V","Grandview C-IV","Grandview R-II","Green Forest R-II","Green Ridge R-VIII","Greenfield R-IV","Greenville R-II","Grundy County R-V","Hale R-I","Halfway R-III","Hallsville R-IV","Hamilton R-II","Hancock Place","Hardeman R-X","Hardin-Central C-II","Harrisburg R-VIII","Harrisonville R-IX","Hartville R-II","Hayti R-II","Hazelwood","Henry County R-I","Hermitage R-IV","Hickman Mills C-1","Hickory County R-I","High Point R-III","Hillsboro R-III","Holcomb R-III","Holden R-III","Hollister R-V","Houston R-I","Howell Valley R-I","Hudson R-IX","Humansville R-IV","Hume R-VIII","Hurley R-I","Iberia R-V","Independence 30","Iron County C-4","Jackson R-2","Jamestown C-1","Jasper County R-V","Jefferson City Public Schools","Jefferson County R-VII","Jennings","Johnson Co. R-VII","Joplin Schools","Junction Hill C-12","Kansas City 33","Kearney R-1","Kelso C-7","Kennett 39","King City R-I","Kingston 42","Kingston K-14","Kingsville R-I","Kirbyville R-VI","Kirkwood R-7","Knob Noster R-VIII","La Monte R-IV","Laclede County C-V","Laclede County R-I","Ladue","Lafayette County C-1","Lakeland R-III","Lamar R-I","Laquey R-V","Laredo R-VII","Lathrop R-II","Lawson R-XIV","Lebanon R-III","Lee's Summit R-VII","Leesville R-IX","Leeton R-X","Leopold R-III","Lesterville R-IV","Lexington R-V","Liberal R-II","Liberty 53","Licking R-VIII","Lincoln R-II","Lindbergh","Livingston County R-III","Lockwood R-I","Logan-Rogersville R-VIII","Lone Jack C-VI","Lonedell R-XIV","Lutie R-VI","Macks Creek R-V","Malden R-I","Malta Bend R-V","Manes R-V","Mansfield R-IV","Maplewood-Richmond Heights","Maries County R-I","Maries County R-II","Marion C. Early R-V","Marionville R-IX","Mark Twain R-VIII","Marquand-Zion R-VI","Marshall School District","Marshfield R-I","Maysville R-I","McDonald County R-I","Meadow Heights R-II","Mehlville R-IX","Meramec Valley R-III","Mexico 59 Public Schools","Miami R-I","Miami R-I Elem.","Mid-Buchanan County R-V","Miller County R-III","Miller R-II","Mirabile C-1","Missouri City 56","Monett R-I","Moniteau County R-I","Moniteau County R-V","Montgomery County R-II","Montrose R-XIV","Morgan County R-I","Morgan County R-II","Mound City R-II","Mount Vernon R-V","Mountain Grove R-III","Mountain View-Birch Tree R-III","Naylor R-II","Neelyville R-IV","Nell Holcomb R-IV","Neosho School District","Nevada R-V","New Bloomfield R-III","New Franklin R-1","New Haven School District","New Madrid County R-I","New York R-IV","Newburg R-2","Niangua R-V","Nixa Public Schools","Norborne R-VIII","Normandy School Collaborative","North Andrew County R-VI","North Callaway County R-I","North Daviess R-III","North Harrison R-III","North Kansas City 74","North Mercer County R-III","North Pemiscot County R-I","North Platte R-I","North Saint Francois County R-1","North Wood R-IV","Northeast Vernon County R-I","Northwest R-I","Norwood R-I","Oak Grove R-VI","Oak Hill R-I","Oak Ridge R-VI","Odessa R-VII","Oran R-III","Orchard Farm R-V","Orearville R-IV","Oregon-Howell R-III","Orrick R-XI","Osage Co. R-I","Osage Co. R-II","Osage Co. R-III","Osborn R-0","Osceola School District","Otterville R-VI","Ozark R-VI","Park Hill","Parkway C-II","Pattonsburg R-II","Pattonville R-III","Pemiscot County R-III","Pemiscot County Special School District","Perry County 32","Pettis County R-V","Pettis County R-XII","Phelps County R-3","Pierce City R-VI","Pilot Grove C-4","Plainview R-VIII","Plato R-V","Platte County R-III","Pleasant Hill R-III","Pleasant Hope R-VI","Pleasant View R-VI","Polo R-VII","Poplar Bluff R-1","Portageville School District","Potosi R-3","Prairie Home R-5","Princeton R-V","Purdy R-II","Puxico R-VIII","Raymondville R-VII","Raymore-Peculiar R-II","Raytown C-II","Reeds Spring R-IV","Republic R-III","Rich Hill R-IV","Richards R-V","Richland R-I","Richland R-IV","Richmond R-XVI","Richwoods R-VII","Ridgeway R-V","Ripley Co. R-IV","Ripley County R-III","Risco R-II","Ritenour","Riverview Gardens","Rock Port R-II","Rockwood R-VI","Rolla 31 Public Schools","Roscoe C-1","Saint James R-1","Salem R-80","Santa Fe R-X","Sarcoxie R-II","Savannah R-III","School of the Osage","Scott City R-I","Scott Co. R-IV","Scott County Central","Sedalia 200","Senath-Hornersville C-8","Seneca R-VII","Seymour R-II","Shawnee R-III","Sheldon R-VIII","Shell Knob 78","Sherwood Cass R-VIII","Sikeston R-6","Silex R-I","Skyline R-II","Slater School District","Smithton R-VI","Smithville R-II","South Callaway R-II","South Harrison Co. R-II","South Holt Co. R-I","South Iron R-I","South Pemiscot Co. R-V","Southern Boone Co. R-I","Southern Reynolds Co R-II","Southland C-9","Southwest Livingston County R-I","Southwest R-V","Sparta R-III","Special School District of St. Louis County","Spickard R-II","Spokane R-VII","Spring Bluff R-XV","Springfield R-XII","St. Charles R-VI","St. Clair R-XIII","St. Elizabeth R-IV","St. Joseph School District","St. Louis City Public Schools","Stanberry R-II","Ste. Genevieve County R-II","Steelville R-III","Stewartsville C-2","Stockton R-1","Stoutland R-II","Strafford R-VI","Strain Japan R-16","Strasburg C-III","Sturgeon School District","Success School District R-VI","Sullivan School District","Summersville R-II","Sunrise R-IX","Swedeborg R-III","Sweet Springs R-VII","Taneyville R-II","Tarkio R-I","Thayer R-II","Thornfield R-I","Tina-Avalon R-II","Tipton R-VI","Trenton R-IX","Tri-County R-VII","Troy R-III","Twin Rivers R-X","Union R-XI","Union Star R-II","University City","Valley Park","Valley R-VI","Van Buren R-1","Van-Far R-I","Verona R-VII","Walnut Grove R-V","Warren County R-III","Warrensburg R-VI","Warsaw R-IX","Washington School District","Waynesville R-VI","Weaubleau R-III","Webb City R-VII","Webster Groves","Wellington-Napoleon R-IX","Wellsville Middletown R-I","Wentzville R-IV","West Plains R-7","West Platte R-II","West Saint Francois County R-IV","Westview C-VI","Wheatland R-II","Wheaton R-III","Willard R-II","Willow Springs R-IV","Windsor C-I","Winfield R-IV","Winona R-III","Winston R-VI","Woodland R-IV","Wright City R-II","Zalma R-V"];
+const dlist = document.getElementById('district-list');
+MO_DISTRICTS.forEach(d => {
+  const o = document.createElement('option');
+  o.value = d;
+  dlist.appendChild(o);
+});
+
+// Show/hide "Other" text input when its checkbox toggled
+const otherCheck = document.getElementById('other-check');
+const otherText = document.getElementById('other-text');
+otherCheck.addEventListener('change', () => {
+  otherText.classList.toggle('show', otherCheck.checked);
+  if (otherCheck.checked) otherText.focus();
+});
+
+const form = document.getElementById('signin');
+const btn = document.getElementById('submit-btn');
+const status = document.getElementById('status');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  status.className = 'status';
+  status.textContent = '';
+
+  const fd = new FormData(form);
+  const commitments = fd.getAll('commitments');
+  const payload = {
+    website: fd.get('website'),
+    first: fd.get('first'),
+    last: fd.get('last'),
+    phone: fd.get('phone'),
+    email: fd.get('email'),
+    street_address: fd.get('street_address'),
+    city: fd.get('city'),
+    state: fd.get('state'),
+    zip: fd.get('zip'),
+    district: fd.get('district'),
+    school: fd.get('school'),
+    commitments,
+    other_text: commitments.includes('Other') ? fd.get('other_text') : '',
+    source: 'amendment 5 commitment form',
+  };
+
+  try {
+    const res = await fetch(`${WORKER}/amendment5-signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      status.textContent = data.error || 'Something went wrong. Please try again.';
+      status.classList.add('show', 'err');
+      btn.disabled = false;
+      btn.textContent = 'Count me in →';
+      return;
+    }
+    document.getElementById('form-view').style.display = 'none';
+    document.getElementById('thanks-view').classList.add('show');
+    window.scrollTo(0, 0);
+  } catch (err) {
+    status.textContent = 'Network error. Please try again.';
+    status.classList.add('show', 'err');
+    btn.disabled = false;
+    btn.textContent = 'Count me in →';
+  }
+});
+</script>
+</body>
+</html>

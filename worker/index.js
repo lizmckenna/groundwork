@@ -110,6 +110,7 @@ export default {
       if (url.pathname === '/auth/verify' && request.method === 'POST') return await authVerify(request, env);
       if (url.pathname === '/signup' && request.method === 'POST') return await signup(request, env);
       if (url.pathname === '/house-meeting-signup' && request.method === 'POST') return await houseMeetingSignup(request, env);
+      if (url.pathname === '/amendment5-signup' && request.method === 'POST') return await amendment5Signup(request, env);
       if (url.pathname === '/house-meeting-hosts' && request.method === 'GET') return await houseMeetingHosts(env);
       if (url.pathname === '/event-detail' && request.method === 'GET') return await eventDetail(env, url);
       if (url.pathname === '/event-rsvp' && request.method === 'POST') return await eventRsvp(request, env);
@@ -145,6 +146,99 @@ export default {
         if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
         await invalidateReadCaches(env);
         return json({ ok: true, flushed: READ_CACHE_KEYS.length });
+      }
+      if (url.pathname === '/admin/bulk-import' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const body = await request.json();
+        const rows = body.rows || [];
+        const source = body.source || 'bulk import';
+        const signup_5_26 = body.signup_5_26 !== false;  // default true
+        const date = todayCT();
+        const results = [];
+        for (const r of rows) {
+          try {
+            const { first, last, email, phone, street_address, city, zip, county, school, district } = r;
+            if (!first || !last) { results.push({ row: r, status: 'skipped', reason: 'no name' }); continue; }
+            const cLower = (county || '').toLowerCase();
+            const isLanee = LANEE_COUNTIES.some(c => cLower.includes(c));
+            const organizerId = isLanee ? LANEE_ID : STEPHANIE_ID;
+            let existingId = null;
+            if (email) {
+              const e = String(email).toLowerCase().trim();
+              const lookup = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${e}'`)}&maxRecords=1`);
+              if (lookup.records.length > 0) existingId = lookup.records[0].id;
+            }
+            if (!existingId && phone) {
+              const digits = String(phone).replace(/\D/g, '').slice(-10);
+              if (digits.length === 10) {
+                const lookup = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+                if (lookup.records.length > 0) existingId = lookup.records[0].id;
+              }
+            }
+            let contactId, action;
+            if (existingId) {
+              contactId = existingId;
+              action = 'updated';
+              const patch = { source, assigned_organizer: [organizerId] };
+              if (signup_5_26) { patch.last_attempt_date = date; patch.last_attempt_result = 'Signed up'; }
+              if (street_address) patch.street_address = street_address;
+              if (city) patch.city = city;
+              if (zip) patch.zip = String(zip);
+              if (county) patch.county = county;
+              if (school) patch.school = school;
+              if (district) patch.district = district;
+              if (email) patch.email = String(email).toLowerCase().trim();
+              if (phone) patch.phone = String(phone).trim();
+              await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ fields: patch, typecast: true }),
+              });
+            } else {
+              action = 'created';
+              const fields = {
+                first: String(first).trim(),
+                last: String(last).trim(),
+                leader_ladder: 'Prospect',
+                assigned_organizer: [organizerId],
+                source,
+              };
+              if (email) fields.email = String(email).toLowerCase().trim();
+              if (phone) fields.phone = String(phone).trim();
+              if (street_address) fields.street_address = street_address;
+              if (city) fields.city = city;
+              if (zip) fields.zip = String(zip);
+              if (county) fields.county = county;
+              if (school) fields.school = school;
+              if (district) fields.district = district;
+              if (signup_5_26) { fields.last_attempt_date = date; fields.last_attempt_result = 'Signed up'; }
+              const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+                method: 'POST',
+                body: JSON.stringify({ records: [{ fields }], typecast: true }),
+              });
+              contactId = created.records[0].id;
+            }
+            if (signup_5_26) {
+              await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+                method: 'POST',
+                body: JSON.stringify({ records: [{ fields: {
+                  Summary: `${date} — signup 5/26 via ${source}`,
+                  date,
+                  method: 'Event attendance',
+                  result: 'Signed up',
+                  event: 'Orientation 5/26',
+                  contact: [contactId],
+                  notes: `Source: ${source}`,
+                }}], typecast: true }),
+              });
+            }
+            results.push({ contact_id: contactId, name: `${first} ${last}`, organizer: isLanee ? 'LaNeé' : 'Stephanie', action });
+          } catch (e) {
+            results.push({ row: r, status: 'error', error: e.message });
+          }
+        }
+        await invalidateReadCaches(env);
+        return json({ ok: true, processed: results.length, results });
       }
       if (url.pathname === '/admin/setup-6-9-field' && request.method === 'POST') {
         const k = request.headers.get('X-Admin-Key');
@@ -660,6 +754,137 @@ async function houseMeetingSignup(request, env) {
 
   await invalidateReadCaches(env);
   return json({ ok: true, contact_id: contactId, commitments_logged: commitments.length });
+}
+
+// =========================================================================
+// /amendment5-signup — public post-meeting commitment form.
+// Dedupes by email/phone. Routes to LaNeé (KC-metro cities) or Stephanie.
+// Date-aware: before 5/27 → counts as 5/26 attendance, after → 6/9.
+// Each commitment becomes its own contact_log row (method=Commitment).
+// =========================================================================
+async function amendment5Signup(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:am5signup:${ip}`;
+  const count = parseInt(await env.KV_BINDING.get(rlKey) || '0');
+  if (count >= 30) return json({ error: 'too many requests, try again later' }, 429, { 'Retry-After': '300' });
+  await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 });
+
+  const body = await request.json();
+  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+  const { first, last, phone, email, street_address, city, state, zip, district, school, commitments = [], other_text, source } = body;
+  if (!first || !last || !phone || !email || !zip) {
+    return json({ error: 'first, last, phone, email, and zip are required' }, 400);
+  }
+
+  const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
+  const cFirst = clean(first);
+  const cLast = clean(last);
+  const cEmail = String(email).toLowerCase().trim();
+  const cPhone = String(phone).trim();
+
+  // Dedupe by email then phone
+  let existingId = null;
+  const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+  if (r.records.length > 0) existingId = r.records[0].id;
+  if (!existingId) {
+    const digits = cPhone.replace(/\D/g, '').slice(-10);
+    if (digits.length === 10) {
+      const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+      if (r2.records.length > 0) existingId = r2.records[0].id;
+    }
+  }
+
+  // Organizer assignment: city heuristic (no county lookup table in worker)
+  const cityLower = (city || '').toLowerCase();
+  const KC_CITIES = ['kansas city','independence','liberty','gladstone','raytown','grandview',"lee's summit",'lees summit','blue springs','belton','overland park','shawnee','olathe','lenexa','leawood','mission','merriam'];
+  const isLaneeArea = KC_CITIES.some(c => cityLower.includes(c));
+  const organizerId = isLaneeArea ? LANEE_ID : STEPHANIE_ID;
+
+  // Determine which event this commitment belongs to based on today's date
+  const today = todayCT();
+  const isAfter526 = today > '2026-05-26';
+  const eventName = isAfter526 ? '6/9 Emergency Meeting' : 'Orientation 5/26';
+  const eventKey = isAfter526 ? '6_9' : '5_26';
+
+  // Build contact field updates
+  const baseFields = {
+    first: cFirst,
+    last: cLast,
+    email: cEmail,
+    phone: cPhone,
+    source: source || 'amendment 5 commitment form',
+  };
+  if (street_address) baseFields.street_address = String(street_address).trim();
+  if (city) baseFields.city = String(city).trim();
+  if (zip) baseFields.zip = String(zip).trim();
+  if (district) baseFields.district = String(district).trim();
+  if (school) baseFields.school = String(school).trim();
+  // Mark as signed-up for the appropriate event
+  baseFields.last_attempt_date = today;
+  if (isAfter526) {
+    baseFields.signup_6_9_status = 'Signed up';
+  } else {
+    baseFields.last_attempt_result = 'Signed up';
+  }
+
+  let contactId;
+  if (existingId) {
+    contactId = existingId;
+    try {
+      await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: baseFields, typecast: true })
+      });
+    } catch (e) { /* non-fatal — continue with log creation */ }
+  } else {
+    const fields = { ...baseFields, leader_ladder: 'Prospect', assigned_organizer: [organizerId] };
+    const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+      method: 'POST',
+      body: JSON.stringify({ records: [{ fields }], typecast: true })
+    });
+    contactId = created.records[0].id;
+  }
+
+  // Create the meeting-attendance log
+  const logRecords = [{
+    fields: {
+      Summary: `${today} — Amendment 5 commitment (${eventName})`,
+      date: today,
+      method: 'Event attendance',
+      result: 'Signed up',
+      event: eventName,
+      contact: [contactId],
+      notes: `Amendment 5 commitment form${commitments.length ? ` · Commitments: ${commitments.join(', ')}` : ''}${other_text ? ` · Other: ${other_text}` : ''}`,
+    }
+  }];
+
+  // One commitment-log row per checked commitment
+  for (const c of commitments) {
+    if (c === 'Other') continue;
+    logRecords.push({
+      fields: {
+        Summary: `${today} — commitment: ${c}`,
+        date: today,
+        method: 'Commitment',
+        result: 'Committed',
+        event: c,
+        contact: [contactId],
+        notes: `From Amendment 5 commitment form (${eventName})`,
+      }
+    });
+  }
+
+  // Batch in 10s for Airtable
+  for (let i = 0; i < logRecords.length; i += 10) {
+    const batch = logRecords.slice(i, i + 10);
+    await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+      method: 'POST',
+      body: JSON.stringify({ records: batch, typecast: true })
+    });
+  }
+
+  await invalidateReadCaches(env);
+  return json({ ok: true, contact_id: contactId, commitments_logged: commitments.length, event: eventName });
 }
 
 // Pages the magic link is allowed to land on (open-redirect protection).
