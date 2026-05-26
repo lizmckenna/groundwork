@@ -240,6 +240,20 @@ export default {
         await invalidateReadCaches(env);
         return json({ ok: true, processed: results.length, results });
       }
+      if (url.pathname === '/admin/setup-a5-field' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const out = { fields_created: [], errors: [] };
+        const f = { name: 'amendment5_commitments', type: 'multilineText' };
+        const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables/${CONTACTS_TBL}/fields`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(f),
+        });
+        if (r.ok) out.fields_created.push(f.name);
+        else out.errors.push({ status: r.status, body: await r.text() });
+        return json(out);
+      }
       if (url.pathname === '/admin/setup-6-9-field' && request.method === 'POST') {
         const k = request.headers.get('X-Admin-Key');
         if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
@@ -825,6 +839,13 @@ async function amendment5Signup(request, env) {
     baseFields.signup_6_9_status = 'Signed up';
   } else {
     baseFields.last_attempt_result = 'Signed up';
+  }
+  // Denormalize commitments onto the contact so Ellen's call-through view is self-contained
+  const commitmentList = (commitments || []).filter(c => c && c !== 'Other');
+  if (commitmentList.length > 0 || (other_text && commitments.includes('Other'))) {
+    const parts = commitmentList.slice();
+    if (other_text && commitments.includes('Other')) parts.push(`Other: ${other_text}`);
+    baseFields.amendment5_commitments = parts.join(' · ');
   }
 
   let contactId;
