@@ -19,6 +19,18 @@ const CONFIRM_EVENT = 'Confirm 5/26';
 const LANEE_ID = 'rec0OmDN68hlffkTn';
 const STEPHANIE_ID = 'recnnEdYIPcclnPLY';
 const LANEE_COUNTIES = ['jackson', 'cass', 'johnson', 'platte', 'clay', 'lafayette', 'buchanan', 'ray'];
+// KC-metro cities — fallback when no county is supplied
+const LANEE_KC_CITIES = ['kansas city','independence','liberty','gladstone','raytown','grandview',"lee's summit",'lees summit','blue springs','belton','overland park','shawnee','olathe','lenexa','leawood','mission','merriam'];
+// KC-metro ZIP prefixes — 640xx & 641xx (MO Jackson/Clay/Platte/Cass/Lafayette/Ray) + 660-662 (KS Johnson/Wyandotte)
+function deriveOrganizerId({ county, city, zip }) {
+  const c = (county || '').toLowerCase();
+  if (c && LANEE_COUNTIES.some(x => c.includes(x))) return LANEE_ID;
+  const ci = (city || '').toLowerCase();
+  if (ci && LANEE_KC_CITIES.some(x => ci.includes(x))) return LANEE_ID;
+  const z = String(zip || '').trim();
+  if (/^64[01]\d{2}$/.test(z) || /^66[012]\d{2}$/.test(z)) return LANEE_ID;
+  return STEPHANIE_ID;
+}
 
 // Canonical organizer mapping — keys are LOWERCASE to match what pages send.
 // Always look up via organizerId(name) to normalize case.
@@ -160,9 +172,8 @@ export default {
           try {
             const { first, last, email, phone, street_address, city, zip, county, school, district } = r;
             if (!first || !last) { results.push({ row: r, status: 'skipped', reason: 'no name' }); continue; }
-            const cLower = (county || '').toLowerCase();
-            const isLanee = LANEE_COUNTIES.some(c => cLower.includes(c));
-            const organizerId = isLanee ? LANEE_ID : STEPHANIE_ID;
+            const organizerId = deriveOrganizerId({ county, city, zip });
+            const isLanee = organizerId === LANEE_ID;
             let existingId = null;
             if (email) {
               const e = String(email).toLowerCase().trim();
@@ -525,9 +536,7 @@ async function signup(request, env) {
     }
   }
 
-  const cLower = (county || '').toLowerCase();
-  const isLanee = LANEE_COUNTIES.some(c => cLower.includes(c));
-  const organizerId = isLanee ? LANEE_ID : STEPHANIE_ID;
+  const organizerId = deriveOrganizerId({ county, city, zip });
   const today = todayCT();
 
   let contactId;
@@ -707,11 +716,8 @@ async function houseMeetingSignup(request, env) {
     }
   }
 
-  // Organizer assignment via city heuristic; fall back to Stephanie.
-  const cityLower = (city || '').toLowerCase();
-  const KC_CITIES = ['kansas city', 'independence', 'liberty', 'gladstone', 'raytown', 'grandview', 'lee\'s summit', 'lees summit', 'blue springs', 'belton', 'overland park', 'shawnee', 'olathe', 'lenexa', 'leawood', 'mission', 'merriam'];
-  const isLaneeArea = KC_CITIES.some(c => cityLower.includes(c));
-  const organizerId = isLaneeArea ? LANEE_ID : STEPHANIE_ID;
+  // Organizer assignment via county → city → zip cascade
+  const organizerId = deriveOrganizerId({ city, zip });
 
   let contactId;
   const baseFields = {
@@ -841,11 +847,8 @@ async function amendment5Signup(request, env) {
     }
   }
 
-  // Organizer assignment: city heuristic (no county lookup table in worker)
-  const cityLower = (city || '').toLowerCase();
-  const KC_CITIES = ['kansas city','independence','liberty','gladstone','raytown','grandview',"lee's summit",'lees summit','blue springs','belton','overland park','shawnee','olathe','lenexa','leawood','mission','merriam'];
-  const isLaneeArea = KC_CITIES.some(c => cityLower.includes(c));
-  const organizerId = isLaneeArea ? LANEE_ID : STEPHANIE_ID;
+  // Organizer assignment via county → city → zip cascade
+  const organizerId = deriveOrganizerId({ city, zip });
 
   // Determine which event this commitment belongs to based on today's date
   const today = todayCT();
