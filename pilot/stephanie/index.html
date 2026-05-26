@@ -1047,9 +1047,12 @@ async function submitRow(row) {
     // One grid square per person (not per method)
     const gridIdx = nextGridIdx;
     nextGridIdx++;
-    sessionActions.push({ contact_id: row.dataset.contactId, methods, outcome, gridIdx });
+    // Normalize the new event-specific signup outcomes back to plain 'signed-up'
+    // for grid/metric purposes — the CSS dot styling only knows the legacy names.
+    const normOutcome = (outcome === 'signed-up-5-26' || outcome === 'signed-up-6-9') ? 'signed-up' : outcome;
+    sessionActions.push({ contact_id: row.dataset.contactId, methods, outcome: normOutcome, gridIdx });
     const dots = document.querySelectorAll('#grid .dot');
-    const dotState = outcome || 'attempted';
+    const dotState = normOutcome || 'attempted';
     if (dots[gridIdx]) dots[gridIdx].dataset.s = dotState;
     recomputeMetrics();
     updateBatchNav();
@@ -1215,7 +1218,7 @@ async function loadCumulativeGrid() {
         const dot = document.createElement('div');
         dot.className = 'dot';
         const state = a.outcome === 'oneonone' ? 'oneonone'
-                    : a.outcome === 'signed-up' ? 'signed-up'
+                    : (a.outcome === 'signed-up' || a.outcome === 'signed-up-5-26' || a.outcome === 'signed-up-6-9') ? 'signed-up'
                     : a.outcome === 'connected' ? 'connected'
                     : 'attempted';
         dot.dataset.s = state;
@@ -1857,8 +1860,19 @@ async function undoSave(row) {
 }
 
 function updateRow(row) {
-  // If a saved row, ignore checkbox changes — use the explicit Undo button instead
-  if (row.classList.contains('row-complete')) return;
+  // If the row was previously saved and the user is now editing again,
+  // re-enable the Save button so they can capture the update as a new log.
+  // (e.g. logged Call+Text earlier, now got a text response — re-saves as
+  // "connected" with a fresh log entry.)
+  if (row.classList.contains('row-complete')) {
+    row.classList.remove('row-complete');
+    const saveBtn = row.querySelector('.qsave-btn');
+    const undoBtn = row.querySelector('.qundo-btn');
+    if (saveBtn) { saveBtn.style.display = ''; saveBtn.disabled = false; }
+    if (undoBtn) undoBtn.style.display = 'none';
+    const status = row.querySelector('.qsave-status');
+    if (status) { status.textContent = 'edit to update'; status.style.color = 'var(--text-tertiary)'; }
+  }
   const checks = {};
   row.querySelectorAll('.qcheck input').forEach(input => {
     checks[input.dataset.outcome] = input.checked;
@@ -1899,8 +1913,8 @@ function recomputeMetrics() {
   let attempts = 0, convos = 0, signups = 0, oneones = 0;
   for (const a of sessionActions) {
     attempts++;  // one attempt per person, regardless of how many methods
-    if (a.outcome === 'connected' || a.outcome === 'signed-up' || a.outcome === 'oneonone') convos++;
-    if (a.outcome === 'signed-up' || a.outcome === 'oneonone') signups++;
+    if (a.outcome === 'connected' || a.outcome === 'signed-up' || a.outcome === 'signed-up-5-26' || a.outcome === 'signed-up-6-9' || a.outcome === 'oneonone') convos++;
+    if (a.outcome === 'signed-up' || a.outcome === 'signed-up-5-26' || a.outcome === 'signed-up-6-9' || a.outcome === 'oneonone') signups++;
     if (a.outcome === 'oneonone') oneones++;
   }
   // Flag counter: count currently-visible rows that need a next step
