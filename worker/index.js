@@ -40,14 +40,16 @@ const EVENT_NAME = 'Emergency Meeting on Public School Funding in Missouri';
 const EVENT_DATE_LABEL = 'Tuesday, May 26 · 7:30 PM CST';
 const FROM_CONFIRM = 'Parents for MO Kids <groundwork@civicpowerlab.us>';
 const REPLY_TO_CONFIRM = 'lanee4kckids@gmail.com';
-// Per-organizer reply-to override. Lookup key is the lowercase organizer slug
-// the dashboard sends (e.g. 'lanee', 'stephanie'). If not present, falls back
-// to REPLY_TO_CONFIRM above.
-const ORGANIZER_REPLY_TO = {
-  'lanee':     'lanee4kckids@gmail.com',
-  'laneé':     'lanee4kckids@gmail.com',
-  'stephanie': 'srttgrs+civicwork@gmail.com',
+// Per-organizer profile used by sendConfirmationEmail.
+// Key is the lowercase organizer slug the dashboard sends (e.g. 'lanee', 'stephanie').
+// If missing → falls back to LaNeé.
+const ORGANIZER_PROFILE = {
+  'lanee':     { name: 'LaNeé Bridewell',    group: 'Parents for KC Kids', reply_to: 'lanee4kckids@gmail.com' },
+  'laneé':     { name: 'LaNeé Bridewell',    group: 'Parents for KC Kids', reply_to: 'lanee4kckids@gmail.com' },
+  'stephanie': { name: 'Stephanie Rittgers', group: 'Parents for MO Kids', reply_to: 'srttgrs+civicwork@gmail.com' },
 };
+// Legacy lookup, kept for any code still reading reply-to only.
+const ORGANIZER_REPLY_TO = Object.fromEntries(Object.entries(ORGANIZER_PROFILE).map(([k,v]) => [k, v.reply_to]));
 
 const ALLOWLIST = [
   'laneebridewell@gmail.com',
@@ -780,6 +782,7 @@ function prospectsFilter(organizerName_) {
     `NOT({leader_ladder}='Not a prospect'),`,
     `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>7),`,
     `NOT({last_attempt_result}='Signed up'),`,
+    `NOT({signup_6_9_status}='Signed up'),`,
     `NOT({last_attempt_result}='Skipped'),`,
     `NOT({last_attempt_result}='Wrong number'),`,
     `NOT({last_attempt_result}='Do not contact'),`,
@@ -846,13 +849,15 @@ async function sendZoomEmailNow(request, env) {
 
 function resolveOutcome(outcome, methodCount) {
   switch (outcome) {
-    case 'oneonone':       return { result: 'Signed up',  event: '1-1 meeting' };
-    case 'signed-up':      return { result: 'Signed up',  event: 'Orientation 5/26' };
-    case 'connected':      return { result: 'Conversation', event: null };
-    case 'skipped':        return { result: 'Skipped',     event: null };
-    case 'wrong-number':   return { result: 'Wrong number', event: null };
-    case 'do-not-contact': return { result: 'Do not contact', event: null };
-    default:               return { result: methodCount > 0 ? 'No answer' : null, event: null };
+    case 'oneonone':         return { result: 'Signed up',  event: '1-1 meeting' };
+    case 'signed-up':        // backwards compat — treat as 5/26
+    case 'signed-up-5-26':   return { result: 'Signed up',  event: 'Orientation 5/26' };
+    case 'signed-up-6-9':    return { result: 'Signed up',  event: '6/9 Emergency Meeting' };
+    case 'connected':        return { result: 'Conversation', event: null };
+    case 'skipped':          return { result: 'Skipped',     event: null };
+    case 'wrong-number':     return { result: 'Wrong number', event: null };
+    case 'do-not-contact':   return { result: 'Do not contact', event: null };
+    default:                 return { result: methodCount > 0 ? 'No answer' : null, event: null };
   }
 }
 
@@ -899,11 +904,21 @@ async function logOutcome(request, env) {
     body: JSON.stringify({ records, typecast: true })
   });
 
+  // last_attempt_result on the CONTACT gates the Today queue (signups skip the
+  // 7-day re-call cycle) and the 5/26 confirm queue (last_attempt_result='Signed up').
+  // For a 6/9 signup we DON'T want them in the 5/26 confirm queue, so override
+  // to 'Conversation' — still keeps them out of the Today re-call rotation.
+  const contactLastResult = (outcome === 'signed-up-6-9') ? 'Conversation' : result;
   const contactFields = {
     last_attempt_date: date,
     last_attempt_method: isAdmin ? 'Other' : (METHOD_MAP[methods[0]] || methods[0]),
-    last_attempt_result: result,
+    last_attempt_result: contactLastResult,
   };
+  // Event-specific denormalized status field — so each event has its own
+  // confirm queue without colliding on last_attempt_result.
+  if (outcome === 'signed-up-6-9') {
+    contactFields.signup_6_9_status = 'Signed up';
+  }
   if (next_step) contactFields.next_step = next_step;
   await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
     method: 'PATCH',
@@ -911,13 +926,14 @@ async function logOutcome(request, env) {
   });
 
   let confirmation_email_sent = false;
-  if (AUTO_CONFIRM_EMAIL && outcome === 'signed-up') {
+  if (AUTO_CONFIRM_EMAIL && (outcome === 'signed-up' || outcome === 'signed-up-5-26' || outcome === 'signed-up-6-9')) {
+    const eventKey = outcome === 'signed-up-6-9' ? '6_9' : '5_26';
     try {
       const contact = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`);
       const cEmail = contact.fields.email;
       const cFirst = contact.fields.first || '';
       if (cEmail) {
-        await sendConfirmationEmail(env, cEmail, cFirst, contact_id);
+        await sendConfirmationEmail(env, cEmail, cFirst, contact_id, null, eventKey);
         confirmation_email_sent = true;
       }
     } catch (e) {
@@ -957,7 +973,10 @@ async function sendConfirmationEmail(env, toEmail, firstName, contactId, organiz
   const date = todayCT();
   const safeName = firstName ? firstName : '';
   const greetingComma = safeName ? `, ${escapeHtml(safeName)}` : '';
-  const replyTo = ORGANIZER_REPLY_TO[String(organizer || '').toLowerCase()] || REPLY_TO_CONFIRM;
+  const profile = ORGANIZER_PROFILE[String(organizer || '').toLowerCase()] || ORGANIZER_PROFILE['lanee'];
+  const replyTo = profile.reply_to;
+  const signoffName = profile.name;
+  const signoffGroup = profile.group;
   const ev = EMAIL_EVENTS[String(eventKey || '5_26')] || EMAIL_EVENTS['5_26'];
   const subject = ev.subject;
   const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
@@ -1054,8 +1073,8 @@ ${ev.preview}
 
         <tr><td style="padding:0 0 36px">
           <div style="font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#1A2418">In solidarity,</div>
-          <div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:15px;line-height:1.35;color:#1A2418;margin-top:6px">LaNeé Bridewell</div>
-          <div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.16em;color:#B25048;margin-top:4px">Parents for KC Kids</div>
+          <div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:15px;line-height:1.35;color:#1A2418;margin-top:6px">${signoffName}</div>
+          <div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.16em;color:#B25048;margin-top:4px">${signoffGroup}</div>
         </td></tr>
 
         <tr><td style="padding-top:18px;border-top:1px dashed rgba(26,36,24,.25);font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.55;color:#1A2418">
@@ -1138,14 +1157,21 @@ async function undoSave(request, env) {
 
 async function getConfirmees(env, urlObj) {
   const organizer = urlObj ? urlObj.searchParams.get('organizer') : null;
-  const cacheKey = organizer ? `cache:confirmees:${organizer}` : 'cache:confirmees';
+  const eventParam = urlObj ? (urlObj.searchParams.get('event') || '5_26') : '5_26';
+  const cacheKey = `cache:confirmees:${eventParam}:${organizer || 'all'}`;
   const cached = await cacheGet(env, cacheKey);
   if (cached) return json(cached);
 
+  // Pick which "signed up" field gates the queue. Default is 5/26 for back-compat.
+  // 5/26 still uses {last_attempt_result}='Signed up' because that's the
+  // historical source of truth before we introduced denormalized status fields.
+  const signupClause = eventParam === '6_9'
+    ? `{signup_6_9_status}='Signed up'`
+    : `{last_attempt_result}='Signed up'`;
   const orgFullName = organizerName(organizer);
   const filter = orgFullName
-    ? `AND({last_attempt_result}='Signed up',FIND('${orgFullName}',{assigned_organizer}&'')>0)`
-    : "{last_attempt_result}='Signed up'";
+    ? `AND(${signupClause},FIND('${orgFullName}',{assigned_organizer}&'')>0)`
+    : signupClause;
   const fields = ['Name','first','last','phone','email','school','district','last_attempt_date','source','signup_6_9_status'];
   let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=200`;
   for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
