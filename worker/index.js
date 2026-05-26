@@ -1042,11 +1042,19 @@ async function authVerify(request, env) {
   const body = await request.json();
   const code = body.code;
   if (!code) return json({ error: 'code required' }, 400);
-  const email = await env.KV_BINDING.get(`code:${code}`);
+  let email = null;
+  try { email = await env.KV_BINDING.get(`code:${code}`); } catch (e) {
+    return json({ error: `kv get failed: ${e.message}` }, 500);
+  }
   if (!email) return json({ error: 'invalid or expired link' }, 401);
-  await env.KV_BINDING.delete(`code:${code}`);
+  // Non-fatal: if delete fails (daily limit), code still auto-expires after CODE_TTL
+  try { await env.KV_BINDING.delete(`code:${code}`); } catch {}
   const sessionToken = genToken(48);
-  await env.KV_BINDING.put(`session:${sessionToken}`, email, { expirationTtl: SESSION_TTL });
+  try {
+    await env.KV_BINDING.put(`session:${sessionToken}`, email, { expirationTtl: SESSION_TTL });
+  } catch (e) {
+    return json({ error: `session put failed: ${e.message}` }, 500);
+  }
   return json({ ok: true, session_token: sessionToken, email });
 }
 
