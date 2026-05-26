@@ -261,9 +261,9 @@
 
   <div id="form-view">
     <div class="hero">
-      <p class="eyebrow">Thanks for joining tonight</p>
-      <h1>5/26/26 Commit Form Options</h1>
-      <p class="lede">Thanks for joining for our Emergency Meeting tonight! Please fill out the commitment form below and let us know how you are throwing in for the fight.</p>
+      <p class="eyebrow" id="hero-eyebrow">Get involved</p>
+      <h1>Amendment 5 Commitment Sign-Up</h1>
+      <p class="lede" id="hero-lede">Add your info and let us know how you're throwing in for the fight against Amendment 5.</p>
     </div>
 
     <div class="card">
@@ -390,6 +390,23 @@ otherCheck.addEventListener('change', () => {
   if (otherCheck.checked) otherText.focus();
 });
 
+// URL-param sourcing — lets organizers share context-specific links so we
+// can tell where each commitment came from (5/26 meeting, 1:1, house meeting…).
+// Examples:
+//   ?src=5-26-emergency-meeting
+//   ?src=lanee-1-1
+//   ?src=stephanie-house-meeting
+//   ?eyebrow=Thanks%20for%20joining%20tonight
+//   ?lede=Custom%20lede%20copy%20here
+const URL_PARAMS = new URLSearchParams(location.search);
+const URL_SRC = URL_PARAMS.get('src') || '';
+if (URL_PARAMS.get('eyebrow')) {
+  document.getElementById('hero-eyebrow').textContent = URL_PARAMS.get('eyebrow');
+}
+if (URL_PARAMS.get('lede')) {
+  document.getElementById('hero-lede').textContent = URL_PARAMS.get('lede');
+}
+
 const form = document.getElementById('signin');
 const btn = document.getElementById('submit-btn');
 const status = document.getElementById('status');
@@ -417,7 +434,7 @@ form.addEventListener('submit', async (e) => {
     school: fd.get('school'),
     commitments,
     other_text: commitments.includes('Other') ? fd.get('other_text') : '',
-    source: 'amendment 5 commitment form',
+    source: URL_SRC ? `amendment 5 commit form · ${URL_SRC}` : 'amendment 5 commit form',
   };
 
   try {
