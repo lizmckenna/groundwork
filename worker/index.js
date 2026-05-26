@@ -502,7 +502,7 @@ async function signup(request, env) {
 
   const body = await request.json();
   if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
-  const { first, last, email, phone, school, district, county, city, zip, signup_5_26, source } = body;
+  const { first, last, email, phone, school, district, county, city, zip, signup_5_26, signup_6_9, source } = body;
   if (!first || !last || (!email && !phone)) {
     return json({ error: 'first name, last name, and email or phone are required' }, 400);
   }
@@ -535,13 +535,21 @@ async function signup(request, env) {
   let contactFirst = cFirst;
   if (existingId) {
     contactId = existingId;
+    const patch = {};
     if (signup_5_26) {
+      patch.last_attempt_date = today;
+      patch.last_attempt_result = 'Signed up';
+    }
+    if (signup_6_9) {
+      // 6/9 signups don't take over last_attempt_result (which gates the 5/26
+      // confirm queue). They get their own denormalized flag.
+      patch.signup_6_9_status = 'Signed up';
+      if (!signup_5_26) patch.last_attempt_date = today;
+    }
+    if (Object.keys(patch).length) {
       await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ fields: {
-          last_attempt_date: today,
-          last_attempt_result: 'Signed up',
-        }, typecast: true })
+        body: JSON.stringify({ fields: patch, typecast: true })
       });
     }
   } else {
@@ -562,6 +570,10 @@ async function signup(request, env) {
     if (signup_5_26) {
       fields.last_attempt_date = today;
       fields.last_attempt_result = 'Signed up';
+    }
+    if (signup_6_9) {
+      fields.signup_6_9_status = 'Signed up';
+      if (!signup_5_26) fields.last_attempt_date = today;
     }
     const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
       method: 'POST',
@@ -587,7 +599,28 @@ async function signup(request, env) {
       })
     });
     if (AUTO_CONFIRM_EMAIL && contactEmail) {
-      await sendConfirmationEmail(env, contactEmail, contactFirst, contactId);
+      await sendConfirmationEmail(env, contactEmail, contactFirst, contactId, null, '5_26');
+    }
+  }
+
+  if (signup_6_9) {
+    await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        records: [{ fields: {
+          Summary: `${today} — signup 6/9 via website`,
+          date: today,
+          method: 'Event attendance',
+          result: 'Signed up',
+          event: '6/9 Emergency Meeting',
+          contact: [contactId],
+          notes: `Source: ${source || 'parents4mopublicschools website signup'}`,
+        }}],
+        typecast: true
+      })
+    });
+    if (AUTO_CONFIRM_EMAIL && contactEmail) {
+      await sendConfirmationEmail(env, contactEmail, contactFirst, contactId, null, '6_9');
     }
   }
 
