@@ -1352,14 +1352,20 @@ async function fetchConfirmees() {
                 <option value="Not interested"${c.signup_6_9==='Not interested'?' selected':''}>Not interested</option>
               </select>
             </div>
-            <div class="qchecks" style="border-top:1px dashed var(--border);padding-top:10px;">
-              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;">Day of</label>
+            <div class="qchecks dayof-526" style="border-top:1px dashed var(--border);padding-top:10px;">
+              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;">5/26 Day of</label>
               <button class="att-btn att-attended" data-att="yes" style="padding:6px 12px;border-radius:6px;background:${att==='Attended'?'var(--gw-green)':'transparent'};color:${att==='Attended'?'white':'var(--gw-green)'};border:1px solid var(--gw-green);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✓ Attended</button>
               <button class="att-btn att-noshow" data-att="no" style="padding:6px 12px;border-radius:6px;background:${att==='No-show'?'var(--gw-red)':'transparent'};color:${att==='No-show'?'white':'var(--gw-red)'};border:1px solid var(--gw-red);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✗ No-show</button>
               <span class="att-status" style="font-size:11px;color:var(--text-tertiary);"></span>
             </div>
             <div class="qsave-row">
-              <button class="qzoom-btn" title="Send the branded Zoom confirmation email to this person right now" ${c.email ? '' : 'disabled'} style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--gw-purple);border:1px solid var(--gw-purple);font-size:12px;font-weight:600;cursor:${c.email ? 'pointer' : 'not-allowed'};font-family:inherit;opacity:${c.email ? '1' : '0.4'};">✉ Send Zoom email</button>
+              <div class="zoom-dropdown" style="position:relative;display:inline-block;">
+                <button class="qzoom-btn" title="Send a branded Zoom confirmation email" ${c.email ? '' : 'disabled'} style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--gw-purple);border:1px solid var(--gw-purple);font-size:12px;font-weight:600;cursor:${c.email ? 'pointer' : 'not-allowed'};font-family:inherit;opacity:${c.email ? '1' : '0.4'};">✉ Send Zoom ▾</button>
+                <div class="zoom-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--bg-elevated);border:1px solid var(--border-hover);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:10;min-width:180px;overflow:hidden;">
+                  <button class="zoom-opt" data-event="5_26" style="display:block;width:100%;padding:10px 14px;background:transparent;color:var(--text-primary);border:none;text-align:left;font-size:12px;font-family:inherit;cursor:pointer;">5/26 Orientation</button>
+                  <button class="zoom-opt" data-event="6_9" style="display:block;width:100%;padding:10px 14px;background:transparent;color:var(--text-primary);border:none;text-align:left;font-size:12px;font-family:inherit;cursor:pointer;border-top:1px solid var(--border);">6/9 Emergency Mtg</button>
+                </div>
+              </div>
               <button class="qsave-btn qconfirm-save">Save</button>
               <span class="qsave-status"></span>
             </div>
@@ -1375,16 +1381,32 @@ async function fetchConfirmees() {
         submitAttendance(row, next);
       }));
       const zoomBtn = row.querySelector('.qzoom-btn');
-      if (zoomBtn) zoomBtn.addEventListener('click', () => sendZoomEmail(row, c.email));
+      const zoomMenu = row.querySelector('.zoom-menu');
+      if (zoomBtn && zoomMenu) {
+        zoomBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          document.querySelectorAll('.zoom-menu').forEach(m => { if (m !== zoomMenu) m.style.display = 'none'; });
+          zoomMenu.style.display = zoomMenu.style.display === 'block' ? 'none' : 'block';
+        });
+        row.querySelectorAll('.zoom-opt').forEach(opt => {
+          opt.addEventListener('mouseover', () => opt.style.background = 'var(--bg-secondary)');
+          opt.addEventListener('mouseout', () => opt.style.background = 'transparent');
+          opt.addEventListener('click', () => {
+            zoomMenu.style.display = 'none';
+            sendZoomEmail(row, c.email, opt.dataset.event);
+          });
+        });
+      }
     });
   } catch (e) {
     chost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load: ${e.message} (worker may need redeploy to add /confirmees endpoint)</div>`;
   }
 }
 
-async function sendZoomEmail(row, emailAddr) {
+async function sendZoomEmail(row, emailAddr, eventKey) {
   if (!emailAddr) return;
-  if (!confirm(`Send the Parents for MO Public Schools Zoom email to ${emailAddr} right now?`)) return;
+  const label = eventKey === '6_9' ? '6/9 Emergency Meeting' : '5/26 Orientation';
+  if (!confirm(`Send the ${label} Zoom email to ${emailAddr} right now?`)) return;
   const status = row.querySelector('.qsave-status');
   const btn = row.querySelector('.qzoom-btn');
   btn.disabled = true;
@@ -1394,7 +1416,7 @@ async function sendZoomEmail(row, emailAddr) {
     const res = await authFetch(`${WORKER}/send-zoom-email`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact_id: row.dataset.contactId, organizer: ORGANIZER }),
+      body: JSON.stringify({ contact_id: row.dataset.contactId, organizer: ORGANIZER, event: eventKey || '5_26' }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -1550,6 +1572,28 @@ walkinSave.addEventListener('click', async () => {
 
 // Hook tab click to load confirms
 document.querySelector('.tab-nav a[data-tab="confirms"]').addEventListener('click', fetchConfirmees);
+
+// Close zoom dropdowns on outside click
+document.addEventListener('click', () => {
+  document.querySelectorAll('.zoom-menu').forEach(m => m.style.display = 'none');
+});
+
+// Date-based hiding: hide 5/26 Day of buttons until 5/26 arrives, then hide
+// 6 days after (5/26 → ~6/1) to keep the tab clean once we're focused on 6/9.
+function applyDateBasedVisibility() {
+  const today = new Date();
+  const eventDate = new Date('2026-05-26T00:00:00');
+  const sixDaysAfter = new Date('2026-06-02T00:00:00');
+  const isInWindow = today >= eventDate && today < sixDaysAfter;
+  document.querySelectorAll('.dayof-526').forEach(el => {
+    el.style.display = isInWindow ? '' : 'none';
+  });
+}
+const _origFetch = fetchConfirmees;
+fetchConfirmees = async function(...args) {
+  await _origFetch.apply(this, args);
+  applyDateBasedVisibility();
+};
 
 // === Find contact tab ===
 const findHost = document.getElementById('find-results');

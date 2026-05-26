@@ -834,14 +834,14 @@ async function getQueueCount(env, urlObj) {
 
 async function sendZoomEmailNow(request, env) {
   const body = await request.json();
-  const { contact_id, organizer } = body;
+  const { contact_id, organizer, event } = body;
   if (!contact_id) return json({ error: 'contact_id required' }, 400);
   const contact = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`);
   const cEmail = contact.fields.email;
   const cFirst = contact.fields.first || '';
   if (!cEmail) return json({ error: 'contact has no email on file' }, 400);
-  await sendConfirmationEmail(env, cEmail, cFirst, contact_id, organizer);
-  return json({ ok: true, sent_to: cEmail });
+  await sendConfirmationEmail(env, cEmail, cFirst, contact_id, organizer, event);
+  return json({ ok: true, sent_to: cEmail, event: event || '5_26' });
 }
 
 function resolveOutcome(outcome, methodCount) {
@@ -930,12 +930,36 @@ async function logOutcome(request, env) {
   return json({ ok: true, created_count: created.records.length, confirmation_email_sent });
 }
 
-async function sendConfirmationEmail(env, toEmail, firstName, contactId, organizer) {
+// Event-specific copy used by sendConfirmationEmail. To add a future event
+// just add an entry here and surface it in the dashboard.
+const EMAIL_EVENTS = {
+  '5_26': {
+    subject: `You're in — Emergency Meeting on Public School Funding · Tue 5/26 7:30 PM CT`,
+    preview: 'Emergency Meeting on Public School Funding · Tue May 26 · 7:30 PM CT · Zoom',
+    eyebrow: 'Emergency Meeting · Public School Funding',
+    intro_event: '<strong>Emergency Meeting on Public School Funding in Missouri</strong>',
+    big_date_html: 'Tue, May 26<br/>7:30 PM CT',
+    sign_off_date: 'May 26th',
+    zoom_link: 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1',
+  },
+  '6_9': {
+    subject: `You're in — Emergency Meeting on Public School Funding · Tue 6/9 7:30 PM CT`,
+    preview: 'Emergency Meeting on Public School Funding · Tue June 9 · 7:30 PM CT · Zoom',
+    eyebrow: 'Emergency Meeting · Public School Funding',
+    intro_event: '<strong>Emergency Meeting on Public School Funding in Missouri</strong>',
+    big_date_html: 'Tue, June 9<br/>7:30 PM CT',
+    sign_off_date: 'June 9th',
+    zoom_link: 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1',
+  },
+};
+
+async function sendConfirmationEmail(env, toEmail, firstName, contactId, organizer, eventKey) {
   const date = todayCT();
   const safeName = firstName ? firstName : '';
   const greetingComma = safeName ? `, ${escapeHtml(safeName)}` : '';
   const replyTo = ORGANIZER_REPLY_TO[String(organizer || '').toLowerCase()] || REPLY_TO_CONFIRM;
-  const subject = `You're in — Emergency Meeting on Public School Funding · Tue 5/26 7:30 PM CT`;
+  const ev = EMAIL_EVENTS[String(eventKey || '5_26')] || EMAIL_EVENTS['5_26'];
+  const subject = ev.subject;
   const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -948,7 +972,7 @@ async function sendConfirmationEmail(env, toEmail, firstName, contactId, organiz
 <body style="margin:0;padding:0;background:#E9E5CE;font-family:Helvetica,Arial,sans-serif;color:#1A2418">
 
 <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#E9E5CE">
-Emergency Meeting on Public School Funding · Tue May 26 · 7:30 PM CT · Zoom
+${ev.preview}
 </div>
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#E9E5CE" style="background:#E9E5CE">
@@ -987,26 +1011,26 @@ Emergency Meeting on Public School Funding · Tue May 26 · 7:30 PM CT · Zoom
         </td></tr>
 
         <tr><td style="padding:0 0 18px;font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1A2418">
-          Hi${greetingComma}, thank you for committing to join our <strong>Emergency Meeting on Public School Funding in Missouri</strong>. We are mobilizing parents, community members, educators, and advocates to respond quickly and strategically to current threats to public school funding in our state.
+          Hi${greetingComma}, thank you for committing to join our ${ev.intro_event}. We are mobilizing parents, community members, educators, and advocates to respond quickly and strategically to current threats to public school funding in our state.
         </td></tr>
 
         <tr><td style="padding:6px 0 22px">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#D9D5C0" style="background:#D9D5C0;border:2px solid #1A2418;border-radius:14px">
             <tr><td style="padding:20px 22px">
               <div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:#2F5E3D;margin:0 0 8px">
-                Emergency Meeting · Public School Funding
+                ${ev.eyebrow}
               </div>
               <div style="font-family:Helvetica,Arial,sans-serif;font-weight:800;font-size:22px;line-height:1.15;text-transform:uppercase;letter-spacing:.01em;color:#1A2418;margin:0 0 6px">
-                Tue, May 26<br/>7:30 PM CT
+                ${ev.big_date_html}
               </div>
               <div style="font-family:Helvetica,Arial,sans-serif;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:#1A2418;opacity:.65">
                 On Zoom
               </div>
               <div style="margin:18px 0 0">
-                <a href="${ZOOM_LINK_5_26}" style="display:inline-block;background:#1A2418;color:#E9E5CE;text-decoration:none;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.06em;padding:13px 20px;border-radius:8px">Open the Zoom link →</a>
+                <a href="${ev.zoom_link}" style="display:inline-block;background:#1A2418;color:#E9E5CE;text-decoration:none;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.06em;padding:13px 20px;border-radius:8px">Open the Zoom link →</a>
               </div>
               <div style="margin:10px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#1A2418;opacity:.65;word-break:break-all">
-                ${ZOOM_LINK_5_26}
+                ${ev.zoom_link}
               </div>
             </td></tr>
           </table>
@@ -1025,7 +1049,7 @@ Emergency Meeting on Public School Funding · Tue May 26 · 7:30 PM CT · Zoom
         </td></tr>
 
         <tr><td style="padding:0 0 28px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1A2418">
-          We look forward to seeing you on May 26th.
+          We look forward to seeing you on ${ev.sign_off_date}.
         </td></tr>
 
         <tr><td style="padding:0 0 36px">
