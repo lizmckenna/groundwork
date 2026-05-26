@@ -1760,7 +1760,8 @@ async function runSearch() {
                 <div class="check-group-label">What happened</div>
                 <div class="check-group-items">
                   <label class="qcheck light-purple"><input type="checkbox" data-outcome="connected"> Connected</label>
-                  <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up"> Signed up</label>
+                  <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up-5-26"> Signed up: 5/26</label>
+                  <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up-6-9"> Signed up: 6/9</label>
                   <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
                 </div>
               </div>
@@ -1809,7 +1810,7 @@ document.getElementById('find-input').addEventListener('keydown', (e) => { if (e
 function rankOutcome(checks) {
   // Dot color = highest single outcome (green > purple > light-purple > grey)
   if (checks.oneonone) return 'oneonone';
-  if (checks['signed-up']) return 'signed-up';
+  if (checks['signed-up-5-26'] || checks['signed-up-6-9'] || checks['signed-up']) return 'signed-up';
   if (checks.connected) return 'connected';
   if (checks.called || checks.texted || checks.emailed) return 'attempted';
   return null;
@@ -1817,7 +1818,12 @@ function rankOutcome(checks) {
 
 function optionsKey(checks) {
   // Combined-outcome key used to look up next-step options.
-  if (checks['signed-up'] && checks.oneonone) return 'signed-up+oneonone';
+  const isSignup = checks['signed-up-5-26'] || checks['signed-up-6-9'] || checks['signed-up'];
+  if (isSignup && checks.oneonone) return 'signed-up+oneonone';
+  // Map the new event-specific outcomes to their own option lists if available,
+  // else fall back to the generic 'signed-up' bucket.
+  if (checks['signed-up-5-26'] && !checks.oneonone) return 'signed-up-5-26';
+  if (checks['signed-up-6-9'] && !checks.oneonone) return 'signed-up-6-9';
   return rankOutcome(checks);
 }
 
