@@ -128,15 +128,12 @@ async function cachePut(env, key, payload, ttl = READ_CACHE_TTL) {
   } catch {}
 }
 async function invalidateReadCaches(env) {
-  // INTENTIONAL NO-OP. Cloudflare KV free tier caps deletes at 1,000/day;
-  // we burned through that earlier and crashed login + signups. Cache values
-  // all have a 5-min TTL (READ_CACHE_TTL = 300s) so they auto-expire.
-  // Trade-off: someone refreshing a view within 5 min of a write may see
-  // stale data. The dashboard's per-row JS still updates local state
-  // immediately, so users see their OWN writes — only cross-user staleness
-  // is affected. Re-enable (or upgrade to Workers Paid) if this becomes a
-  // real UX problem.
-  return;
+  // Re-enabled now that account is on Workers Paid (1M deletes/month).
+  // Each delete wrapped individually so a one-off failure doesn't crash
+  // the request that triggered it.
+  await Promise.all(READ_CACHE_KEYS.map(k =>
+    env.KV_BINDING.delete(k).catch(() => null)
+  ));
 }
 
 export default {
