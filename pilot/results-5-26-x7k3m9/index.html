@@ -276,9 +276,9 @@ const districtRank = Object.entries(
     .reduce((acc, a) => { acc[a.district_norm] = (acc[a.district_norm]||0) + 1; return acc; }, {})
 ).sort((a,b) => b[1]-a[1]);
 const topDistricts = districtRank.slice(0, 8).map(([n,_]) => n);
-const colorFor = (d) => {
+const colorFor = (d) => { /* other = bright purple, not gray (gray = no-show indicator) */
   const i = topDistricts.indexOf(d);
-  return i >= 0 ? DISTRICT_COLORS[i] : '#999';
+  return i >= 0 ? DISTRICT_COLORS[i] : '#5A4A9E';
 };
 const map = L.map('map').setView([38.5, -92.5], 6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 18 }).addTo(map);
@@ -308,7 +308,7 @@ topDistricts.forEach((d, i) => {
   legend.appendChild(span);
 });
 const other = document.createElement('span'); other.className = 'legend-item';
-other.innerHTML = '<span class="legend-dot" style="background:#999"></span>Other districts'; legend.appendChild(other);
+other.innerHTML = '<span class="legend-dot" style="background:#5A4A9E"></span>Other districts'; legend.appendChild(other);
 const sym = document.createElement('span'); sym.className = 'legend-item';
 sym.innerHTML = '<span class="legend-dot" style="background:#1A2418;opacity:0.85"></span>Filled = attended · <span class="legend-dot" style="background:transparent;border:1px solid #1A2418"></span>Hollow = no-show';
 legend.appendChild(sym);
