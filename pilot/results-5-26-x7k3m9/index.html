@@ -66,6 +66,21 @@
   .person:hover .person-info{opacity:1}
 
   footer.f{margin-top:48px;padding-top:18px;border-top:1px dashed rgba(26,36,24,.25);font-family:'Archivo Narrow',sans-serif;font-size:11px;color:var(--muted);text-align:center;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+
+  .bucket-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:14px}
+  .bucket-card{background:var(--paper);border:1.5px solid var(--ink);border-radius:10px;padding:16px;position:relative;cursor:default;transition:background 0.15s}
+  .bucket-card:hover{background:var(--card-bg)}
+  .bucket-card.highlight{border-color:var(--rose);border-width:2px}
+  .bnum{font-family:'Archivo Narrow',sans-serif;font-weight:800;font-size:36px;line-height:1;color:var(--ink)}
+  .blabel{font-family:'Archivo Narrow',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:12px;color:var(--ink);margin-top:6px}
+  .bsub{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.4}
+  .bnames{display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#fff;border:1.5px solid var(--ink);border-radius:8px;padding:10px 14px;margin:6px 0 0;list-style:none;max-height:280px;overflow-y:auto;box-shadow:0 6px 18px rgba(0,0,0,0.15);font-size:13px}
+  .bucket-card:hover .bnames{display:block}
+  .bnames li{padding:3px 0;border-bottom:1px solid rgba(26,36,24,0.06);display:flex;justify-content:space-between;gap:10px}
+  .bnames li:last-child{border-bottom:none}
+  .bnames .dur{color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11px}
+  @media (max-width:720px){.bucket-grid{grid-template-columns:repeat(2,1fr)}}
+
 </style>
 </head>
 <body>
@@ -87,6 +102,140 @@
     <div class="stat"><div class="num" id="s-deep">0</div><div class="label">Deep commitments*</div><div class="pct" id="s-deep-pct"></div></div>
   </div>
   <p style="margin:-12px 0 24px;font-size:12px;color:var(--muted)">*Committed to hosting a house meeting or attending Parent Power Camp — the commitments that build other organizers and multiply the team.</p>
+
+<div class="card" style="margin-bottom:24px">
+  <h3>Who stayed how long</h3>
+  <div class="sub">Based on Zoom join/leave times. Meeting was 69 minutes long. Hover any card to see names.</div>
+  <div class="bucket-grid">
+    <div class="bucket-card">
+      <div class="bnum">6</div>
+      <div class="blabel">Full (60+ min)</div>
+      <div class="bsub">Stayed for the whole thing</div>
+      <ul class="bnames"><li>sarah <span class="dur">72 min</span></li>
+<li>Ellen Glover <span class="dur">69 min</span></li>
+<li>LaNee Bridewell <span class="dur">64 min</span></li>
+<li>Stephanie Rittgers (she/her/hers) <span class="dur">64 min</span></li>
+<li>Molly Fleming <span class="dur">64 min</span></li>
+<li>David Tremaine <span class="dur">61 min</span></li></ul>
+    </div>
+    <div class="bucket-card">
+      <div class="bnum">82</div>
+      <div class="blabel">Most of it (30–59 min)</div>
+      <div class="bsub">Came and stayed</div>
+      <ul class="bnames"><li>AJ -mobile ( limited audio) <span class="dur">59 min</span></li>
+<li>Sarah Boyer <span class="dur">51 min</span></li>
+<li>Ryan Meyer <span class="dur">49 min</span></li>
+<li>Michael Minter <span class="dur">48 min</span></li>
+<li>Scott Lowe <span class="dur">48 min</span></li>
+<li>Judy Young <span class="dur">48 min</span></li>
+<li>Emily Omohundro <span class="dur">48 min</span></li>
+<li>iPhonekaren sieve <span class="dur">48 min</span></li>
+<li>iPhonebecky <span class="dur">48 min</span></li>
+<li>Mary Ann Mutrux <span class="dur">48 min</span></li>
+<li>Shanteé Carey <span class="dur">48 min</span></li>
+<li>Laci Horn <span class="dur">48 min</span></li>
+<li>Christy Cox <span class="dur">48 min</span></li>
+<li>Elizabeth Paradise <span class="dur">48 min</span></li>
+<li>Samantha Martin <span class="dur">48 min</span></li>
+<li>Colby Evans <span class="dur">48 min</span></li>
+<li>Rankin Plemmons <span class="dur">48 min</span></li>
+<li>Namita P. <span class="dur">48 min</span></li>
+<li>AJ 's Laptop- (AJ ( She/They)) <span class="dur">48 min</span></li>
+<li>Jennifer Tillman <span class="dur">47 min</span></li>
+<li>Odessa Wright <span class="dur">47 min</span></li>
+<li>Ginny B <span class="dur">47 min</span></li>
+<li>Jenny Marcuzzo <span class="dur">47 min</span></li>
+<li>Mindy Darrow <span class="dur">47 min</span></li>
+<li>Lisa Kramer (LK_Bu) <span class="dur">47 min</span></li>
+<li>lizmckenna <span class="dur">47 min</span></li>
+<li>Beth Mitchell <span class="dur">47 min</span></li>
+<li>Marla Tackett <span class="dur">47 min</span></li>
+<li>Marge's iPhone <span class="dur">47 min</span></li>
+<li>Danica Worner <span class="dur">46 min</span></li>
+<li>Amber Simpson <span class="dur">46 min</span></li>
+<li>iPhone <span class="dur">46 min</span></li>
+<li>Katy Weigel <span class="dur">46 min</span></li>
+<li>Kenneth <span class="dur">46 min</span></li>
+<li>Garrett L <span class="dur">46 min</span></li>
+<li>Laura Zink <span class="dur">46 min</span></li>
+<li>Angie's iPhone <span class="dur">46 min</span></li>
+<li>Rod Wright <span class="dur">46 min</span></li>
+<li>Spencer Toder <span class="dur">46 min</span></li>
+<li>Holly Snyder <span class="dur">46 min</span></li>
+<li>Steven Blair (Stevem Blair) <span class="dur">46 min</span></li>
+<li>Natalie Millard <span class="dur">46 min</span></li>
+<li>Lori N <span class="dur">45 min</span></li>
+<li>Max <span class="dur">45 min</span></li>
+<li>Cayla <span class="dur">45 min</span></li>
+<li>Courtney Kamp (Francis Howell Forward) <span class="dur">45 min</span></li>
+<li>EG <span class="dur">45 min</span></li>
+<li>Amelia’s iPhone <span class="dur">45 min</span></li>
+<li>Gina Posladek <span class="dur">44 min</span></li>
+<li>DeMarco Davidson <span class="dur">44 min</span></li>
+<li>Chapman <span class="dur">44 min</span></li>
+<li>Cara Huhman <span class="dur">43 min</span></li>
+<li>Benjamin Roesler <span class="dur">43 min</span></li>
+<li>Emily McCallister <span class="dur">43 min</span></li>
+<li>Marissa Polzin <span class="dur">43 min</span></li>
+<li>Lynda Stewart <span class="dur">42 min</span></li>
+<li>Blythe Bernhard <span class="dur">42 min</span></li>
+<li>Geralyn Madigan <span class="dur">42 min</span></li>
+<li>iPhone (236) <span class="dur">42 min</span></li>
+<li>Stephanie Flanagan (Anastasia Flanagan) <span class="dur">42 min</span></li>
+<li>ahile <span class="dur">42 min</span></li>
+<li>Tai M  Organizer SEIU KC <span class="dur">41 min</span></li>
+<li>Sally Nickel <span class="dur">41 min</span></li>
+<li>Amy Minich <span class="dur">41 min</span></li>
+<li>Sharon Pike <span class="dur">41 min</span></li>
+<li>Ellen Schwartze <span class="dur">40 min</span></li>
+<li>Claire Suellentrop <span class="dur">40 min</span></li>
+<li>Amanda <span class="dur">40 min</span></li>
+<li>Amanda E (she/her) <span class="dur">39 min</span></li>
+<li>Alyssa Keiner <span class="dur">39 min</span></li>
+<li>DC Okonta <span class="dur">38 min</span></li>
+<li>Sierra <span class="dur">38 min</span></li>
+<li>Colleen Tepen <span class="dur">37 min</span></li>
+<li>Brianna <span class="dur">35 min</span></li>
+<li>Chris Moore <span class="dur">35 min</span></li>
+<li>Nina V <span class="dur">34 min</span></li>
+<li>Amanda Quance (she/her/hers) <span class="dur">34 min</span></li>
+<li>L Barnett <span class="dur">33 min</span></li>
+<li>Dr. Stephen Himes <span class="dur">33 min</span></li>
+<li>Kelley Coquillette <span class="dur">33 min</span></li>
+<li>Quentin Wilson <span class="dur">32 min</span></li>
+<li>Amanda Hurtt <span class="dur">30 min</span></li></ul>
+    </div>
+    <div class="bucket-card highlight">
+      <div class="bnum">5</div>
+      <div class="blabel">Brief (15–29 min)</div>
+      <div class="bsub">Joined briefly</div>
+      <ul class="bnames"><li>AFT MISSOURI <span class="dur">28 min</span></li>
+<li>Jill <span class="dur">27 min</span></li>
+<li>Cheryl Hibbeler <span class="dur">19 min</span></li>
+<li>Autumn Cammarata <span class="dur">19 min</span></li>
+<li>Kay Park <span class="dur">15 min</span></li></ul>
+    </div>
+    <div class="bucket-card highlight">
+      <div class="bnum">13</div>
+      <div class="blabel">Drive-by (&lt;15 min)</div>
+      <div class="bsub">Worth following up — said they couldn't stay the whole time</div>
+      <ul class="bnames"><li>Lauren Kellner <span class="dur">14 min</span></li>
+<li>Jere H <span class="dur">12 min</span></li>
+<li>Monica Balestreri <span class="dur">11 min</span></li>
+<li>Mark Savage <span class="dur">11 min</span></li>
+<li>acolvin9 <span class="dur">10 min</span></li>
+<li>Kelly's iPad <span class="dur">9 min</span></li>
+<li>Laura Burkhardt <span class="dur">9 min</span></li>
+<li>Th <span class="dur">5 min</span></li>
+<li>Claire's Fathom Notetaker <span class="dur">3 min</span></li>
+<li>Steve McLuckie <span class="dur">2 min</span></li>
+<li>Taki Manolakos <span class="dur">2 min</span></li>
+<li>Jen Bahr <span class="dur">1 min</span></li>
+<li>Tori (KCMO) <span class="dur">1 min</span></li></ul>
+    </div>
+  </div>
+</div>
+
 
   <div class="card">
     <h3>Engagement funnel</h3>
