@@ -323,9 +323,7 @@ const committed = RAW_DATA.filter(a => a.commitments && a.commitments.length > 0
 const deepWork = RAW_DATA.filter(a => a.commitments && a.commitments.some(c => c === 'Host house meeting' || c === 'Parent Power Camp')).length;
 document.getElementById('s-reg').textContent = registered;
 document.getElementById('s-att').textContent = attended;
-document.getElementById('s-att-pct').textContent = walkinAttended > 0
-  ? Math.round(regAttended/registered*100) + '% turnout · +' + walkinAttended + ' walk-ins/staff'
-  : Math.round(attended/registered*100) + '% of regs';
+document.getElementById('s-att-pct').textContent = Math.round(attended/registered*100) + '% turnout';
 document.getElementById('s-com').textContent = committed;
 document.getElementById('s-com-pct').textContent = Math.round(committed/registered*100) + '% of regs · ' + Math.round(committed/attended*100) + '% of attendees';
 document.getElementById('s-deep').textContent = deepWork;
