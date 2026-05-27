@@ -274,6 +274,28 @@ export default {
         await invalidateReadCaches(env);
         return json({ ok: true, processed: results.length, results });
       }
+      if (url.pathname === '/admin/bulk-patch-contacts' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const body = await request.json();
+        const records = body.records || [];  // [{id, fields:{...}}]
+        const updated = [];
+        const errors = [];
+        for (let i = 0; i < records.length; i += 10) {
+          const batch = records.slice(i, i + 10);
+          try {
+            await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ records: batch, typecast: true })
+            });
+            for (const r of batch) updated.push(r.id);
+          } catch (e) {
+            errors.push({ batch_start: i, error: e.message });
+          }
+        }
+        await invalidateReadCaches(env);
+        return json({ ok: true, updated_count: updated.length, errors });
+      }
       if (url.pathname === '/admin/bulk-log' && request.method === 'POST') {
         const k = request.headers.get('X-Admin-Key');
         if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
