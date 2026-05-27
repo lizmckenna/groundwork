@@ -274,6 +274,42 @@ export default {
         await invalidateReadCaches(env);
         return json({ ok: true, processed: results.length, results });
       }
+      if (url.pathname === '/admin/bulk-log' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const body = await request.json();
+        const entries = body.entries || [];
+        // Each entry: { contact_id, method, result, event, notes, date }
+        const date = body.date || todayCT();
+        const created = [];
+        const errors = [];
+        // Batch in 10s for Airtable
+        for (let i = 0; i < entries.length; i += 10) {
+          const batch = entries.slice(i, i + 10);
+          const records = batch.map(e => ({
+            fields: {
+              Summary: e.summary || `${e.date || date} — ${e.method || 'Other'}`,
+              date: e.date || date,
+              method: e.method || 'Other',
+              ...(e.result ? { result: e.result } : {}),
+              ...(e.event ? { event: e.event } : {}),
+              contact: [e.contact_id],
+              ...(e.notes ? { notes: e.notes } : {}),
+            }
+          }));
+          try {
+            const resp = await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+              method: 'POST',
+              body: JSON.stringify({ records, typecast: true })
+            });
+            for (const r of resp.records) created.push(r.id);
+          } catch (e) {
+            errors.push({ batch_start: i, error: e.message });
+          }
+        }
+        await invalidateReadCaches(env);
+        return json({ ok: true, created_count: created.length, created, errors });
+      }
       if (url.pathname === '/admin/setup-a5-field' && request.method === 'POST') {
         const k = request.headers.get('X-Admin-Key');
         if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
