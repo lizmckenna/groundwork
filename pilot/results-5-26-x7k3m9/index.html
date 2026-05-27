@@ -47,6 +47,24 @@
   .legend-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:14px;font-size:12px}
   .legend-item{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;background:var(--paper);border-radius:12px}
   .legend-dot{width:10px;height:10px;border-radius:50%}
+
+  /* Roster expandable accordions */
+  details.roster{background:var(--paper);border:1.5px solid var(--ink);border-radius:10px;padding:14px 18px;margin:10px 0;transition:background 0.15s}
+  details.roster[open]{background:var(--card-bg)}
+  details.roster summary{cursor:pointer;font-family:'Archivo Narrow',sans-serif;font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink);display:flex;justify-content:space-between;align-items:center;list-style:none}
+  details.roster summary::-webkit-details-marker{display:none}
+  details.roster summary::after{content:'▾';font-size:14px;color:var(--rose);transition:transform 0.15s}
+  details.roster[open] summary::after{transform:rotate(180deg)}
+  .count-pill{background:var(--rose);color:white;font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 9px;border-radius:999px;letter-spacing:.04em}
+  .district-group{margin-top:14px;padding-top:10px;border-top:1px dashed rgba(26,36,24,0.2)}
+  .district-group:first-of-type{border-top:none;margin-top:8px;padding-top:4px}
+  .district-name{font-family:'Archivo Narrow',sans-serif;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--teal);margin-bottom:6px}
+  .person-list{display:flex;flex-wrap:wrap;gap:6px}
+  .person{position:relative;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:4px 11px;font-size:13px;cursor:default}
+  .person:hover{background:var(--ink);color:var(--paper)}
+  .person-info{position:absolute;bottom:calc(100% + 4px);left:0;background:var(--ink);color:var(--paper);font-size:12px;padding:8px 12px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 0.15s;z-index:10;box-shadow:2px 2px 0 rgba(0,0,0,0.15)}
+  .person:hover .person-info{opacity:1}
+
   footer.f{margin-top:48px;padding-top:18px;border-top:1px dashed rgba(26,36,24,.25);font-family:'Archivo Narrow',sans-serif;font-size:11px;color:var(--muted);text-align:center;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
 </style>
 </head>
@@ -59,16 +77,16 @@
   <div class="hero">
     <p class="eyebrow">Internal report · Don't share publicly</p>
     <h1>5/26 Emergency Meeting<br>Turnout + Commitments</h1>
-    <p class="lede">First emergency meeting on the Amendment 5 fight. <b>172 registrants, 88 attended, 62 made formal commitments</b>. Below: turnout by status, commitments breakdown, signups over time, geographic distribution.</p>
+    <p class="lede">First emergency meeting on the Amendment 5 fight. <b>172 registrants, 88 attended, 62 made formal commitments</b>. Below: turnout by status, commitments breakdown, signups over time, geographic distribution, full roster by commitment.</p>
   </div>
 
   <div class="stats-row">
     <div class="stat"><div class="num" id="s-reg">0</div><div class="label">Registered</div></div>
     <div class="stat"><div class="num" id="s-att">0</div><div class="label">Attended</div><div class="pct" id="s-att-pct"></div></div>
     <div class="stat"><div class="num" id="s-com">0</div><div class="label">Committed</div><div class="pct" id="s-com-pct"></div></div>
-    <div class="stat"><div class="num" id="s-deep">0</div><div class="label">Deep work*</div><div class="pct" id="s-deep-pct"></div></div>
+    <div class="stat"><div class="num" id="s-deep">0</div><div class="label">Lead Organizers*</div><div class="pct" id="s-deep-pct"></div></div>
   </div>
-  <p style="margin:-12px 0 24px;font-size:12px;color:var(--muted)">*Hosting house meeting or attending Parent Power Camp — high-touch organizing commitments.</p>
+  <p style="margin:-12px 0 24px;font-size:12px;color:var(--muted)">*Committed to hosting a house meeting or attending Parent Power Camp — the commitments that build other organizers and multiply the team.</p>
 
   <div class="card">
     <h3>Engagement funnel</h3>
@@ -77,9 +95,10 @@
   </div>
 
   <div class="card">
-    <h3>Signups over time</h3>
-    <div class="sub">When people RSVPed for the 5/26 meeting (timestamps from when they first hit "signed up").</div>
-    <div id="time" style="height:300px"></div>
+    <h3>Signups over time · did early signups flake more?</h3>
+    <div class="sub">Daily signups (bars) split by what each cohort eventually did, plus a turnout-% line for each cohort. Look at the right-hand axis to compare follow-through rates across signup days.</div>
+    <div id="time" style="height:340px"></div>
+    <div id="time-insight" style="margin-top:12px;font-size:13px;color:var(--ink);background:var(--paper);padding:10px 14px;border-radius:8px;border-left:3px solid var(--rose)"></div>
   </div>
 
   <div class="card">
@@ -101,6 +120,10 @@
     <div id="legend" class="legend-row"></div>
   </div>
 
+  <h2>Roster by commitment</h2>
+  <p style="font-size:14px;color:var(--muted);margin:-8px 0 18px">Click any commitment to expand. People are grouped by school district. Hover any name for email + phone.</p>
+  <div id="roster"></div>
+
   <footer class="f">Generated for Parents for Missouri Public Schools · 5/26/26</footer>
 </div>
 
@@ -121,16 +144,11 @@ const DISTRICT_NORM = {
   'Francis Howell R-III': 'Francis Howell School District',
   'St. Louis Public Schools (SLPS)': 'St. Louis Public Schools',
   'St. Louis City Public Schools': 'St. Louis Public Schools',
-  'Rockwood School District': 'Rockwood School District',
-  'Rockwood R-VI': 'Rockwood School District',
-  'Parkway School District': 'Parkway School District',
-  'Parkway C-II': 'Parkway School District',
 };
 function normDistrict(d){
   if (!d) return 'Unknown';
   const norm = DISTRICT_NORM[d];
   if (norm) return norm;
-  // Light cleanup: strip trailing whitespace
   return d.trim() || 'Unknown';
 }
 RAW_DATA.forEach(a => { a.district_norm = normDistrict(a.district); });
@@ -149,13 +167,12 @@ document.getElementById('s-deep').textContent = deepWork;
 document.getElementById('s-deep-pct').textContent = Math.round(deepWork/total*100) + '% of regs';
 
 // === Funnel chart ===
-const FUNNEL_COLORS = ['#3E4F6E', '#335A78', '#2F5E3D', '#B25048'];
 Plotly.newPlot('funnel', [{
   type: 'funnel',
-  y: ['Registered','Attended (any duration)','Filled commit form','Deep-work commitment'],
+  y: ['Registered','Attended (any duration)','Filled commit form','Lead organizers'],
   x: [total, attended, committed, deepWork],
   textinfo: 'value+percent initial',
-  marker: { color: FUNNEL_COLORS },
+  marker: { color: ['#3E4F6E', '#335A78', '#2F5E3D', '#B25048'] },
   textfont: { family: 'DM Sans, sans-serif', size: 14, color: '#fff' },
   hoverinfo: 'x+y',
 }], {
@@ -164,25 +181,61 @@ Plotly.newPlot('funnel', [{
   font: { family: 'DM Sans, sans-serif', color: '#1A2418', size: 13 },
 }, {displayModeBar: false, responsive: true});
 
-// === Signups over time ===
-const byDate = {};
+// === Signups over time WITH attendance breakdown per cohort ===
+const cohortMap = {};  // date → {attended, partial, noshow}
 RAW_DATA.forEach(a => {
-  if (a.signup_date) byDate[a.signup_date] = (byDate[a.signup_date]||0) + 1;
+  if (!a.signup_date) return;
+  if (!cohortMap[a.signup_date]) cohortMap[a.signup_date] = {attended:0, partial:0, noshow:0, total:0};
+  cohortMap[a.signup_date].total++;
+  if (a.attendance === 'Attended') cohortMap[a.signup_date].attended++;
+  else if (a.attendance === 'Partial') cohortMap[a.signup_date].partial++;
+  else cohortMap[a.signup_date].noshow++;
 });
-const sortedDates = Object.keys(byDate).sort();
-// Cumulative
-let cum = 0;
-const cumVals = sortedDates.map(d => { cum += byDate[d]; return cum; });
+const dates = Object.keys(cohortMap).sort();
+const attCohort = dates.map(d => cohortMap[d].attended);
+const partCohort = dates.map(d => cohortMap[d].partial);
+const noCohort = dates.map(d => cohortMap[d].noshow);
+const pctCohort = dates.map(d => Math.round((cohortMap[d].attended + cohortMap[d].partial) / cohortMap[d].total * 100));
+
 Plotly.newPlot('time', [
-  { x: sortedDates, y: sortedDates.map(d => byDate[d]), type:'bar', name:'Signups that day', marker:{color:'#C99633'} },
-  { x: sortedDates, y: cumVals, type:'scatter', mode:'lines+markers', name:'Cumulative', yaxis:'y2', line:{color:'#B25048',width:3}, marker:{size:8} },
+  { x: dates, y: attCohort, name:'Attended', type:'bar', marker:{color:'#2F5E3D'} },
+  { x: dates, y: partCohort, name:'Partial',  type:'bar', marker:{color:'#C99633'} },
+  { x: dates, y: noCohort,  name:'No-show',  type:'bar', marker:{color:'#B25048'} },
+  { x: dates, y: pctCohort, name:'Turnout %', type:'scatter', mode:'lines+markers+text',
+    text: pctCohort.map(v => v+'%'), textposition:'top center',
+    yaxis:'y2', line:{color:'#1A2418', width:3, dash:'dot'}, marker:{size:9, color:'#1A2418'} },
 ], {
+  barmode:'stack',
   margin:{l:50,r:60,t:10,b:50}, paper_bgcolor:'transparent', plot_bgcolor:'transparent',
   font:{family:'DM Sans, sans-serif', color:'#1A2418', size:12},
-  yaxis: { title:'Daily signups', gridcolor:'rgba(26,36,24,0.1)' },
-  yaxis2: { title:'Cumulative', overlaying:'y', side:'right', gridcolor:'transparent' },
+  yaxis: { title:'Signups (stacked by outcome)', gridcolor:'rgba(26,36,24,0.1)' },
+  yaxis2: { title:'Cohort turnout %', overlaying:'y', side:'right', range:[0,100], gridcolor:'transparent', ticksuffix:'%' },
   legend: { orientation:'h', y:1.15 },
 }, {displayModeBar:false, responsive:true});
+
+// Insight blurb
+function insight(){
+  if (dates.length < 2) return '';
+  const early = dates.slice(0, Math.ceil(dates.length/2));
+  const late = dates.slice(Math.ceil(dates.length/2));
+  function rate(ds){
+    let a=0, t=0;
+    for (const d of ds){ a += cohortMap[d].attended + cohortMap[d].partial; t += cohortMap[d].total; }
+    return t > 0 ? Math.round(a/t*100) : 0;
+  }
+  const eRate = rate(early), lRate = rate(late);
+  const lastDay = dates[dates.length-1];
+  const lastDayRate = pctCohort[pctCohort.length-1];
+  let msg = '';
+  if (Math.abs(eRate - lRate) >= 5) {
+    msg = 'Early signups (' + early.join(', ') + ') turned out at <b>' + eRate + '%</b>, late signups (' + late.join(', ') + ') at <b>' + lRate + '%</b>. ' + (eRate > lRate ? 'Earlier commits stuck better.' : 'Later commits stuck better — same-day sign-ups followed through more.');
+  } else {
+    msg = 'Turnout rates are similar across signup cohorts (<b>' + eRate + '% early</b> vs <b>' + lRate + '% late</b>) — signup timing wasn\'t a strong predictor of follow-through.';
+  }
+  msg += ' Day-of (' + lastDay + ') turnout was <b>' + lastDayRate + '%</b>.';
+  return msg;
+}
+document.getElementById('time-insight').innerHTML = insight();
 
 // === Turnout chart ===
 const turnoutCounts = { 'Attended':0, 'Partial':0, 'No-show':0, 'Walk-in':0 };
@@ -192,8 +245,7 @@ Plotly.newPlot('turnout', [{
   y: Object.keys(turnoutCounts), x: Object.values(turnoutCounts),
   marker: { color: ['#2F5E3D','#C99633','#B25048','#3E4F6E'] },
   text: Object.values(turnoutCounts).map(v => v + ' (' + Math.round(v/total*100) + '%)'),
-  textposition: 'auto',
-  textfont: { size:14, color:'#fff' },
+  textposition: 'auto', textfont: { size:14, color:'#fff' },
 }], {
   margin:{l:90,r:30,t:10,b:40}, paper_bgcolor:'transparent', plot_bgcolor:'transparent',
   font:{family:'DM Sans, sans-serif', color:'#1A2418', size:13},
@@ -210,8 +262,7 @@ Plotly.newPlot('commits', [{
   x: sortedCommits.map(([_,v]) => v).reverse(),
   marker: { color:'#335A78' },
   text: sortedCommits.map(([_,v]) => v).reverse(),
-  textposition: 'auto',
-  textfont: { size:13, color:'#fff' },
+  textposition: 'auto', textfont: { size:13, color:'#fff' },
 }], {
   margin:{l:220,r:30,t:10,b:40}, paper_bgcolor:'transparent', plot_bgcolor:'transparent',
   font:{family:'DM Sans, sans-serif', color:'#1A2418', size:13},
@@ -219,9 +270,7 @@ Plotly.newPlot('commits', [{
 }, {displayModeBar:false, responsive:true});
 
 // === Geographic map (Leaflet) ===
-const DISTRICT_COLORS = [
-  '#B25048','#C99633','#2F5E3D','#3E4F6E','#335A78','#B05A2C','#7A4163','#4A6F4A',
-];
+const DISTRICT_COLORS = ['#B25048','#C99633','#2F5E3D','#3E4F6E','#335A78','#B05A2C','#7A4163','#4A6F4A'];
 const districtRank = Object.entries(
   RAW_DATA.filter(a => a.lat && a.district_norm !== 'Unknown')
     .reduce((acc, a) => { acc[a.district_norm] = (acc[a.district_norm]||0) + 1; return acc; }, {})
@@ -231,48 +280,25 @@ const colorFor = (d) => {
   const i = topDistricts.indexOf(d);
   return i >= 0 ? DISTRICT_COLORS[i] : '#999';
 };
-
-const map = L.map('map').setView([38.5, -92.5], 6);  // Center of MO
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap',
-  maxZoom: 18,
-}).addTo(map);
-
-// Add markers
-const plotted = RAW_DATA.filter(a => a.lat && a.lon);
-const attendedColor = (a) => {
-  if (a.attendance === 'Attended') return '#fff';
-  if (a.attendance === 'Walk-in') return '#fff';
-  if (a.attendance === 'Partial') return '#fff';
-  return 'transparent';
-};
-plotted.forEach(a => {
-  // Slight jitter so coincident points don't overlap
+const map = L.map('map').setView([38.5, -92.5], 6);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 18 }).addTo(map);
+RAW_DATA.filter(a => a.lat && a.lon).forEach(a => {
   const jitter = (Math.random() - 0.5) * 0.04;
-  const lat = a.lat + jitter;
-  const lon = a.lon + jitter;
   const color = colorFor(a.district_norm);
   const filled = a.attendance === 'Attended' || a.attendance === 'Partial' || a.attendance === 'Walk-in';
-  const marker = L.circleMarker([lat, lon], {
-    radius: filled ? 8 : 6,
-    fillColor: color,
-    color: '#1A2418',
-    weight: filled ? 2 : 1,
-    opacity: 1,
-    fillOpacity: filled ? 0.85 : 0.25,
+  const marker = L.circleMarker([a.lat + jitter, a.lon + jitter], {
+    radius: filled ? 8 : 6, fillColor: color, color: '#1A2418',
+    weight: filled ? 2 : 1, opacity: 1, fillOpacity: filled ? 0.85 : 0.25,
   }).addTo(map);
-  let commitsText = (a.commitments || []).length ? '<br><b>Commitments:</b> ' + a.commitments.join(', ') : '';
+  const commitsText = (a.commitments || []).length ? '<br><b>Commitments:</b> ' + a.commitments.join(', ') : '';
   marker.bindTooltip(
     '<b>' + (a.name || '(no name)') + '</b><br>' +
     'District: ' + a.district_norm + '<br>' +
     'City/County: ' + (a.city || a.county || a.zip || '-') + '<br>' +
-    'Attendance: <b>' + a.attendance + '</b>' +
-    commitsText,
+    'Attendance: <b>' + a.attendance + '</b>' + commitsText,
     { direction: 'top', offset: [0, -8] }
   );
 });
-
-// Legend
 const legend = document.getElementById('legend');
 topDistricts.forEach((d, i) => {
   const span = document.createElement('span');
@@ -281,14 +307,62 @@ topDistricts.forEach((d, i) => {
   span.innerHTML = '<span class="legend-dot" style="background:' + DISTRICT_COLORS[i] + '"></span>' + d + ' <b>(' + count + ')</b>';
   legend.appendChild(span);
 });
-const other = document.createElement('span');
-other.className = 'legend-item';
-other.innerHTML = '<span class="legend-dot" style="background:#999"></span>Other districts';
-legend.appendChild(other);
-const sym = document.createElement('span');
-sym.className = 'legend-item';
+const other = document.createElement('span'); other.className = 'legend-item';
+other.innerHTML = '<span class="legend-dot" style="background:#999"></span>Other districts'; legend.appendChild(other);
+const sym = document.createElement('span'); sym.className = 'legend-item';
 sym.innerHTML = '<span class="legend-dot" style="background:#1A2418;opacity:0.85"></span>Filled = attended · <span class="legend-dot" style="background:transparent;border:1px solid #1A2418"></span>Hollow = no-show';
 legend.appendChild(sym);
+
+// === ROSTER by commitment, grouped by district ===
+const COMMIT_ORDER = sortedCommits.map(([n,_]) => n);  // order by popularity
+const rosterEl = document.getElementById('roster');
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+COMMIT_ORDER.forEach(commit => {
+  const people = RAW_DATA.filter(a => (a.commitments||[]).includes(commit))
+    .sort((a,b) => (a.last||'').localeCompare(b.last||''));
+  if (!people.length) return;
+  // Group by district
+  const byDistrict = {};
+  people.forEach(p => {
+    const d = p.district_norm || 'Unknown';
+    if (!byDistrict[d]) byDistrict[d] = [];
+    byDistrict[d].push(p);
+  });
+  const sortedDistricts = Object.entries(byDistrict).sort((a,b) => b[1].length - a[1].length);
+  const details = document.createElement('details');
+  details.className = 'roster';
+  const summary = document.createElement('summary');
+  summary.innerHTML = '<span>' + escapeHtml(commit) + '</span><span class="count-pill">' + people.length + '</span>';
+  details.appendChild(summary);
+  sortedDistricts.forEach(([district, ps]) => {
+    const dGroup = document.createElement('div');
+    dGroup.className = 'district-group';
+    const dName = document.createElement('div');
+    dName.className = 'district-name';
+    dName.textContent = district + ' · ' + ps.length;
+    dGroup.appendChild(dName);
+    const pList = document.createElement('div');
+    pList.className = 'person-list';
+    ps.forEach(p => {
+      const person = document.createElement('span');
+      person.className = 'person';
+      person.textContent = p.name || '(no name)';
+      const info = document.createElement('span');
+      info.className = 'person-info';
+      const lines = [];
+      if (p.email) lines.push('✉ ' + p.email);
+      if (p.phone) lines.push('📞 ' + p.phone);
+      if (p.attendance) lines.push('Attendance: ' + p.attendance);
+      if (p.city) lines.push(p.city + (p.county ? ' · ' + p.county : ''));
+      info.innerHTML = lines.length ? lines.map(escapeHtml).join('<br>') : '(no contact info)';
+      person.appendChild(info);
+      pList.appendChild(person);
+    });
+    dGroup.appendChild(pList);
+    details.appendChild(dGroup);
+  });
+  rosterEl.appendChild(details);
+});
 </script>
 </body>
 </html>
