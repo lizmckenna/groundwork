@@ -95,9 +95,13 @@
   </div>
   <div class="card">
     <h3>Did confirmation calls work?</h3>
-    <div class="sub">Of the 172 registrants, LaNeé + Stephanie reached some via confirmation calls before the meeting. Here's the stickiness breakdown: who got what call-touch, and whether they showed up.</div>
-    <div id="confirm-cross" style="height:300px"></div>
+    <div class="sub">Restricted to the <b>64 registrants who signed up at least 24h before the meeting</b> — the people who were actually callable. (The remaining 108 registrants signed up on 5/26 itself, after the call list had been built, so they can't be in this analysis.) Data pulled from the contact_log in Airtable: every Call, Text, or Email touch logged between signup and 5/26.</div>
+    <div id="confirm-cross" style="height:320px"></div>
     <div id="confirm-insight" style="margin-top:12px;font-size:13px;color:var(--ink);background:var(--paper);padding:10px 14px;border-radius:8px;border-left:3px solid var(--rose)"></div>
+    <h4 style="margin-top:24px;font-family:'Archivo Narrow',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:13px;color:var(--ink)">Does touch volume matter?</h4>
+    <div class="sub">Same 64 callable registrants, grouped by total number of touch attempts (call, text, or email).</div>
+    <div id="touch-volume" style="height:280px"></div>
+    <div id="touch-insight" style="margin-top:12px;font-size:13px;color:var(--ink);background:var(--paper);padding:10px 14px;border-radius:8px;border-left:3px solid var(--teal)"></div>
   </div>
 
 
@@ -187,55 +191,104 @@ Plotly.newPlot('funnel', [{
   paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
   font: { family: 'DM Sans, sans-serif', color: '#1A2418', size: 13 },
 }, {displayModeBar: false, responsive: true});
-// === Confirmation-call stickiness ===
-const confirmBuckets = {};
+// === Confirmation-call stickiness (CALLABLE ONLY: signed up >24h before meeting) ===
+const CONFIRM_DATA = {
+  callable_count: 64,
+  late_count: 108,
+  by_best_result: {
+    'Confirmed':       {att:7,  no:1},
+    'Reminder sent':   {att:12, no:31},
+    'Cancelled':       {att:0,  no:1},
+    'Touched (other)': {att:1,  no:4},
+    '(no touch)':      {att:2,  no:5},
+  },
+  by_touch_count: {
+    '0':  {att:2,  no:5},
+    '1':  {att:3,  no:15},
+    '2':  {att:14, no:22},
+    '3+': {att:3,  no:0},
+  },
+};
 const ATT_SET = new Set(['Attended','Partial','Walk-in']);
-RAW_DATA.forEach(a => {
-  const cs = a.confirm_status || '(no touch)';
-  if (!confirmBuckets[cs]) confirmBuckets[cs] = {attended:0, noshow:0};
-  if (ATT_SET.has(a.attendance)) confirmBuckets[cs].attended++;
-  else confirmBuckets[cs].noshow++;
-});
-const CB_ORDER = ['Confirmed','Reminder sent','No answer','Declined','Cancelled','(no touch)'].filter(k => confirmBuckets[k]);
-const cbAttended = CB_ORDER.map(k => confirmBuckets[k].attended);
-const cbNoshow = CB_ORDER.map(k => confirmBuckets[k].noshow);
-const cbPct = CB_ORDER.map(k => {
-  const t = confirmBuckets[k].attended + confirmBuckets[k].noshow;
-  return t > 0 ? Math.round(confirmBuckets[k].attended / t * 100) : 0;
-});
-const cbLabels = CB_ORDER.map(k => k + ' (' + (confirmBuckets[k].attended + confirmBuckets[k].noshow) + ')');
-Plotly.newPlot('confirm-cross', [
-  { x: cbLabels, y: cbAttended, name:'Attended', type:'bar', marker:{color:'#2F5E3D'},
-    text: cbAttended.map(v => v ? v : ''), textposition:'inside', textfont:{color:'#fff',size:13} },
-  { x: cbLabels, y: cbNoshow, name:'No-show', type:'bar', marker:{color:'#B25048'},
-    text: cbNoshow.map(v => v ? v : ''), textposition:'inside', textfont:{color:'#fff',size:13} },
-  { x: cbLabels, y: cbPct, name:'Turnout %', type:'scatter', mode:'lines+markers+text', yaxis:'y2',
-    text: cbPct.map(v => v + '%'), textposition:'top center', textfont:{size:13, color:'#1A2418'},
-    line:{color:'#1A2418', width:3, dash:'dot'}, marker:{size:10, color:'#1A2418'} },
-], {
-  barmode: 'stack',
-  margin:{l:50, r:60, t:10, b:60}, paper_bgcolor:'transparent', plot_bgcolor:'transparent',
-  font:{family:'DM Sans, sans-serif', color:'#1A2418', size:12},
-  yaxis: { title:'Registrants', gridcolor:'rgba(26,36,24,0.1)' },
-  yaxis2: { title:'Turnout %', overlaying:'y', side:'right', range:[0,105], ticksuffix:'%', gridcolor:'transparent' },
-  legend: { orientation:'h', y:1.15 },
-}, {displayModeBar:false, responsive:true});
 (function(){
-  const conf = confirmBuckets['Confirmed'] || {attended:0,noshow:0};
-  const confT = conf.attended + conf.noshow;
-  const confPct = confT > 0 ? Math.round(conf.attended/confT*100) : 0;
-  const noTouch = confirmBuckets['(no touch)'] || {attended:0,noshow:0};
-  const ntT = noTouch.attended + noTouch.noshow;
-  const ntPct = ntT > 0 ? Math.round(noTouch.attended/ntT*100) : 0;
-  const remind = confirmBuckets['Reminder sent'] || {attended:0,noshow:0};
-  const rmT = remind.attended + remind.noshow;
-  const rmPct = rmT > 0 ? Math.round(remind.attended/rmT*100) : 0;
-  let msg = '<b>Confirmation calls work — but only when they end in a verbal yes.</b> ';
-  if (confT > 0) msg += 'The ' + confT + ' people explicitly <b>Confirmed</b> via call turned out at <b>' + confPct + '%</b>. ';
-  if (rmT > 0) msg += 'The ' + rmT + ' people who got a <b>Reminder sent</b> but no verbal confirmation turned out at <b>' + rmPct + '%</b>. ';
-  if (ntT > 0) msg += 'The ' + ntT + ' registrants with <b>no call-touch at all</b> turned out at <b>' + ntPct + '%</b>. ';
-  msg += 'Takeaway: prioritize getting an actual verbal yes — sending reminders alone is barely better than not calling.';
+  const CB_ORDER = ['Confirmed','Reminder sent','Touched (other)','Cancelled','(no touch)'];
+  const buckets = CONFIRM_DATA.by_best_result;
+  const present = CB_ORDER.filter(k => buckets[k]);
+  const att = present.map(k => buckets[k].att);
+  const no  = present.map(k => buckets[k].no);
+  const tot = present.map(k => buckets[k].att + buckets[k].no);
+  const pct = present.map((k,i) => tot[i] > 0 ? Math.round(buckets[k].att / tot[i] * 100) : 0);
+  const labels = present.map((k,i) => k + ' (' + tot[i] + ')');
+  Plotly.newPlot('confirm-cross', [
+    { x: labels, y: att, name:'Attended', type:'bar', marker:{color:'#2F5E3D'},
+      text: att.map(v => v ? v : ''), textposition:'inside', textfont:{color:'#fff',size:13} },
+    { x: labels, y: no, name:'No-show', type:'bar', marker:{color:'#B25048'},
+      text: no.map(v => v ? v : ''), textposition:'inside', textfont:{color:'#fff',size:13} },
+    { x: labels, y: pct, name:'Turnout %', type:'scatter', mode:'lines+markers+text', yaxis:'y2',
+      text: pct.map(v => v + '%'), textposition:'top center', textfont:{size:13, color:'#1A2418'},
+      line:{color:'#1A2418', width:3, dash:'dot'}, marker:{size:10, color:'#1A2418'} },
+  ], {
+    barmode: 'stack',
+    margin:{l:50, r:60, t:10, b:60}, paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+    font:{family:'DM Sans, sans-serif', color:'#1A2418', size:12},
+    yaxis: { title:'Registrants', gridcolor:'rgba(26,36,24,0.1)' },
+    yaxis2: { title:'Turnout %', overlaying:'y', side:'right', range:[0,105], ticksuffix:'%', gridcolor:'transparent' },
+    legend: { orientation:'h', y:1.15 },
+  }, {displayModeBar:false, responsive:true});
+
+  const conf = buckets['Confirmed'] || {att:0,no:0};
+  const confT = conf.att + conf.no;
+  const confPct = confT > 0 ? Math.round(conf.att/confT*100) : 0;
+  const rm = buckets['Reminder sent'] || {att:0,no:0};
+  const rmT = rm.att + rm.no;
+  const rmPct = rmT > 0 ? Math.round(rm.att/rmT*100) : 0;
+  const nt = buckets['(no touch)'] || {att:0,no:0};
+  const ntT = nt.att + nt.no;
+  const ntPct = ntT > 0 ? Math.round(nt.att/ntT*100) : 0;
+  let msg = '<b>Calls work — but only when they end in a verbal yes.</b> ';
+  msg += 'The <b>' + confT + '</b> people we got an explicit <b>Confirmed</b> from turned out at <b>' + confPct + '%</b>. ';
+  msg += 'The <b>' + rmT + '</b> people who got a <b>Reminder sent</b> but no verbal yes turned out at <b>' + rmPct + '%</b> — almost identical to the <b>' + ntT + '</b> who got <b>no touch at all</b> (' + ntPct + '%). ';
+  msg += 'Lesson: leaving a voicemail or sending a text without a conversation is barely worth the time. Push for the verbal yes.';
   document.getElementById('confirm-insight').innerHTML = msg;
+})();
+
+// === Does touch volume matter? ===
+(function(){
+  const TC_ORDER = ['0','1','2','3+'];
+  const tc = CONFIRM_DATA.by_touch_count;
+  const att = TC_ORDER.map(k => tc[k] ? tc[k].att : 0);
+  const no  = TC_ORDER.map(k => tc[k] ? tc[k].no : 0);
+  const tot = TC_ORDER.map((k,i) => att[i] + no[i]);
+  const pct = TC_ORDER.map((k,i) => tot[i] > 0 ? Math.round(att[i] / tot[i] * 100) : 0);
+  const labels = TC_ORDER.map((k,i) => k + ' touches (' + tot[i] + ')');
+  Plotly.newPlot('touch-volume', [
+    { x: labels, y: att, name:'Attended', type:'bar', marker:{color:'#2F5E3D'},
+      text: att.map(v => v ? v : ''), textposition:'inside', textfont:{color:'#fff',size:13} },
+    { x: labels, y: no, name:'No-show', type:'bar', marker:{color:'#B25048'},
+      text: no.map(v => v ? v : ''), textposition:'inside', textfont:{color:'#fff',size:13} },
+    { x: labels, y: pct, name:'Turnout %', type:'scatter', mode:'lines+markers+text', yaxis:'y2',
+      text: pct.map(v => v + '%'), textposition:'top center', textfont:{size:13, color:'#1A2418'},
+      line:{color:'#3B6E70', width:3, dash:'dot'}, marker:{size:10, color:'#3B6E70'} },
+  ], {
+    barmode: 'stack',
+    margin:{l:50, r:60, t:10, b:50}, paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+    font:{family:'DM Sans, sans-serif', color:'#1A2418', size:12},
+    yaxis: { title:'Registrants', gridcolor:'rgba(26,36,24,0.1)' },
+    yaxis2: { title:'Turnout %', overlaying:'y', side:'right', range:[0,110], ticksuffix:'%', gridcolor:'transparent' },
+    legend: { orientation:'h', y:1.18 },
+  }, {displayModeBar:false, responsive:true});
+
+  const c1 = tc['1'] || {att:0,no:0};
+  const c2 = tc['2'] || {att:0,no:0};
+  const c3 = tc['3+'] || {att:0,no:0};
+  const p1 = (c1.att+c1.no) ? Math.round(c1.att/(c1.att+c1.no)*100) : 0;
+  const p2 = (c2.att+c2.no) ? Math.round(c2.att/(c2.att+c2.no)*100) : 0;
+  const p3 = (c3.att+c3.no) ? Math.round(c3.att/(c3.att+c3.no)*100) : 0;
+  let msg = '<b>Persistence pays.</b> ';
+  msg += 'One touch (' + p1 + '%) is barely better than no touch — sometimes worse, since "one touch" often = a voicemail with no follow-up. ';
+  msg += 'Two touches lifts turnout to <b>' + p2 + '%</b>. The handful of people we reached <b>three or more times</b> attended at <b>' + p3 + '%</b>. ';
+  msg += 'Caveat: this is correlation, not pure causation — people who pick up tend to be more engaged to start. But the pattern is clear: stop after one and the touch goes wasted.';
+  document.getElementById('touch-insight').innerHTML = msg;
 })();
 
 
@@ -390,7 +443,7 @@ COMMIT_ORDER.forEach(commit => {
   const details = document.createElement('details');
   details.className = 'roster';
   const summary = document.createElement('summary');
-  summary.innerHTML = '<span>' + escapeHtml(commit) + '</span><span class="count-pill">' + people.length + '</span>';
+  summary.innerHTML = '<span style="display:flex;align-items:center;gap:10px;"><span>' + escapeHtml(commit) + '</span><span class="count-pill">' + people.length + '</span></span>';
   details.appendChild(summary);
   sortedDistricts.forEach(([district, ps]) => {
     const dGroup = document.createElement('div');
