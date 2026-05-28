@@ -236,7 +236,7 @@ code, .formula{
       <ul>
         <li><code>assigned_organizer</code> &nbsp;<b>is</b>&nbsp; <code>LaNeé</code> (or <code>Stephanie</code>)</li>
         <li><code>attendance_5_26_status</code> &nbsp;<b>is any of</b>&nbsp; <code>Attended, Partial</code></li>
-        <li><code>leader_ladder</code> &nbsp;<b>is none of</b>&nbsp; <code>Not a prospect</code>, <code>Not a recruit, keep informed</code>, <code>Core Leader</code></li>
+        <li><code>leader_ladder</code> &nbsp;<b>is none of</b>&nbsp; <code>Not a prospect</code>, <code>Core Leader</code></li>
         <li><code>last_attempt_result</code> &nbsp;<b>is none of</b>&nbsp; <code>Do not contact</code>, <code>Signed up</code>, <code>Skipped</code>, <code>Wrong number</code></li>
       </ul>
       <p>The last two filters are load-bearing — they're what makes the "retire a contact" workflow in section 3.5 actually pull people out of your daily list. Without them, you'll keep seeing folks you already tagged as retired.</p>
@@ -249,7 +249,7 @@ code, .formula{
         <li><code>amendment5_commitments</code> &nbsp;<b>does not contain</b>&nbsp; <code>Regional launch team</code></li>
         <li><code>amendment5_commitments</code> &nbsp;<b>does not contain</b>&nbsp; <code>School board resolution</code></li>
         <li><code>amendment5_commitments</code> &nbsp;<b>does not contain</b>&nbsp; <code>Other</code></li>
-        <li><code>leader_ladder</code> &nbsp;<b>is none of</b>&nbsp; <code>Not a prospect</code>, <code>Not a recruit, keep informed</code>, <code>Core Leader</code></li>
+        <li><code>leader_ladder</code> &nbsp;<b>is none of</b>&nbsp; <code>Not a prospect</code>, <code>Core Leader</code></li>
         <li><code>last_attempt_result</code> &nbsp;<b>is none of</b>&nbsp; <code>Do not contact</code>, <code>Signed up</code>, <code>Skipped</code>, <code>Wrong number</code></li>
       </ul>
       <p>The four amendment5 exclusions keep multi-commitment leaders out — they belong to LaNeé/Stephanie for strategic 1:1s. The last two exclusions drop retired contacts (see section 3.5) out of your daily list.</p>
@@ -332,12 +332,12 @@ code, .formula{
     <p class="section-sub">For people who aren't going to develop into leaders — whether they politely opted out, only wanted info from the meeting, or actively asked to be left alone. The goal is to remove them from your active call list without deleting them from the base. Two different fields, two different meanings — pick the right one.</p>
 
     <div class="note" style="background:var(--paper-2);color:var(--ink);border-left-color:var(--rose)">
-      <b>Three retirement options, side by side:</b>
+      <b>Two retirement options, side by side:</b>
       <ul style="margin:8px 0 0;padding-left:20px">
-        <li><code>leader_ladder = Not a prospect</code> → "not someone we're recruiting; don't actively reach out, but they stay in the base for context."</li>
-        <li><code>leader_ladder = Not a recruit, keep informed</code> → "not a leadership recruit, but DO send them campaign-moment blast emails." Same call-list exclusion as Not a prospect; different signal to the future comms tool.</li>
-        <li><code>last_attempt_result = Do not contact</code> → "stop reaching out, period." Channel-level off-switch. Use for explicit opt-outs.</li>
+        <li><code>leader_ladder = Not a prospect</code> → "not someone we're recruiting." Drops out of your call queue. Stays on the Buttondown email list by default — they'll still get campaign-moment updates and can unsubscribe themselves if they want.</li>
+        <li><code>last_attempt_result = Do not contact</code> → "stop reaching out, period." Channel-level off-switch. Use for explicit opt-outs across all channels.</li>
       </ul>
+      <p style="margin:10px 0 0;font-size:13px;opacity:0.85">Why this is simpler than tracking comms-opt-in in Airtable: Buttondown handles unsubscribes via the link in every email. We don't need to mirror that state in our base — the email tool is the source of truth for who's on the list.</p>
     </div>
 
     <div class="step">
@@ -357,23 +357,7 @@ code, .formula{
     </div>
 
     <div class="step">
-      <div class="step-label">Case B — Wants to stay in the loop, just not lead</div>
-      <h3>"Email me updates, but I'm not going to take a leadership role"</h3>
-      <p>The middle case Stephanie surfaced: supportive, wants campaign-moment updates, but not someone you're developing into a leader. Log a final Contact Log row, then change their tier:</p>
-      <div class="example">
-        <div class="ex-label">Example: someone who wants to stay informed but isn't recruitable</div>
-        <dl class="kv">
-          <dt>date</dt><dd>today</dd>
-          <dt>method</dt><dd>Call</dd>
-          <dt>result</dt><dd>Conversation</dd>
-          <dt>notes</dt><dd>Wants campaign-moment email updates but not interested in an ongoing organizing role. Tagged Not a recruit, keep informed.</dd>
-        </dl>
-      </div>
-      <p>On the <b>contact row</b>, set <code>leader_ladder = Not a recruit, keep informed</code>. They drop out of your call queue (same as Not a prospect) but stay tagged for the future blast-email tool. <em>Note: if you don't see this option in the dropdown yet, type it as a new value and Airtable will create it for everyone.</em></p>
-    </div>
-
-    <div class="step">
-      <div class="step-label">Case C — Active opt-out</div>
+      <div class="step-label">Case B — Active opt-out</div>
       <h3>They asked you to stop contacting them</h3>
       <p>Different signal — this is about the channel, not their recruitment status. Use <code>Do not contact</code> on both the log row and the contact row:</p>
       <div class="example">
