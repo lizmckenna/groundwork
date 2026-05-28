@@ -195,22 +195,24 @@ code, .formula{
       <div class="person">
         <div class="who kathryn">Kathryn</div>
         <div class="role">Trainings funnel</div>
-        <p>Anyone who said they want to be an <b>Amplifier</b> OR <b>host a House Meeting</b>. Kathryn turns them out to the right training.</p>
-        <div class="filter">amendment5_commitments<br/>has "Amplifier" OR "Host house meeting"</div>
+        <p>People who picked <b>Amplifier and/or House Meeting</b> and <b>nothing else</b>. Narrow, training-focused asks. Kathryn turns them out to the right training.</p>
+        <div class="filter">amendment5_commitments has Amplifier and/or Host house meeting<br/>AND has none of: Parent Power Camp, Regional launch team, School board resolution, Other</div>
       </div>
       <div class="person">
         <div class="who lanee">LaNeé</div>
         <div class="role">KC metro + general</div>
-        <p>People assigned to LaNeé who attended 5/26 AND don't fall into Kathryn's bucket. Schedule 1:1s, keep them warm for 6/9.</p>
-        <div class="filter">assigned_organizer = LaNeé<br/>AND attendance_5_26_status = "Attended" or "Partial"<br/>AND NOT in Kathryn's list</div>
+        <p>People assigned to LaNeé who attended 5/26 AND fall outside Kathryn's narrow bucket — i.e., they signed up for something broader than just trainings (or signed up for nothing yet). Schedule 1:1s, keep warm for 6/9. LaNeé also pushes them toward the relevant HM/Amp trainings as part of the 1:1.</p>
+        <div class="filter">assigned_organizer = LaNeé<br/>AND attendance_5_26_status = Attended or Partial<br/>AND NOT in Kathryn's narrow list</div>
       </div>
       <div class="person">
         <div class="who stephanie">Stephanie</div>
         <div class="role">Greater MO + general</div>
-        <p>Same as LaNeé but for her assigned region. Schedule 1:1s, keep them warm.</p>
-        <div class="filter">assigned_organizer = Stephanie<br/>AND attendance_5_26_status = "Attended" or "Partial"<br/>AND NOT in Kathryn's list</div>
+        <p>Same as LaNeé but for her assigned region. Schedule 1:1s, keep warm. Also pushes folks toward HM/Amp trainings as part of the conversation.</p>
+        <div class="filter">assigned_organizer = Stephanie<br/>AND attendance_5_26_status = Attended or Partial<br/>AND NOT in Kathryn's narrow list</div>
       </div>
     </div>
+
+    <div class="note" style="background:var(--paper);color:var(--ink);border-left-color:var(--rose)"><b>Why narrower for Kathryn:</b> someone who picked Amplifier + House Meeting + Parent Power Camp + School Board Resolution (i.e., engaged across the board, like Kelley Coquillette on 5/26) deserves a strategic 1:1 from LaNeé/Stephanie, not a transactional training-funnel touch from Kathryn. Kathryn focuses on people whose entire ask is "get to the right training." LaNeé and Stephanie also nudge their folks toward HM/Amp trainings as part of the broader conversation, so trainings still fill up.</div>
 
     <div class="note"><b>Note from Ellen:</b> there's a fourth bucket coming — people from schools that already have a parent fellow or KC-Kids lead. Those people should funnel directly to that school's lead. Ellen will share the school-team list separately, and we'll add a fourth view then.</div>
   </section>
@@ -229,14 +231,22 @@ code, .formula{
     <div class="step">
       <div class="step-label">Step 2</div>
       <h3>Add filters (the AND list)</h3>
-      <p>Click the Filter button at the top. Add the conditions for your bucket. Example for LaNeé:</p>
+      <p><b>For LaNeé and Stephanie</b> (regional follow-up). Click the Filter button at the top. Add:</p>
       <ul>
-        <li><code>assigned_organizer</code> &nbsp;<b>is</b>&nbsp; <code>LaNeé</code></li>
+        <li><code>assigned_organizer</code> &nbsp;<b>is</b>&nbsp; <code>LaNeé</code> (or <code>Stephanie</code>)</li>
         <li><code>attendance_5_26_status</code> &nbsp;<b>is any of</b>&nbsp; <code>Attended, Partial</code></li>
-        <li><code>amendment5_commitments</code> &nbsp;<b>does not contain</b>&nbsp; <code>Amplifier</code></li>
-        <li><code>amendment5_commitments</code> &nbsp;<b>does not contain</b>&nbsp; <code>Host house meeting</code></li>
       </ul>
-      <p>The last two exclusions keep you from double-calling people Kathryn is already chasing.</p>
+      <p>No exclusions needed — Kathryn's filter does the splitting, not yours. You'll see everyone in your region who attended. The Kelley-Coquillette-types (multi-commitment) will be in your list, and you'll handle them as 1:1s.</p>
+      <p><b>For Kathryn</b> (narrow training-funnel — Amp/HM only, nothing else):</p>
+      <ul>
+        <li><code>attendance_5_26_status</code> &nbsp;<b>is any of</b>&nbsp; <code>Attended, Partial</code></li>
+        <li><code>amendment5_commitments</code> &nbsp;<b>contains</b>&nbsp; <code>Amplifier</code> &nbsp;OR&nbsp; <code>amendment5_commitments</code> &nbsp;<b>contains</b>&nbsp; <code>Host house meeting</code> (use the "Add condition group" + "OR" option)</li>
+        <li><code>amendment5_commitments</code> &nbsp;<b>does not contain</b>&nbsp; <code>Parent Power Camp</code></li>
+        <li><code>amendment5_commitments</code> &nbsp;<b>does not contain</b>&nbsp; <code>Regional launch team</code></li>
+        <li><code>amendment5_commitments</code> &nbsp;<b>does not contain</b>&nbsp; <code>School board resolution</code></li>
+        <li><code>amendment5_commitments</code> &nbsp;<b>does not contain</b>&nbsp; <code>Other</code></li>
+      </ul>
+      <p>The four exclusions keep multi-commitment leaders out — they belong to LaNeé/Stephanie for strategic 1:1s.</p>
     </div>
 
     <div class="step">
