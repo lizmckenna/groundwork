@@ -324,28 +324,36 @@ code, .formula{
   <!-- SECTION 3.5 — Retiring contacts -->
   <section class="s-log" id="retire">
     <h2><span class="num">3.5</span>Retire a contact cleanly</h2>
-    <p class="section-sub">For people who aren't going to develop into leaders — whether they politely opted out, only wanted info from the meeting, or actively asked to be left alone. The goal is to remove them from your active call list without deleting them from the base.</p>
+    <p class="section-sub">For people who aren't going to develop into leaders — whether they politely opted out, only wanted info from the meeting, or actively asked to be left alone. The goal is to remove them from your active call list without deleting them from the base. Two different fields, two different meanings — pick the right one.</p>
+
+    <div class="note" style="background:var(--paper-2);color:var(--ink);border-left-color:var(--rose)">
+      <b>The two fields, side by side:</b>
+      <ul style="margin:8px 0 0;padding-left:20px">
+        <li><code>leader_ladder = Not a prospect</code> → "still a person in our base, but not someone we're trying to develop into a leader." Polite, neutral. Keep them in for info blasts, future campaign moments, context.</li>
+        <li><code>last_attempt_result = Do not contact</code> → "stop reaching out, period." Channel-level off-switch.</li>
+      </ul>
+    </div>
 
     <div class="step">
       <div class="step-label">Case A — Polite "not for me"</div>
       <h3>Got what they needed at 5/26, not looking for an ongoing role</h3>
-      <p>They're not hostile, they're just done. Log one final Contact Log row, then take them out of your queue:</p>
+      <p>They're not hostile, they're just done with active recruitment. Log a final Contact Log row, then change their tier on the contact row:</p>
       <div class="example">
         <div class="ex-label">Example: someone who came to 5/26 for info only</div>
         <dl class="kv">
           <dt>date</dt><dd>today</dd>
           <dt>method</dt><dd>Call</dd>
           <dt>result</dt><dd>Conversation</dd>
-          <dt>notes</dt><dd>Came to 5/26 for info, not looking for an ongoing role right now. Keep in base for future campaign moments.</dd>
+          <dt>notes</dt><dd>Came to 5/26 for info, not looking for an ongoing role right now. Tagged as Not a prospect — keep in base for future moments.</dd>
         </dl>
       </div>
-      <p>Then on the <b>contact row</b>, set <code>last_attempt_result = Do not contact</code>. That's the flag that pulls them out of your active recruiting views (all of those filter out <code>Do not contact</code>).</p>
+      <p>Then on the <b>contact row</b>, change <code>leader_ladder</code> from Prospect/Supporter → <code>Not a prospect</code>. That option already exists in the dropdown — all active recruiting views filter it out, so they fall off your call list immediately but stay in the base for context.</p>
     </div>
 
     <div class="step">
       <div class="step-label">Case B — Active opt-out</div>
       <h3>They asked you to stop contacting them</h3>
-      <p>Same shape, just with <code>Do not contact</code> on the log row too, so the audit trail is unambiguous:</p>
+      <p>Different signal — this is about the channel, not their recruitment status. Use <code>Do not contact</code> on both the log row and the contact row:</p>
       <div class="example">
         <div class="ex-label">Example: someone who asked to be removed</div>
         <dl class="kv">
@@ -355,12 +363,10 @@ code, .formula{
           <dt>notes</dt><dd>Asked to be removed from the list. Respect it — no further outreach.</dd>
         </dl>
       </div>
-      <p>And again, update the contact's <code>last_attempt_result</code> to <code>Do not contact</code>.</p>
+      <p>On the <b>contact row</b>: set <code>last_attempt_result = Do not contact</code>. (You can also flip <code>leader_ladder</code> to <code>Not a prospect</code> if it's clear they're not a leadership recruit, but the channel flag is the load-bearing one for opt-outs.)</p>
     </div>
 
-    <div class="note"><b>Why we don't delete:</b> the whole point of the base is to remember context. If someone calls back in six months around a different campaign moment, you want to know "we already talked to her, here's what she said." Deleting destroys that. Flagging preserves it AND keeps her out of your daily call queue.</div>
-
-    <div class="note warn"><b>Coming soon:</b> if you find yourself wanting a softer middle option — for folks who said "not now, but check back" — let Liz know. We can add a <code>Not a recruit, keep informed</code> option so they get blast updates around big moments without clogging anyone's call list.</div>
+    <div class="note"><b>Why we don't delete:</b> the whole point of the base is to remember context. If someone calls back in six months around a different campaign moment, you want to know "we already talked to her, here's what she said." Deleting destroys that. Flagging preserves it AND keeps them out of your daily call queue.</div>
   </section>
 
   <!-- SECTION 4 — 1:1 scheduling -->
