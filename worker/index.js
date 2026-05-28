@@ -1154,6 +1154,7 @@ function prospectsFilter(organizerName_) {
     `AND(`,
     `NOT({leader_ladder}='Core Leader'),`,
     `NOT({leader_ladder}='Not a prospect'),`,
+    `NOT({leader_ladder}='Not a recruit, keep informed'),`,
     `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>7),`,
     `NOT({last_attempt_result}='Signed up'),`,
     `NOT({signup_6_9_status}='Signed up'),`,

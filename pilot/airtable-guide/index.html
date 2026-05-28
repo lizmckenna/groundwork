@@ -327,10 +327,11 @@ code, .formula{
     <p class="section-sub">For people who aren't going to develop into leaders — whether they politely opted out, only wanted info from the meeting, or actively asked to be left alone. The goal is to remove them from your active call list without deleting them from the base. Two different fields, two different meanings — pick the right one.</p>
 
     <div class="note" style="background:var(--paper-2);color:var(--ink);border-left-color:var(--rose)">
-      <b>The two fields, side by side:</b>
+      <b>Three retirement options, side by side:</b>
       <ul style="margin:8px 0 0;padding-left:20px">
-        <li><code>leader_ladder = Not a prospect</code> → "still a person in our base, but not someone we're trying to develop into a leader." Polite, neutral. Keep them in for info blasts, future campaign moments, context.</li>
-        <li><code>last_attempt_result = Do not contact</code> → "stop reaching out, period." Channel-level off-switch.</li>
+        <li><code>leader_ladder = Not a prospect</code> → "not someone we're recruiting; don't actively reach out, but they stay in the base for context."</li>
+        <li><code>leader_ladder = Not a recruit, keep informed</code> → "not a leadership recruit, but DO send them campaign-moment blast emails." Same call-list exclusion as Not a prospect; different signal to the future comms tool.</li>
+        <li><code>last_attempt_result = Do not contact</code> → "stop reaching out, period." Channel-level off-switch. Use for explicit opt-outs.</li>
       </ul>
     </div>
 
@@ -351,7 +352,23 @@ code, .formula{
     </div>
 
     <div class="step">
-      <div class="step-label">Case B — Active opt-out</div>
+      <div class="step-label">Case B — Wants to stay in the loop, just not lead</div>
+      <h3>"Email me updates, but I'm not going to take a leadership role"</h3>
+      <p>The middle case Stephanie surfaced: supportive, wants campaign-moment updates, but not someone you're developing into a leader. Log a final Contact Log row, then change their tier:</p>
+      <div class="example">
+        <div class="ex-label">Example: someone who wants to stay informed but isn't recruitable</div>
+        <dl class="kv">
+          <dt>date</dt><dd>today</dd>
+          <dt>method</dt><dd>Call</dd>
+          <dt>result</dt><dd>Conversation</dd>
+          <dt>notes</dt><dd>Wants campaign-moment email updates but not interested in an ongoing organizing role. Tagged Not a recruit, keep informed.</dd>
+        </dl>
+      </div>
+      <p>On the <b>contact row</b>, set <code>leader_ladder = Not a recruit, keep informed</code>. They drop out of your call queue (same as Not a prospect) but stay tagged for the future blast-email tool. <em>Note: if you don't see this option in the dropdown yet, type it as a new value and Airtable will create it for everyone.</em></p>
+    </div>
+
+    <div class="step">
+      <div class="step-label">Case C — Active opt-out</div>
       <h3>They asked you to stop contacting them</h3>
       <p>Different signal — this is about the channel, not their recruitment status. Use <code>Do not contact</code> on both the log row and the contact row:</p>
       <div class="example">
