@@ -236,8 +236,11 @@ code, .formula{
       <ul>
         <li><code>assigned_organizer</code> &nbsp;<b>is</b>&nbsp; <code>LaNeé</code> (or <code>Stephanie</code>)</li>
         <li><code>attendance_5_26_status</code> &nbsp;<b>is any of</b>&nbsp; <code>Attended, Partial</code></li>
+        <li><code>leader_ladder</code> &nbsp;<b>is none of</b>&nbsp; <code>Not a prospect</code>, <code>Not a recruit, keep informed</code>, <code>Core Leader</code></li>
+        <li><code>last_attempt_result</code> &nbsp;<b>is none of</b>&nbsp; <code>Do not contact</code>, <code>Signed up</code>, <code>Skipped</code>, <code>Wrong number</code></li>
       </ul>
-      <p>No exclusions needed — Kathryn's filter does the splitting, not yours. You'll see everyone in your region who attended. The Kelley-Coquillette-types (multi-commitment) will be in your list, and you'll handle them as 1:1s.</p>
+      <p>The last two filters are load-bearing — they're what makes the "retire a contact" workflow in section 3.5 actually pull people out of your daily list. Without them, you'll keep seeing folks you already tagged as retired.</p>
+      <p>No need for a Kathryn-style exclusion otherwise — you'll see everyone in your region who attended. The Kelley-Coquillette-types (multi-commitment) will be in your list, and you'll handle them as 1:1s.</p>
       <p><b>For Kathryn</b> (narrow training-funnel — Amp/HM only, nothing else):</p>
       <ul>
         <li><code>attendance_5_26_status</code> &nbsp;<b>is any of</b>&nbsp; <code>Attended, Partial</code></li>
@@ -246,8 +249,10 @@ code, .formula{
         <li><code>amendment5_commitments</code> &nbsp;<b>does not contain</b>&nbsp; <code>Regional launch team</code></li>
         <li><code>amendment5_commitments</code> &nbsp;<b>does not contain</b>&nbsp; <code>School board resolution</code></li>
         <li><code>amendment5_commitments</code> &nbsp;<b>does not contain</b>&nbsp; <code>Other</code></li>
+        <li><code>leader_ladder</code> &nbsp;<b>is none of</b>&nbsp; <code>Not a prospect</code>, <code>Not a recruit, keep informed</code>, <code>Core Leader</code></li>
+        <li><code>last_attempt_result</code> &nbsp;<b>is none of</b>&nbsp; <code>Do not contact</code>, <code>Signed up</code>, <code>Skipped</code>, <code>Wrong number</code></li>
       </ul>
-      <p>The four exclusions keep multi-commitment leaders out — they belong to LaNeé/Stephanie for strategic 1:1s.</p>
+      <p>The four amendment5 exclusions keep multi-commitment leaders out — they belong to LaNeé/Stephanie for strategic 1:1s. The last two exclusions drop retired contacts (see section 3.5) out of your daily list.</p>
     </div>
 
     <div class="step">
