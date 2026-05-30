@@ -64,15 +64,15 @@ const AUTO_CONFIRM_EMAIL = false;
 const ZOOM_LINK_5_26 = 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1';
 const EVENT_NAME = 'Emergency Meeting on Public School Funding in Missouri';
 const EVENT_DATE_LABEL = 'Tuesday, May 26 · 7:30 PM CST';
-const FROM_CONFIRM = 'Parents for MO Kids <groundwork@civicpowerlab.us>';
+const FROM_CONFIRM = 'Parents for Missouri Public Schools <groundwork@civicpowerlab.us>';
 const REPLY_TO_CONFIRM = 'lanee4kckids@gmail.com';
 // Per-organizer profile used by sendConfirmationEmail.
 // Key is the lowercase organizer slug the dashboard sends (e.g. 'lanee', 'stephanie').
 // If missing → falls back to LaNeé.
 const ORGANIZER_PROFILE = {
-  'lanee':     { name: 'LaNeé Bridewell',    group: 'Parents for KC Kids', reply_to: 'lanee4kckids@gmail.com' },
-  'laneé':     { name: 'LaNeé Bridewell',    group: 'Parents for KC Kids', reply_to: 'lanee4kckids@gmail.com' },
-  'stephanie': { name: 'Stephanie Rittgers', group: 'Parents for MO Kids', reply_to: 'srttgrs+civicwork@gmail.com' },
+  'lanee':     { name: 'LaNeé Bridewell',    group: 'Parents for Missouri Public Schools', reply_to: 'lanee4kckids@gmail.com' },
+  'laneé':     { name: 'LaNeé Bridewell',    group: 'Parents for Missouri Public Schools', reply_to: 'lanee4kckids@gmail.com' },
+  'stephanie': { name: 'Stephanie Rittgers', group: 'Parents for Missouri Public Schools', reply_to: 'srttgrs+civicwork@gmail.com' },
 };
 // Legacy lookup, kept for any code still reading reply-to only.
 const ORGANIZER_REPLY_TO = Object.fromEntries(Object.entries(ORGANIZER_PROFILE).map(([k,v]) => [k, v.reply_to]));
@@ -146,6 +146,8 @@ export default {
       if (url.pathname === '/signup' && request.method === 'POST') return await signup(request, env);
       if (url.pathname === '/house-meeting-signup' && request.method === 'POST') return await houseMeetingSignup(request, env);
       if (url.pathname === '/amendment5-signup' && request.method === 'POST') return await amendment5Signup(request, env);
+      if (url.pathname === '/training-signup' && request.method === 'POST') return await trainingSignup(request, env);
+      if (url.pathname === '/remind-signup' && request.method === 'POST') return await remindSignup(request, env);
       if (url.pathname === '/house-meeting-hosts' && request.method === 'GET') return await houseMeetingHosts(env);
       if (url.pathname === '/event-detail' && request.method === 'GET') return await eventDetail(env, url);
       if (url.pathname === '/event-rsvp' && request.method === 'POST') return await eventRsvp(request, env);
@@ -331,6 +333,101 @@ export default {
         }
         await invalidateReadCaches(env);
         return json({ ok: true, created_count: created.length, created, errors });
+      }
+      if (url.pathname === '/admin/base-schema' && request.method === 'GET') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables`, {
+          headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}` },
+        });
+        return json({ ok: r.ok, status: r.status, body: JSON.parse(await r.text()) });
+      }
+      if (url.pathname === '/admin/list-records' && request.method === 'GET') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const tableId = url.searchParams.get('table');
+        if (!tableId) return json({ error: 'table param required' }, 400);
+        const r = await fetch(`https://api.airtable.com/v0/${BASE}/${tableId}?maxRecords=100`, {
+          headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}` },
+        });
+        return json({ ok: r.ok, status: r.status, body: JSON.parse(await r.text()) });
+      }
+      if (url.pathname === '/admin/patch-records' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const body = await request.json();
+        const tableId = body.table;
+        const records = body.records || [];
+        if (!tableId) return json({ error: 'table required' }, 400);
+        const updated = [];
+        const errors = [];
+        for (let i = 0; i < records.length; i += 10) {
+          const chunk = records.slice(i, i + 10);
+          const r = await fetch(`https://api.airtable.com/v0/${BASE}/${tableId}`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ records: chunk, typecast: true }),
+          });
+          if (r.ok) updated.push(...chunk.map(c => c.id));
+          else errors.push({ batch_start: i, status: r.status, body: await r.text() });
+        }
+        return json({ ok: true, updated_count: updated.length, errors });
+      }
+      if (url.pathname === '/admin/create-view' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const body = await request.json();
+        const tableId = body.table || CONTACTS_TBL;
+        const payload = {
+          name: body.name,
+          type: body.type || 'grid',
+        };
+        if (body.visibleFieldIds) payload.visibleFieldIds = body.visibleFieldIds;
+        const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables/${tableId}/views`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        return json({ ok: r.ok, status: r.status, body: await r.text() });
+      }
+      if (url.pathname === '/admin/create-records' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const body = await request.json();
+        const tableId = body.table;
+        const records = body.records || [];
+        if (!tableId) return json({ error: 'table required' }, 400);
+        const created = [];
+        const errors = [];
+        for (let i = 0; i < records.length; i += 10) {
+          const chunk = records.slice(i, i + 10);
+          const r = await fetch(`https://api.airtable.com/v0/${BASE}/${tableId}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ records: chunk, typecast: true }),
+          });
+          if (r.ok) {
+            const j = await r.json();
+            created.push(...j.records.map(rec => ({ id: rec.id, name: rec.fields.Name || rec.fields.name || '' })));
+          } else {
+            errors.push({ batch_start: i, status: r.status, body: await r.text() });
+          }
+        }
+        return json({ ok: true, created_count: created.length, created, errors });
+      }
+      if (url.pathname === '/admin/create-field' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const body = await request.json();
+        const f = { name: body.name, type: body.type };
+        if (body.options) f.options = body.options;
+        const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables/${CONTACTS_TBL}/fields`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(f),
+        });
+        const txt = await r.text();
+        return json({ ok: r.ok, status: r.status, body: txt });
       }
       if (url.pathname === '/admin/setup-a5-field' && request.method === 'POST') {
         const k = request.headers.get('X-Admin-Key');
@@ -595,10 +692,11 @@ async function signup(request, env) {
 
   const body = await request.json();
   if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
-  const { first, last, email, phone, school, district, county, city, zip, signup_5_26, signup_6_9, source } = body;
+  const { first, last, email, phone, school, district, county, city, zip, signup_5_26, signup_6_9, recruited_by, source } = body;
   if (!first || !last || (!email && !phone)) {
     return json({ error: 'first name, last name, and email or phone are required' }, 400);
   }
+  const cRecruiter = recruited_by ? String(recruited_by).trim() : '';
 
   const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
   const cFirst = clean(first);
@@ -637,6 +735,7 @@ async function signup(request, env) {
       patch.signup_6_9_status = 'Signed up';
       if (!signup_5_26) patch.last_attempt_date = today;
     }
+    if (cRecruiter) patch.recruited_by = cRecruiter;
     if (Object.keys(patch).length) {
       await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
         method: 'PATCH',
@@ -668,6 +767,7 @@ async function signup(request, env) {
       fields.signup_6_9_status = 'Signed up';
       if (!signup_5_26) fields.last_attempt_date = today;
     }
+    if (cRecruiter) fields.recruited_by = cRecruiter;
     const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
       method: 'POST',
       body: JSON.stringify({ records: [{ fields }], typecast: true })
@@ -908,10 +1008,11 @@ async function amendment5Signup(request, env) {
 
   const body = await request.json();
   if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
-  const { first, last, phone, email, street_address, city, state, zip, district, school, commitments = [], other_text, source } = body;
+  const { first, last, phone, email, street_address, city, state, zip, district, school, commitments = [], other_text, recruited_by, source } = body;
   if (!first || !last || !phone || !email || !zip) {
     return json({ error: 'first, last, phone, email, and zip are required' }, 400);
   }
+  const cRecruiter = recruited_by ? String(recruited_by).trim() : '';
 
   const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
   const cFirst = clean(first);
@@ -953,6 +1054,7 @@ async function amendment5Signup(request, env) {
   if (zip) baseFields.zip = String(zip).trim();
   if (district) baseFields.district = String(district).trim();
   if (school) baseFields.school = String(school).trim();
+  if (cRecruiter) baseFields.recruited_by = cRecruiter;
   // Mark as signed-up for the appropriate event
   baseFields.last_attempt_date = today;
   if (isAfter526) {
@@ -1026,6 +1128,244 @@ async function amendment5Signup(request, env) {
 
   await invalidateReadCaches(env);
   return json({ ok: true, contact_id: contactId, commitments_logged: commitments.length, event: eventName });
+}
+
+// =========================================================================
+// /training-signup — public training-signup form (parents4mopublicschools.org/trainings/).
+// Accepts: first, last, email, phone, zip, events[] (array of event labels like
+// "Amplifier Training 6/11"), source.
+// Dedupes by email then phone. Routes via existing county→city→zip cascade.
+// Writes one contact_log row per training (method=Event attendance, result=Signed up)
+// plus updates a multi-select `events_signed_up` on the contact (auto-creates options
+// via typecast=true).
+// =========================================================================
+async function trainingSignup(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:trainsignup:${ip}`;
+  let count = 0;
+  try { count = parseInt(await env.KV_BINDING.get(rlKey) || '0'); } catch {}
+  if (count >= 30) return json({ error: 'too many requests, try again later' }, 429, { 'Retry-After': '300' });
+  try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
+
+  const body = await request.json();
+  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+  const { first, last, phone, email, zip, events = [], recruited_by, source } = body;
+  if (!first || !last || !phone || !email || !zip) {
+    return json({ error: 'first, last, phone, email, and zip are required' }, 400);
+  }
+  const cRecruiter = recruited_by ? String(recruited_by).trim() : '';
+  if (!Array.isArray(events) || events.length === 0) {
+    return json({ error: 'pick at least one training' }, 400);
+  }
+
+  const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
+  const cFirst = clean(first);
+  const cLast = clean(last);
+  const cEmail = String(email).toLowerCase().trim();
+  const cPhone = String(phone).trim();
+  const cZip = String(zip).trim();
+
+  // Dedupe by email then phone
+  let existingId = null;
+  const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+  if (r.records.length > 0) existingId = r.records[0].id;
+  if (!existingId) {
+    const digits = cPhone.replace(/\D/g, '').slice(-10);
+    if (digits.length === 10) {
+      const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+      if (r2.records.length > 0) existingId = r2.records[0].id;
+    }
+  }
+
+  // Organizer assignment via existing cascade
+  const organizerId = deriveOrganizerId({ zip: cZip });
+
+  const today = todayCT();
+
+  // Pull existing events_signed_up so we can merge (multi-select on Airtable)
+  let existingEvents = [];
+  if (existingId) {
+    try {
+      const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${existingId}`);
+      const v = cur.fields && cur.fields.events_signed_up;
+      if (Array.isArray(v)) existingEvents = v;
+      else if (typeof v === 'string' && v) existingEvents = v.split(',').map(s => s.trim()).filter(Boolean);
+    } catch {}
+  }
+  const mergedEvents = Array.from(new Set([...existingEvents, ...events]));
+
+  // Build contact field updates
+  const baseFields = {
+    first: cFirst,
+    last: cLast,
+    email: cEmail,
+    phone: cPhone,
+    zip: cZip,
+    source: source || 'training signup',
+    last_attempt_date: today,
+    events_signed_up: mergedEvents,
+  };
+  if (cRecruiter) baseFields.recruited_by = cRecruiter;
+  // If the user signed up for the 6/9 Emergency Meeting through this form,
+  // also flip signup_6_9_status so they appear in the 6/9 Event Tracking tab
+  // (mirrors the homepage /signup flow).
+  if (events.some(e => /6\/9 Emergency Meeting/i.test(e))) {
+    baseFields.signup_6_9_status = 'Signed up';
+  }
+
+  let contactId;
+  if (existingId) {
+    contactId = existingId;
+    try {
+      await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: baseFields, typecast: true })
+      });
+    } catch (e) { /* non-fatal — continue with log creation */ }
+  } else {
+    const fields = { ...baseFields, leader_ladder: 'Prospect', assigned_organizer: [organizerId] };
+    const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+      method: 'POST',
+      body: JSON.stringify({ records: [{ fields }], typecast: true })
+    });
+    contactId = created.records[0].id;
+  }
+
+  // One contact_log row per training selected
+  const logRecords = events.map(evName => ({
+    fields: {
+      Summary: `${today} — training signup: ${evName}`,
+      date: today,
+      method: 'Event attendance',
+      result: 'Signed up',
+      event: evName,
+      contact: [contactId],
+      notes: source ? `Source: ${source}` : 'Training signup form',
+    }
+  }));
+
+  // Airtable allows max 10 records per POST
+  for (let i = 0; i < logRecords.length; i += 10) {
+    const chunk = logRecords.slice(i, i + 10);
+    try {
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+        method: 'POST',
+        body: JSON.stringify({ records: chunk, typecast: true })
+      });
+    } catch (e) { /* non-fatal — contact is still created */ }
+  }
+
+  await invalidateReadCaches(env);
+  return json({ ok: true, contact_id: contactId, events_logged: events.length, events });
+}
+
+// =========================================================================
+// /remind-signup — public "remind me to vote" form (QR / dismissal-line flier).
+// Single-purpose: first, phone, zip. Optional email. Adds to vote-reminder list.
+// Sets wants_vote_reminders=true on the contact + logs the signup event.
+// =========================================================================
+async function remindSignup(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:remindsignup:${ip}`;
+  let count = 0;
+  try { count = parseInt(await env.KV_BINDING.get(rlKey) || '0'); } catch {}
+  if (count >= 30) return json({ error: 'too many requests, try again later' }, 429, { 'Retry-After': '300' });
+  try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
+
+  const body = await request.json();
+  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+  const { first, last, phone, email, zip, school, district, wants_updates, wants_help, recruited_by, source } = body;
+  if (!first || !last || !phone) {
+    return json({ error: 'first name, last name, and phone are required' }, 400);
+  }
+  const cRecruiter = recruited_by ? String(recruited_by).trim() : '';
+
+  const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
+  const cFirst = clean(first);
+  const cLast = clean(last);
+  const cPhone = String(phone).trim();
+  const cEmail = email ? String(email).toLowerCase().trim() : '';
+  const cZip = zip ? String(zip).trim() : '';
+  const cSchool = school ? String(school).trim() : '';
+  const cDistrict = district ? String(district).trim() : '';
+
+  // Dedupe by phone then email
+  let existingId = null;
+  const digits = cPhone.replace(/\D/g, '').slice(-10);
+  if (digits.length === 10) {
+    const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+    if (r2.records.length > 0) existingId = r2.records[0].id;
+  }
+  if (!existingId && cEmail) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+    if (r.records.length > 0) existingId = r.records[0].id;
+  }
+
+  const today = todayCT();
+
+  const baseFields = {
+    first: cFirst,
+    last: cLast,
+    phone: cPhone,
+    source: source || 'remind me to vote',
+    last_attempt_date: today,
+    wants_vote_reminders: true,
+  };
+  if (cEmail) baseFields.email = cEmail;
+  if (cZip) baseFields.zip = cZip;
+  if (cSchool) baseFields.school = cSchool;
+  if (cDistrict) baseFields.district = cDistrict;
+  if (cRecruiter) baseFields.recruited_by = cRecruiter;
+  if (wants_updates) baseFields.wants_amendment5_updates = true;
+  if (wants_help) baseFields.wants_to_volunteer = true;
+
+  let contactId;
+  if (existingId) {
+    contactId = existingId;
+    try {
+      await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: baseFields, typecast: true })
+      });
+    } catch (e) { /* non-fatal */ }
+  } else {
+    const fields = { ...baseFields, leader_ladder: 'Prospect' };
+    // Only assign organizer if we have a zip to route on; otherwise leave unassigned
+    if (cZip) {
+      const organizerId = deriveOrganizerId({ zip: cZip });
+      if (organizerId) fields.assigned_organizer = [organizerId];
+    }
+    const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+      method: 'POST',
+      body: JSON.stringify({ records: [{ fields }], typecast: true })
+    });
+    contactId = created.records[0].id;
+  }
+
+  // Log the signup
+  try {
+    await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+      method: 'POST',
+      body: JSON.stringify({ records: [{
+        fields: {
+          Summary: `${today} — vote reminder signup`,
+          date: today,
+          method: 'Other',
+          result: 'Signed up',
+          event: 'Vote reminder list',
+          contact: [contactId],
+          notes: [
+            source ? `Source: ${source}` : 'Remind me to vote form',
+            wants_updates ? 'Wants Amendment 5 updates' : null,
+            wants_help ? 'Wants to help us win (volunteer follow-up)' : null,
+          ].filter(Boolean).join(' · '),
+        }
+      }], typecast: true })
+    });
+  } catch (e) { /* non-fatal */ }
+
+  await invalidateReadCaches(env);
+  return json({ ok: true, contact_id: contactId });
 }
 
 // Pages the magic link is allowed to land on (open-redirect protection).
