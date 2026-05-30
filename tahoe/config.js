@@ -2,10 +2,9 @@
 // Edit this file to wire the site up to your Google Sheet.
 
 window.TAHOE_CONFIG = {
-  // Paste your Apps Script Web App URL here after you deploy it.
-  // Until then, the site renders with realistic mock data so you can preview.
-  // See apps-script.gs for the ~2 minute setup.
-  appsScriptUrl: "",
+  // Apps Script Web App URL — bound to the "Tahoe 2026" Google Sheet.
+  // See apps-script.gs for the script source and setup notes.
+  appsScriptUrl: "https://script.google.com/macros/s/AKfycbzXWoX0XhBcAtrKLcntcMxxv75lzQDpfIEDzYBWjapK-QZoOJ9CI-fq4OFcXHIRfm9x/exec",
 
   // Demo mode: when there's no Apps Script URL, the heatmap pretends "today" is
   // mid-reunion so you can see what the page will look like during the week.
