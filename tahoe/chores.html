@@ -59,14 +59,17 @@
       <div class="heatmap-wrap">
         <div id="heatmap" class="heatmap"></div>
       </div>
-      <div class="legend">
-        <span>Less</span>
-        <span class="swatch" style="background: #eef2f4"></span>
-        <span class="swatch" style="background: #bfe1ec"></span>
-        <span class="swatch" style="background: #7ec0d4"></span>
-        <span class="swatch" style="background: #2c7da0"></span>
-        <span class="swatch" style="background: #1a4d6e"></span>
-        <span>More</span>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; gap: 12px; flex-wrap: wrap;">
+        <button class="btn secondary small" id="heatmap-toggle" hidden>Show all</button>
+        <div class="legend" style="margin-top: 0;">
+          <span>Less</span>
+          <span class="swatch" style="background: #eef2f4"></span>
+          <span class="swatch" style="background: #bfe1ec"></span>
+          <span class="swatch" style="background: #7ec0d4"></span>
+          <span class="swatch" style="background: #2c7da0"></span>
+          <span class="swatch" style="background: #1a4d6e"></span>
+          <span>More</span>
+        </div>
       </div>
     </div>
   </section>
@@ -198,20 +201,34 @@
     });
 
     // ---- Heatmap ----
+    const HEATMAP_TOP_N = 10;
+    let heatmapExpanded = false;
+
     function renderHeatmap() {
-      const adults = data.people.filter(p => p.role === "adult");
+      const allAdults = data.people.filter(p => p.role === "adult");
       const counts = {}; // person -> { date: count }
-      adults.forEach(p => counts[p.name] = {});
+      allAdults.forEach(p => counts[p.name] = {});
       data.completions.forEach(c => {
         if (!counts[c.person]) return;
         counts[c.person][c.date] = (counts[c.person][c.date] || 0) + 1;
       });
       // sort by total descending so most active people float to top
       const totals = {};
-      adults.forEach(p => {
+      allAdults.forEach(p => {
         totals[p.name] = Object.values(counts[p.name]).reduce((a, b) => a + b, 0);
       });
-      adults.sort((a, b) => totals[b.name] - totals[a.name] || a.name.localeCompare(b.name));
+      allAdults.sort((a, b) => totals[b.name] - totals[a.name] || a.name.localeCompare(b.name));
+
+      const adults = heatmapExpanded ? allAdults : allAdults.slice(0, HEATMAP_TOP_N);
+      const toggleBtn = document.getElementById("heatmap-toggle");
+      if (allAdults.length > HEATMAP_TOP_N) {
+        toggleBtn.hidden = false;
+        toggleBtn.textContent = heatmapExpanded
+          ? `Show top ${HEATMAP_TOP_N}`
+          : `Show all ${allAdults.length}`;
+      } else {
+        toggleBtn.hidden = true;
+      }
 
       const scale = cfg.heatScale;
       function color(n) {
@@ -339,6 +356,11 @@
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => toast.classList.remove("show"), 4500);
     }
+
+    document.getElementById("heatmap-toggle").addEventListener("click", () => {
+      heatmapExpanded = !heatmapExpanded;
+      renderHeatmap();
+    });
 
     renderAll();
   })();
