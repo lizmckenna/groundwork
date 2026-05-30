@@ -3,100 +3,151 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5">
-  <title>Tahoe 2026 — Family Reunion</title>
+  <meta name="theme-color" content="#0d3b5c">
+  <title>Tahoe 2026</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <header class="topbar">
-  <div class="topbar-inner">
-    <div class="brand">
-      <span class="brand-mark">🌲</span>
-      <span>Tahoe 2026</span>
-      <span class="brand-sub">July 20–26</span>
-    </div>
-    <nav class="nav">
-      <a href="index.html" class="active">Home</a>
-      <a href="chores.html">Chores</a>
-      <a href="schedule.html">Schedule</a>
-      <a href="lodging.html">Lodging</a>
-      <a href="photos.html">Photos</a>
-    </nav>
+  <div class="brand">🌲 The McKennas at Tahoe
+    <span class="brand-sub">July 20 – 26, 2026</span>
   </div>
 </header>
 
+<section class="hero-scene">
+  <!-- mountain silhouettes -->
+  <svg class="mountains" viewBox="0 0 400 130" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M 0 130 L 60 60 L 110 95 L 170 30 L 230 80 L 290 45 L 360 90 L 400 70 L 400 130 Z" fill="#52759b" />
+    <path d="M 0 130 L 40 90 L 90 110 L 160 70 L 220 100 L 290 75 L 360 105 L 400 95 L 400 130 Z" fill="#3d6489" />
+    <!-- snow caps -->
+    <path d="M 165 36 L 170 30 L 175 36 L 173 40 L 167 40 Z" fill="#fff" opacity="0.85" />
+    <path d="M 287 51 L 290 45 L 293 51 L 291 54 L 289 54 Z" fill="#fff" opacity="0.85" />
+  </svg>
+
+  <!-- pine silhouettes -->
+  <svg class="pines-left" viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+    <g fill="#173e2c">
+      <path d="M 20 80 L 20 50 L 8 60 L 18 35 L 6 45 L 20 18 L 34 45 L 22 35 L 32 60 L 20 50 Z"/>
+      <path d="M 60 80 L 60 55 L 50 62 L 58 42 L 48 50 L 60 28 L 72 50 L 62 42 L 70 62 L 60 55 Z"/>
+      <path d="M 100 80 L 100 60 L 92 66 L 99 50 L 91 56 L 100 38 L 109 56 L 101 50 L 108 66 L 100 60 Z"/>
+    </g>
+  </svg>
+  <svg class="pines-right" viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+    <g fill="#173e2c">
+      <path d="M 20 80 L 20 60 L 12 66 L 19 50 L 11 56 L 20 38 L 29 56 L 21 50 L 28 66 L 20 60 Z"/>
+      <path d="M 60 80 L 60 55 L 50 62 L 58 42 L 48 50 L 60 28 L 72 50 L 62 42 L 70 62 L 60 55 Z"/>
+      <path d="M 100 80 L 100 50 L 88 60 L 98 35 L 86 45 L 100 18 L 114 45 L 102 35 L 112 60 L 100 50 Z"/>
+    </g>
+  </svg>
+
+  <div class="eyebrow">See you at the lake</div>
+  <h1>Tahoe<br>2026</h1>
+  <p class="tagline">Four Ring Road · Teece House</p>
+
+  <div class="countdown" id="countdown">
+    <div class="unit"><div class="num" id="cd-d">—</div><div class="label">Days</div></div>
+    <div class="unit"><div class="num" id="cd-h">—</div><div class="label">Hours</div></div>
+    <div class="unit"><div class="num" id="cd-m">—</div><div class="label">Min</div></div>
+    <div class="unit"><div class="num" id="cd-s">—</div><div class="label">Sec</div></div>
+  </div>
+</section>
+
 <main class="shell">
 
-  <section class="hero">
-    <div class="eyebrow">Family reunion</div>
-    <h1>See you at the lake.</h1>
-    <p class="meta">Four Ring Road, Teece House &nbsp;·&nbsp; Lake Tahoe, CA</p>
-
-    <div class="countdown" id="countdown">
-      <div class="unit"><div class="num" id="cd-d">—</div><div class="label">Days</div></div>
-      <div class="unit"><div class="num" id="cd-h">—</div><div class="label">Hours</div></div>
-      <div class="unit"><div class="num" id="cd-m">—</div><div class="label">Min</div></div>
-      <div class="unit"><div class="num" id="cd-s">—</div><div class="label">Sec</div></div>
+  <section class="section">
+    <div class="section-title">
+      <h2>Today at the lake</h2>
     </div>
-  </section>
-
-  <section class="section" id="today-section">
-    <div class="section-head">
-      <h2 id="today-title">Today at the lake</h2>
-      <span class="hint" id="today-date">—</span>
-    </div>
-
-    <div class="grid-2">
-      <div class="card">
-        <h3>Dinner lead</h3>
-        <p class="lead" id="dinner-lead">—</p>
-        <p class="lead" id="dinner-menu" style="margin-top: 6px;"></p>
+    <div class="card sky">
+      <div style="display:flex; align-items: baseline; gap: 10px; margin-bottom: 14px;">
+        <span class="pill" id="today-pill">—</span>
+        <span style="color: var(--ink-soft); font-size: 0.92rem;" id="today-headcount">—</span>
       </div>
-      <div class="card">
-        <h3>Today's plan</h3>
-        <div id="today-plan" class="lead">—</div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top: 14px;">
-      <h3>Who's around</h3>
-      <div id="who-here" class="lead">—</div>
+      <h3 style="margin-bottom: 4px;">🍽️ Dinner is on…</h3>
+      <p style="font-size: 1.1rem; color: var(--ink); margin-bottom: 14px;" id="dinner-lead">—</p>
+      <h3 style="margin-bottom: 4px;">📋 What's happening</h3>
+      <div id="today-plan" style="font-size: 1rem; color: var(--ink);"></div>
     </div>
   </section>
 
   <section class="section">
-    <div class="section-head">
+    <div class="section-title">
       <h2>Jump in</h2>
     </div>
-    <div class="grid-2">
-      <a class="card" href="chores.html" style="display:block;">
-        <h3>🏆 Chores & Glory</h3>
-        <p class="lead">Sign up, tap "done", climb the leaderboard.</p>
+    <div class="tiles">
+      <a class="tile blue" href="chores.html">
+        <svg class="tile-ico" viewBox="0 0 32 32" fill="none" stroke="#1f6fa3" stroke-width="2.2" stroke-linecap="round">
+          <path d="M 16 4 L 16 14"/>
+          <path d="M 10 14 L 22 14"/>
+          <path d="M 8 14 L 8 26 L 24 26 L 24 14"/>
+          <path d="M 12 26 L 12 20 L 20 20 L 20 26"/>
+        </svg>
+        <div class="tile-title">Help out</div>
+        <div class="tile-sub">Sign up, tap done, get glory</div>
       </a>
-      <a class="card" href="schedule.html" style="display:block;">
-        <h3>🗓️ This week's schedule</h3>
-        <p class="lead">Hikes, beach days, kid stuff, free blocks.</p>
+      <a class="tile pine" href="schedule.html">
+        <svg class="tile-ico" viewBox="0 0 32 32" fill="none" stroke="#173e2c" stroke-width="2.2" stroke-linecap="round">
+          <circle cx="16" cy="16" r="10"/>
+          <path d="M 16 10 L 16 16 L 20 18"/>
+        </svg>
+        <div class="tile-title">This week</div>
+        <div class="tile-sub">Hikes, beach days, meals</div>
       </a>
-      <a class="card" href="lodging.html" style="display:block;">
-        <h3>🛏️ Where you're sleeping</h3>
-        <p class="lead">Beds, tents, and overflow spots.</p>
+      <a class="tile sand" href="lodging.html">
+        <svg class="tile-ico" viewBox="0 0 32 32" fill="none" stroke="#8e6a1f" stroke-width="2.2" stroke-linecap="round">
+          <path d="M 4 22 L 28 22 L 28 26"/>
+          <path d="M 4 18 L 4 26"/>
+          <path d="M 4 18 L 28 18 L 28 14 C 28 12 26 10 24 10 L 12 10 C 10 10 8 12 8 14 L 8 18"/>
+          <circle cx="12" cy="15" r="2"/>
+        </svg>
+        <div class="tile-title">Where you sleep</div>
+        <div class="tile-sub">Beds, tents, overflow</div>
       </a>
-      <a class="card" href="photos.html" style="display:block;">
-        <h3>📸 Memories</h3>
-        <p class="lead">Tahoe reunions of years past.</p>
+      <a class="tile coral" href="photos.html">
+        <svg class="tile-ico" viewBox="0 0 32 32" fill="none" stroke="#c1416e" stroke-width="2.2" stroke-linecap="round">
+          <rect x="4" y="9" width="24" height="18" rx="2"/>
+          <path d="M 11 9 L 13 6 L 19 6 L 21 9"/>
+          <circle cx="16" cy="18" r="5"/>
+        </svg>
+        <div class="tile-title">Memories</div>
+        <div class="tile-sub">Tahoe albums past</div>
       </a>
     </div>
   </section>
 
   <footer class="foot">
-    <div id="mock-tag-foot" class="mock-tag" hidden>Preview mode — using sample data</div>
-    <div>Made with love for the family · See you in <span id="cd-days-foot">—</span> days</div>
+    <div id="mock-tag-foot" class="mock-tag" hidden>Preview · sample data</div>
+    <div>Made with love for the family. See you in <span id="cd-days-foot">—</span> days.</div>
   </footer>
 
 </main>
+
+<nav class="tabbar">
+  <a class="tab active" href="index.html">
+    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M 5 13 L 14 5 L 23 13 L 23 23 L 5 23 Z"/></svg>
+    <span class="tab-label">Home</span>
+  </a>
+  <a class="tab" href="chores.html">
+    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M 14 4 L 14 11"/><path d="M 9 11 L 19 11"/><path d="M 7 11 L 7 24 L 21 24 L 21 11"/></svg>
+    <span class="tab-label">Help</span>
+  </a>
+  <a class="tab" href="schedule.html">
+    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="14" r="9"/><path d="M 14 8 L 14 14 L 18 16"/></svg>
+    <span class="tab-label">Plan</span>
+  </a>
+  <a class="tab" href="lodging.html">
+    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M 4 19 L 24 19 L 24 23"/><path d="M 4 15 L 4 23"/><path d="M 4 15 L 24 15 L 24 12 C 24 10 22 9 20 9 L 11 9 C 9 9 7 10 7 12 L 7 15"/></svg>
+    <span class="tab-label">Beds</span>
+  </a>
+  <a class="tab" href="photos.html">
+    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="20" height="15" rx="2"/><path d="M 10 9 L 12 6 L 16 6 L 18 9"/><circle cx="14" cy="16" r="4"/></svg>
+    <span class="tab-label">Photos</span>
+  </a>
+</nav>
 
 <script src="config.js"></script>
 <script src="data.js"></script>
@@ -105,70 +156,51 @@
     const cfg = window.TAHOE_CONFIG;
     const data = await window.TAHOE_DATA.fetchAll();
 
-    // Countdown
     const target = new Date(cfg.startDate + "T16:00:00-07:00");
     function tick() {
       const diff = target - new Date();
-      if (diff <= 0) {
-        document.getElementById("cd-d").textContent = "0";
-        document.getElementById("cd-h").textContent = "0";
-        document.getElementById("cd-m").textContent = "0";
-        document.getElementById("cd-s").textContent = "0";
-        document.getElementById("cd-days-foot").textContent = "0";
-        return;
-      }
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      if (diff <= 0) { set("cd-d", 0); set("cd-h", 0); set("cd-m", 0); set("cd-s", 0); set("cd-days-foot", 0); return; }
       const d = Math.floor(diff / 86400000);
       const h = Math.floor((diff / 3600000) % 24);
       const m = Math.floor((diff / 60000) % 60);
       const s = Math.floor((diff / 1000) % 60);
-      document.getElementById("cd-d").textContent = d;
-      document.getElementById("cd-h").textContent = h;
-      document.getElementById("cd-m").textContent = m;
-      document.getElementById("cd-s").textContent = s;
-      document.getElementById("cd-days-foot").textContent = d;
+      set("cd-d", d); set("cd-h", h); set("cd-m", m); set("cd-s", s); set("cd-days-foot", d);
     }
     tick(); setInterval(tick, 1000);
 
-    // Mock badge
     if (data.mock) document.getElementById("mock-tag-foot").hidden = false;
 
-    // Today panel
-    const now = new Date();
-    const realTodayIso = now.toISOString().slice(0, 10);
+    const realTodayIso = new Date().toISOString().slice(0, 10);
     const inReunion = realTodayIso >= cfg.startDate && realTodayIso <= cfg.endDate;
     const todayIso = inReunion ? realTodayIso : (data.mock ? cfg.demoTodayOverride : cfg.startDate);
-
     const todayDay = cfg.days.find(d => d.date === todayIso) || cfg.days[0];
-    const todayShort = todayDay.short;
-    document.getElementById("today-date").textContent =
-      todayDay.label + " · " + todayShort + (inReunion ? "" : (data.mock ? " (preview)" : " — first day"));
 
-    // Dinner lead
+    document.getElementById("today-pill").textContent =
+      todayDay.label + " · " + todayDay.short + (inReunion ? "" : data.mock ? " (preview)" : " · first day");
+
     const lead = data.dinnerLeads[todayIso];
     document.getElementById("dinner-lead").textContent =
-      lead && lead.leads ? lead.leads : "Open — sign up in the sheet";
-    document.getElementById("dinner-menu").textContent =
-      lead && lead.menu ? "Menu: " + lead.menu : "";
+      lead && lead.leads
+        ? lead.leads + (lead.menu ? " — " + lead.menu : "")
+        : "Open — sign up in the sheet";
 
-    // Today's plan
     const plan = data.schedule.filter(s => s.date === todayIso);
     const planEl = document.getElementById("today-plan");
     if (plan.length === 0) {
-      planEl.textContent = "Nothing scheduled yet. Free day — go to the lake.";
+      planEl.textContent = "No plans set — go to the lake.";
     } else {
       planEl.innerHTML = plan.map(s => {
-        const t = s.time === "all day" ? "" : s.time + " · ";
-        return `<div>${t}<strong>${s.title}</strong>${s.lead ? " — " + s.lead : ""}</div>`;
+        const t = s.time === "all day" ? "All day" : s.time;
+        return `<div style="padding: 4px 0;"><strong>${t}</strong> &nbsp;${s.title}${s.lead ? " · " + s.lead : ""}</div>`;
       }).join("");
     }
 
-    // Who's around today
-    const here = data.people.filter(p => p.days.includes(todayShort));
+    const here = data.people.filter(p => p.days.includes(todayDay.short));
     const adults = here.filter(p => p.role === "adult");
     const kids = here.filter(p => p.role === "kid");
-    document.getElementById("who-here").innerHTML =
-      `<strong>${adults.length}</strong> adults · <strong>${kids.length}</strong> kids · ` +
-      `<span class="pill muted">${here.length} total</span>`;
+    document.getElementById("today-headcount").textContent =
+      `${adults.length} grown-ups · ${kids.length} kids`;
   })();
 </script>
 

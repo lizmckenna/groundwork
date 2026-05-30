@@ -3,105 +3,100 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5">
-  <title>Chores & Glory · Tahoe 2026</title>
+  <meta name="theme-color" content="#0d3b5c">
+  <title>Help out · Tahoe 2026</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<header class="topbar">
-  <div class="topbar-inner">
-    <div class="brand">
-      <span class="brand-mark">🌲</span>
-      <span>Tahoe 2026</span>
-    </div>
-    <nav class="nav">
-      <a href="index.html">Home</a>
-      <a href="chores.html" class="active">Chores</a>
-      <a href="schedule.html">Schedule</a>
-      <a href="lodging.html">Lodging</a>
-      <a href="photos.html">Photos</a>
-    </nav>
-  </div>
-</header>
+<section class="page-hero">
+  <div class="eyebrow">Many hands, light work</div>
+  <h1>Help out</h1>
+  <p class="tagline">Tap "I did it" when you finish a chore. The wall remembers.</p>
+</section>
 
 <main class="shell">
 
-  <section class="hero">
-    <div class="eyebrow">Many hands make light work</div>
-    <h1>Chores & Glory</h1>
-    <p class="meta">Sign up, tap "done", earn your title. The heatmap doesn't lie.</p>
-  </section>
-
-  <!-- TODAY'S SIGN-UP -->
   <section class="section">
-    <div class="section-head">
+    <div class="section-title">
       <h2 id="today-heading">Today's signups</h2>
-      <span class="hint" id="today-sub">—</span>
     </div>
-    <div class="card">
-      <div id="today-grid" class="today-grid">Loading…</div>
-    </div>
-    <div class="ticker" style="margin-top: 14px;" id="ticker">
-      <div class="ticker-item">Activity will appear here as people check chores off.</div>
+    <div id="today-grid" class="signup-list">Loading…</div>
+    <div class="ticker" id="ticker" style="margin-top: 16px;">
+      <div class="ticker-item">Activity will show here as people check things off.</div>
     </div>
   </section>
 
-  <!-- HEATMAP -->
   <section class="section">
-    <div class="section-head">
-      <h2>Contribution heatmap</h2>
-      <span class="hint">One row per adult · the week at a glance</span>
+    <div class="section-title">
+      <h2>Help-out wall</h2>
     </div>
     <div class="card">
-      <div class="heatmap-wrap">
+      <p style="margin-bottom: 12px;">Each row is a grown-up. The blue squares are days you pitched in. The orange box is today.</p>
+      <div class="heatwrap">
         <div id="heatmap" class="heatmap"></div>
       </div>
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; gap: 12px; flex-wrap: wrap;">
-        <button class="btn secondary small" id="heatmap-toggle" hidden>Show all</button>
-        <div class="legend" style="margin-top: 0;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; gap: 12px; flex-wrap: wrap;">
+        <button class="btn ghost" id="heatmap-toggle" hidden>Show all</button>
+        <div class="legend">
           <span>Less</span>
-          <span class="swatch" style="background: #eef2f4"></span>
+          <span class="swatch" style="background: #eef3f6"></span>
           <span class="swatch" style="background: #bfe1ec"></span>
           <span class="swatch" style="background: #7ec0d4"></span>
           <span class="swatch" style="background: #2c7da0"></span>
-          <span class="swatch" style="background: #1a4d6e"></span>
+          <span class="swatch" style="background: #0d3b5c"></span>
           <span>More</span>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- LEADERBOARD -->
   <section class="section">
-    <div class="section-head">
-      <h2>🏆 Leaderboard</h2>
-      <span class="hint">Top contributors this reunion</span>
+    <div class="section-title">
+      <h2>🏆 Top helpers</h2>
     </div>
-    <div class="card">
-      <div id="leaderboard" class="lb">Loading…</div>
-    </div>
+    <div id="leaderboard" class="lb">Loading…</div>
   </section>
 
-  <!-- KIDS TRACK -->
   <section class="section">
-    <div class="section-head">
-      <h2>🌟 Kids' wall of glory</h2>
-      <span class="hint">Helping counts too</span>
+    <div class="section-title">
+      <h2>🌟 Kid heroes</h2>
     </div>
-    <div class="card">
-      <div id="kids-board" class="lb">Loading…</div>
-    </div>
+    <div id="kids-board" class="lb">Loading…</div>
   </section>
 
   <footer class="foot">
-    <div id="mock-tag-foot" class="mock-tag" hidden>Preview mode — using sample data</div>
+    <div id="mock-tag-foot" class="mock-tag" hidden>Preview · sample data</div>
     <div>Be excellent to each other. 🌲</div>
   </footer>
 
 </main>
+
+<nav class="tabbar">
+  <a class="tab" href="index.html">
+    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M 5 13 L 14 5 L 23 13 L 23 23 L 5 23 Z"/></svg>
+    <span class="tab-label">Home</span>
+  </a>
+  <a class="tab active" href="chores.html">
+    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M 14 4 L 14 11"/><path d="M 9 11 L 19 11"/><path d="M 7 11 L 7 24 L 21 24 L 21 11"/></svg>
+    <span class="tab-label">Help</span>
+  </a>
+  <a class="tab" href="schedule.html">
+    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="14" r="9"/><path d="M 14 8 L 14 14 L 18 16"/></svg>
+    <span class="tab-label">Plan</span>
+  </a>
+  <a class="tab" href="lodging.html">
+    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M 4 19 L 24 19 L 24 23"/><path d="M 4 15 L 4 23"/><path d="M 4 15 L 24 15 L 24 12 C 24 10 22 9 20 9 L 11 9 C 9 9 7 10 7 12 L 7 15"/></svg>
+    <span class="tab-label">Beds</span>
+  </a>
+  <a class="tab" href="photos.html">
+    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="20" height="15" rx="2"/><path d="M 10 9 L 12 6 L 16 6 L 18 9"/><circle cx="14" cy="16" r="4"/></svg>
+    <span class="tab-label">Photos</span>
+  </a>
+</nav>
 
 <div class="toast" id="toast">
   <span id="toast-msg">Saved!</span>
@@ -114,18 +109,16 @@
   (async function () {
     const cfg = window.TAHOE_CONFIG;
     let data = await window.TAHOE_DATA.fetchAll();
-
     if (data.mock) document.getElementById("mock-tag-foot").hidden = false;
 
-    // ---- Determine "today" ----
     const realTodayIso = new Date().toISOString().slice(0, 10);
     const inReunion = realTodayIso >= cfg.startDate && realTodayIso <= cfg.endDate;
     const todayIso = inReunion ? realTodayIso : (data.mock ? cfg.demoTodayOverride : cfg.startDate);
     const todayDay = cfg.days.find(d => d.date === todayIso) || cfg.days[0];
-    document.getElementById("today-sub").textContent =
-      todayDay.label + " · " + todayDay.short + (inReunion ? "" : data.mock ? " (preview)" : "");
 
-    // ---- Render today's signup grid ----
+    document.getElementById("today-heading").textContent =
+      `Today — ${todayDay.label} ${todayDay.short}${inReunion ? "" : data.mock ? " (preview)" : ""}`;
+
     function renderToday() {
       const slots = data.choreSlots.filter(s => s.date === todayIso);
       const dinner = data.dinnerLeads[todayIso];
@@ -141,7 +134,7 @@
       if (dinner && dinner.leads) {
         const done = completedToday.has(`${dinner.leads}::Dinner lead`);
         items.push(renderRow({
-          label: "Dinner lead",
+          label: "🍽️ Dinner lead",
           detail: dinner.leads + (dinner.menu ? ` · ${dinner.menu}` : ""),
           person: dinner.leads,
           chore: "Dinner lead",
@@ -153,39 +146,51 @@
         const done = person && completedToday.has(`${person}::${s.role}`);
         items.push(renderRow({
           label: s.role,
-          detail: person || "Open — sign up in the sheet",
+          detail: person || "Up for grabs",
           person,
           chore: s.role,
           done,
         }));
       });
 
-      grid.innerHTML = items.join("") || `<div class="lead">Nothing scheduled yet for today.</div>`;
+      grid.innerHTML = items.join("") || `<div class="card">Nothing on the list for today.</div>`;
     }
 
     function renderRow({ label, detail, person, chore, done }) {
       const safePerson = (person || "").replace(/"/g, "&quot;");
+      const stateClass = done ? "done" : (person ? "" : "open");
       return `
-        <div class="today-row ${done ? "done" : ""}">
-          <div class="label">${label}<small>${detail}</small></div>
+        <div class="signup-row ${stateClass}">
+          <div class="what">${label}<small>${detail}</small></div>
           ${person
             ? (done
-                ? `<span class="done-tag">✓ Done</span>`
-                : `<button class="btn small" data-person="${safePerson}" data-chore="${chore}">I did this</button>`)
+                ? `<span class="done-stamp">✓ Done</span>`
+                : `<button class="btn coral" data-person="${safePerson}" data-chore="${chore}">I did it</button>`)
             : `<span class="pill muted">Open</span>`}
         </div>`;
     }
 
-    // ---- Tap "I did this" ----
     document.getElementById("today-grid").addEventListener("click", async (e) => {
       const btn = e.target.closest("button[data-person]");
       if (!btn) return;
       const person = btn.dataset.person;
       const chore = btn.dataset.chore;
       btn.disabled = true;
+
+      // confetti pop on the button
+      const rect = btn.getBoundingClientRect();
+      ["🎉","✨","🌲"].forEach((ch, i) => {
+        const e = document.createElement("div");
+        e.className = "pop";
+        e.textContent = ch;
+        e.style.left = (rect.left + rect.width / 2 + (i - 1) * 18) + "px";
+        e.style.top = (rect.top + window.scrollY) + "px";
+        document.body.appendChild(e);
+        setTimeout(() => e.remove(), 800);
+      });
+
       const res = await window.TAHOE_DATA.markDone({ person, date: todayIso, chore });
       if (res.ok) {
-        // refetch (mock array is mutated in place; live mode will re-pull)
         data = await window.TAHOE_DATA.fetchAll();
         renderAll();
         showToast(`${person} did ${chore}. Glory.`, () => {
@@ -200,19 +205,17 @@
       }
     });
 
-    // ---- Heatmap ----
     const HEATMAP_TOP_N = 10;
     let heatmapExpanded = false;
 
     function renderHeatmap() {
       const allAdults = data.people.filter(p => p.role === "adult");
-      const counts = {}; // person -> { date: count }
+      const counts = {};
       allAdults.forEach(p => counts[p.name] = {});
       data.completions.forEach(c => {
         if (!counts[c.person]) return;
         counts[c.person][c.date] = (counts[c.person][c.date] || 0) + 1;
       });
-      // sort by total descending so most active people float to top
       const totals = {};
       allAdults.forEach(p => {
         totals[p.name] = Object.values(counts[p.name]).reduce((a, b) => a + b, 0);
@@ -223,9 +226,7 @@
       const toggleBtn = document.getElementById("heatmap-toggle");
       if (allAdults.length > HEATMAP_TOP_N) {
         toggleBtn.hidden = false;
-        toggleBtn.textContent = heatmapExpanded
-          ? `Show top ${HEATMAP_TOP_N}`
-          : `Show all ${allAdults.length}`;
+        toggleBtn.textContent = heatmapExpanded ? `Show top ${HEATMAP_TOP_N}` : `Show all ${allAdults.length}`;
       } else {
         toggleBtn.hidden = true;
       }
@@ -240,9 +241,9 @@
       }
 
       const cells = [];
-      cells.push(`<div class="h-name"></div>`);
+      cells.push(`<div></div>`);
       cfg.days.forEach(d => {
-        cells.push(`<div class="h-head">${d.label}<br><small>${d.short}</small></div>`);
+        cells.push(`<div class="h-head"><div class="day">${d.label[0]}</div><small>${d.short}</small></div>`);
       });
       adults.forEach(p => {
         const total = totals[p.name];
@@ -253,11 +254,10 @@
           const n = counts[p.name][d.date] || 0;
           const isToday = d.date === todayIso;
           const present = (p.days || []).includes(d.short);
-          const bg = present ? color(n) : "#fafafa";
+          const bg = present ? color(n) : "transparent";
           cells.push(
-            `<div class="cell ${isToday ? "today" : ""}"
+            `<div class="cell ${isToday ? "today" : ""} ${!present ? "empty" : ""}"
                   style="--heat: ${bg}"
-                  data-count="${n}"
                   title="${p.name} · ${d.label} ${d.short}: ${n} chore${n === 1 ? "" : "s"}${!present ? " (not here)" : ""}"></div>`
           );
         });
@@ -265,15 +265,13 @@
       document.getElementById("heatmap").innerHTML = cells.join("");
     }
 
-    // ---- Leaderboard ----
     function renderLeaderboard() {
       const adults = data.people.filter(p => p.role === "adult");
       const totals = adults.map(p => ({
         person: p.name,
         count: data.completions.filter(c => c.person === p.name).length,
       })).sort((a, b) => b.count - a.count);
-
-      const top = totals.slice(0, 8);
+      const top = totals.slice(0, 6);
       const html = top.map((row, i) => {
         const title = cfg.titles.find(t => row.count >= t.min);
         const titleStr = title ? `${title.emoji} ${title.title}` : "—";
@@ -285,21 +283,19 @@
             <div class="count">${row.count}</div>
           </div>`;
       }).join("");
-      document.getElementById("leaderboard").innerHTML = html || `<div class="lead">No chores done yet — be first!</div>`;
+      document.getElementById("leaderboard").innerHTML = html || `<div class="card">No chores done yet — be first!</div>`;
     }
 
-    // ---- Kids board ----
     function renderKids() {
       const kids = data.people.filter(p => p.role === "kid");
       const totals = kids.map(p => ({
         person: p.name,
         count: data.completions.filter(c => c.person === p.name).length,
       })).sort((a, b) => b.count - a.count);
-
       const top = totals.filter(t => t.count > 0).slice(0, 6);
       if (top.length === 0) {
         document.getElementById("kids-board").innerHTML =
-          `<div class="lead">No kid heroes yet. Leo is currently the front-runner of the imagined future.</div>`;
+          `<div class="card">No kid heroes yet. Leo is leading the imagined future.</div>`;
         return;
       }
       document.getElementById("kids-board").innerHTML = top.map((row, i) => {
@@ -313,24 +309,14 @@
       }).join("");
     }
 
-    // ---- Activity ticker ----
     function renderTicker() {
-      const recent = [...data.completions]
-        .sort((a, b) => (b.at || "").localeCompare(a.at || ""))
-        .slice(0, 5);
+      const recent = [...data.completions].sort((a, b) => (b.at || "").localeCompare(a.at || "")).slice(0, 5);
       if (recent.length === 0) return;
       const el = document.getElementById("ticker");
       el.innerHTML = recent.map(c => {
-        const when = c.at ? formatRelative(c.at) : "";
-        return `<div class="ticker-item">✓ <strong>${c.person}</strong> did <em>${c.chore}</em> ${when}</div>`;
+        const when = c.at ? new Date(c.at).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }) : "";
+        return `<div class="ticker-item">✓ <strong>${c.person}</strong> did <em>${c.chore}</em> &nbsp;${when}</div>`;
       }).join("");
-    }
-
-    function formatRelative(iso) {
-      try {
-        const d = new Date(iso);
-        return d.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
-      } catch { return ""; }
     }
 
     function renderAll() {
@@ -341,17 +327,13 @@
       renderTicker();
     }
 
-    // ---- Toast ----
     let toastTimer;
     function showToast(msg, onUndo) {
       const toast = document.getElementById("toast");
       document.getElementById("toast-msg").textContent = msg;
       const undoBtn = document.getElementById("toast-undo");
       undoBtn.hidden = !onUndo;
-      undoBtn.onclick = () => {
-        toast.classList.remove("show");
-        onUndo && onUndo();
-      };
+      undoBtn.onclick = () => { toast.classList.remove("show"); onUndo && onUndo(); };
       toast.classList.add("show");
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => toast.classList.remove("show"), 4500);
