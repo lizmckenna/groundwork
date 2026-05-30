@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5">
+  <title>Schedule · Tahoe 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">🌲</span>
+      <span>Tahoe 2026</span>
+    </div>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="chores.html">Chores</a>
+      <a href="schedule.html" class="active">Schedule</a>
+      <a href="lodging.html">Lodging</a>
+      <a href="photos.html">Photos</a>
+    </nav>
+  </div>
+</header>
+
+<main class="shell">
+
+  <section class="hero">
+    <div class="eyebrow">The week at a glance</div>
+    <h1>Schedule</h1>
+    <p class="meta">Hikes, beach days, kid stuff, free blocks. Add more in the Sheet's "schedule" tab.</p>
+  </section>
+
+  <section class="section" id="days"></section>
+
+  <footer class="foot">
+    <div id="mock-tag-foot" class="mock-tag" hidden>Preview mode — using sample data</div>
+    <div>Don't over-program. Leave room to nap.</div>
+  </footer>
+
+</main>
+
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script>
+  (async function () {
+    const cfg = window.TAHOE_CONFIG;
+    const data = await window.TAHOE_DATA.fetchAll();
+    if (data.mock) document.getElementById("mock-tag-foot").hidden = false;
+
+    const KIND_PILL = {
+      meal: "warm",
+      hike: "pine",
+      beach: "",
+      kids: "warm",
+      logistics: "muted",
+    };
+    const KIND_EMOJI = {
+      meal: "🍽️",
+      hike: "🥾",
+      beach: "🏖️",
+      kids: "🧒",
+      logistics: "📦",
+    };
+
+    const root = document.getElementById("days");
+    cfg.days.forEach(d => {
+      const items = data.schedule.filter(s => s.date === d.date)
+        .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.marginBottom = "14px";
+      const list = items.map(s => `
+        <div style="display:flex; gap:14px; padding: 10px 0; border-top: 1px solid var(--line);">
+          <div style="min-width: 70px; font-weight: 600; color: var(--lake-deep);">${s.time === "all day" ? "All day" : s.time}</div>
+          <div style="flex:1;">
+            <div style="font-weight: 500;">${KIND_EMOJI[s.kind] || "•"} ${s.title}</div>
+            ${s.lead ? `<div style="color: var(--slate); font-size: 0.88rem;">Lead: ${s.lead}</div>` : ""}
+          </div>
+          ${s.kind ? `<span class="pill ${KIND_PILL[s.kind] || ""}">${s.kind}</span>` : ""}
+        </div>
+      `).join("") || `<div class="lead" style="padding: 10px 0;">Open day — go to the lake.</div>`;
+      card.innerHTML = `
+        <h3 style="display:flex; align-items: baseline; gap: 10px;">
+          ${d.label}
+          <small style="font-family: 'Inter', sans-serif; font-weight: 500; color: var(--slate); font-size: 0.85rem;">${d.short}</small>
+        </h3>
+        ${list}
+      `;
+      root.appendChild(card);
+    });
+  })();
+</script>
+
+</body>
+</html>

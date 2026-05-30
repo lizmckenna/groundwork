@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5">
+  <title>Lodging · Tahoe 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">🌲</span>
+      <span>Tahoe 2026</span>
+    </div>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="chores.html">Chores</a>
+      <a href="schedule.html">Schedule</a>
+      <a href="lodging.html" class="active">Lodging</a>
+      <a href="photos.html">Photos</a>
+    </nav>
+  </div>
+</header>
+
+<main class="shell">
+
+  <section class="hero">
+    <div class="eyebrow">Where you're sleeping</div>
+    <h1>Lodging</h1>
+    <p class="meta">Beds, tents, and overflow spots across the week.</p>
+  </section>
+
+  <section class="section">
+    <div class="card" style="padding: 6px;">
+      <div class="lodging-table">
+        <table class="lodging">
+          <thead>
+            <tr id="head-row">
+              <th>Location</th>
+              <th>Room</th>
+              <th>Bed</th>
+              <!-- day cols injected -->
+            </tr>
+          </thead>
+          <tbody id="lodging-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <p class="hint" style="margin-top: 10px; font-size: 0.82rem; color: var(--slate-light);">
+      Empty cells = open bed. Edit assignments in the Google Sheet "lodging" tab; this page will update automatically.
+    </p>
+  </section>
+
+  <footer class="foot">
+    <div id="mock-tag-foot" class="mock-tag" hidden>Preview mode — using sample data</div>
+    <div>🌲 🌲 🌲</div>
+  </footer>
+
+</main>
+
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script>
+  (async function () {
+    const cfg = window.TAHOE_CONFIG;
+    const data = await window.TAHOE_DATA.fetchAll();
+    if (data.mock) document.getElementById("mock-tag-foot").hidden = false;
+
+    // Inject day columns into header
+    const headRow = document.getElementById("head-row");
+    cfg.days.forEach(d => {
+      const th = document.createElement("th");
+      th.className = "day";
+      th.innerHTML = `${d.label}<br><small style="font-weight:400; opacity: 0.8">${d.short}</small>`;
+      headRow.appendChild(th);
+    });
+
+    // Group rows by location
+    const body = document.getElementById("lodging-body");
+    let lastLoc = null;
+    data.lodging.forEach(row => {
+      if (row.location !== lastLoc) {
+        const sec = document.createElement("tr");
+        sec.className = "section-row";
+        const td = document.createElement("td");
+        td.colSpan = 3 + cfg.days.length;
+        td.textContent = row.location;
+        sec.appendChild(td);
+        body.appendChild(sec);
+        lastLoc = row.location;
+      }
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="loc-cell">${row.location}</td>
+        <td>${row.room}</td>
+        <td>${row.bed || ""}</td>
+      `;
+      cfg.days.forEach(d => {
+        const val = (row.assignments || {})[d.short] || "";
+        const td = document.createElement("td");
+        td.className = "day" + (val ? "" : " empty");
+        td.textContent = val || "—";
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+  })();
+</script>
+
+</body>
+</html>

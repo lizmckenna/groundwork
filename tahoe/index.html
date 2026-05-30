@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5">
+  <title>Tahoe 2026 — Family Reunion</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">🌲</span>
+      <span>Tahoe 2026</span>
+      <span class="brand-sub">July 20–26</span>
+    </div>
+    <nav class="nav">
+      <a href="index.html" class="active">Home</a>
+      <a href="chores.html">Chores</a>
+      <a href="schedule.html">Schedule</a>
+      <a href="lodging.html">Lodging</a>
+      <a href="photos.html">Photos</a>
+    </nav>
+  </div>
+</header>
+
+<main class="shell">
+
+  <section class="hero">
+    <div class="eyebrow">Family reunion</div>
+    <h1>See you at the lake.</h1>
+    <p class="meta">Four Ring Road, Teece House &nbsp;·&nbsp; Lake Tahoe, CA</p>
+
+    <div class="countdown" id="countdown">
+      <div class="unit"><div class="num" id="cd-d">—</div><div class="label">Days</div></div>
+      <div class="unit"><div class="num" id="cd-h">—</div><div class="label">Hours</div></div>
+      <div class="unit"><div class="num" id="cd-m">—</div><div class="label">Min</div></div>
+      <div class="unit"><div class="num" id="cd-s">—</div><div class="label">Sec</div></div>
+    </div>
+  </section>
+
+  <section class="section" id="today-section">
+    <div class="section-head">
+      <h2 id="today-title">Today at the lake</h2>
+      <span class="hint" id="today-date">—</span>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Dinner lead</h3>
+        <p class="lead" id="dinner-lead">—</p>
+        <p class="lead" id="dinner-menu" style="margin-top: 6px;"></p>
+      </div>
+      <div class="card">
+        <h3>Today's plan</h3>
+        <div id="today-plan" class="lead">—</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 14px;">
+      <h3>Who's around</h3>
+      <div id="who-here" class="lead">—</div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>Jump in</h2>
+    </div>
+    <div class="grid-2">
+      <a class="card" href="chores.html" style="display:block;">
+        <h3>🏆 Chores & Glory</h3>
+        <p class="lead">Sign up, tap "done", climb the leaderboard.</p>
+      </a>
+      <a class="card" href="schedule.html" style="display:block;">
+        <h3>🗓️ This week's schedule</h3>
+        <p class="lead">Hikes, beach days, kid stuff, free blocks.</p>
+      </a>
+      <a class="card" href="lodging.html" style="display:block;">
+        <h3>🛏️ Where you're sleeping</h3>
+        <p class="lead">Beds, tents, and overflow spots.</p>
+      </a>
+      <a class="card" href="photos.html" style="display:block;">
+        <h3>📸 Memories</h3>
+        <p class="lead">Tahoe reunions of years past.</p>
+      </a>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div id="mock-tag-foot" class="mock-tag" hidden>Preview mode — using sample data</div>
+    <div>Made with love for the family · See you in <span id="cd-days-foot">—</span> days</div>
+  </footer>
+
+</main>
+
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script>
+  (async function () {
+    const cfg = window.TAHOE_CONFIG;
+    const data = await window.TAHOE_DATA.fetchAll();
+
+    // Countdown
+    const target = new Date(cfg.startDate + "T16:00:00-07:00");
+    function tick() {
+      const diff = target - new Date();
+      if (diff <= 0) {
+        document.getElementById("cd-d").textContent = "0";
+        document.getElementById("cd-h").textContent = "0";
+        document.getElementById("cd-m").textContent = "0";
+        document.getElementById("cd-s").textContent = "0";
+        document.getElementById("cd-days-foot").textContent = "0";
+        return;
+      }
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff / 3600000) % 24);
+      const m = Math.floor((diff / 60000) % 60);
+      const s = Math.floor((diff / 1000) % 60);
+      document.getElementById("cd-d").textContent = d;
+      document.getElementById("cd-h").textContent = h;
+      document.getElementById("cd-m").textContent = m;
+      document.getElementById("cd-s").textContent = s;
+      document.getElementById("cd-days-foot").textContent = d;
+    }
+    tick(); setInterval(tick, 1000);
+
+    // Mock badge
+    if (data.mock) document.getElementById("mock-tag-foot").hidden = false;
+
+    // Today panel
+    const now = new Date();
+    const realTodayIso = now.toISOString().slice(0, 10);
+    const inReunion = realTodayIso >= cfg.startDate && realTodayIso <= cfg.endDate;
+    const todayIso = inReunion ? realTodayIso : (data.mock ? cfg.demoTodayOverride : cfg.startDate);
+
+    const todayDay = cfg.days.find(d => d.date === todayIso) || cfg.days[0];
+    const todayShort = todayDay.short;
+    document.getElementById("today-date").textContent =
+      todayDay.label + " · " + todayShort + (inReunion ? "" : (data.mock ? " (preview)" : " — first day"));
+
+    // Dinner lead
+    const lead = data.dinnerLeads[todayIso];
+    document.getElementById("dinner-lead").textContent =
+      lead && lead.leads ? lead.leads : "Open — sign up in the sheet";
+    document.getElementById("dinner-menu").textContent =
+      lead && lead.menu ? "Menu: " + lead.menu : "";
+
+    // Today's plan
+    const plan = data.schedule.filter(s => s.date === todayIso);
+    const planEl = document.getElementById("today-plan");
+    if (plan.length === 0) {
+      planEl.textContent = "Nothing scheduled yet. Free day — go to the lake.";
+    } else {
+      planEl.innerHTML = plan.map(s => {
+        const t = s.time === "all day" ? "" : s.time + " · ";
+        return `<div>${t}<strong>${s.title}</strong>${s.lead ? " — " + s.lead : ""}</div>`;
+      }).join("");
+    }
+
+    // Who's around today
+    const here = data.people.filter(p => p.days.includes(todayShort));
+    const adults = here.filter(p => p.role === "adult");
+    const kids = here.filter(p => p.role === "kid");
+    document.getElementById("who-here").innerHTML =
+      `<strong>${adults.length}</strong> adults · <strong>${kids.length}</strong> kids · ` +
+      `<span class="pill muted">${here.length} total</span>`;
+  })();
+</script>
+
+</body>
+</html>

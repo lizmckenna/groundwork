@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5">
+  <title>Chores & Glory · Tahoe 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">🌲</span>
+      <span>Tahoe 2026</span>
+    </div>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="chores.html" class="active">Chores</a>
+      <a href="schedule.html">Schedule</a>
+      <a href="lodging.html">Lodging</a>
+      <a href="photos.html">Photos</a>
+    </nav>
+  </div>
+</header>
+
+<main class="shell">
+
+  <section class="hero">
+    <div class="eyebrow">Many hands make light work</div>
+    <h1>Chores & Glory</h1>
+    <p class="meta">Sign up, tap "done", earn your title. The heatmap doesn't lie.</p>
+  </section>
+
+  <!-- TODAY'S SIGN-UP -->
+  <section class="section">
+    <div class="section-head">
+      <h2 id="today-heading">Today's signups</h2>
+      <span class="hint" id="today-sub">—</span>
+    </div>
+    <div class="card">
+      <div id="today-grid" class="today-grid">Loading…</div>
+    </div>
+    <div class="ticker" style="margin-top: 14px;" id="ticker">
+      <div class="ticker-item">Activity will appear here as people check chores off.</div>
+    </div>
+  </section>
+
+  <!-- HEATMAP -->
+  <section class="section">
+    <div class="section-head">
+      <h2>Contribution heatmap</h2>
+      <span class="hint">One row per adult · the week at a glance</span>
+    </div>
+    <div class="card">
+      <div class="heatmap-wrap">
+        <div id="heatmap" class="heatmap"></div>
+      </div>
+      <div class="legend">
+        <span>Less</span>
+        <span class="swatch" style="background: #eef2f4"></span>
+        <span class="swatch" style="background: #bfe1ec"></span>
+        <span class="swatch" style="background: #7ec0d4"></span>
+        <span class="swatch" style="background: #2c7da0"></span>
+        <span class="swatch" style="background: #1a4d6e"></span>
+        <span>More</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEADERBOARD -->
+  <section class="section">
+    <div class="section-head">
+      <h2>🏆 Leaderboard</h2>
+      <span class="hint">Top contributors this reunion</span>
+    </div>
+    <div class="card">
+      <div id="leaderboard" class="lb">Loading…</div>
+    </div>
+  </section>
+
+  <!-- KIDS TRACK -->
+  <section class="section">
+    <div class="section-head">
+      <h2>🌟 Kids' wall of glory</h2>
+      <span class="hint">Helping counts too</span>
+    </div>
+    <div class="card">
+      <div id="kids-board" class="lb">Loading…</div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div id="mock-tag-foot" class="mock-tag" hidden>Preview mode — using sample data</div>
+    <div>Be excellent to each other. 🌲</div>
+  </footer>
+
+</main>
+
+<div class="toast" id="toast">
+  <span id="toast-msg">Saved!</span>
+  <button class="undo" id="toast-undo" hidden>Undo</button>
+</div>
+
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script>
+  (async function () {
+    const cfg = window.TAHOE_CONFIG;
+    let data = await window.TAHOE_DATA.fetchAll();
+
+    if (data.mock) document.getElementById("mock-tag-foot").hidden = false;
+
+    // ---- Determine "today" ----
+    const realTodayIso = new Date().toISOString().slice(0, 10);
+    const inReunion = realTodayIso >= cfg.startDate && realTodayIso <= cfg.endDate;
+    const todayIso = inReunion ? realTodayIso : (data.mock ? cfg.demoTodayOverride : cfg.startDate);
+    const todayDay = cfg.days.find(d => d.date === todayIso) || cfg.days[0];
+    document.getElementById("today-sub").textContent =
+      todayDay.label + " · " + todayDay.short + (inReunion ? "" : data.mock ? " (preview)" : "");
+
+    // ---- Render today's signup grid ----
+    function renderToday() {
+      const slots = data.choreSlots.filter(s => s.date === todayIso);
+      const dinner = data.dinnerLeads[todayIso];
+      const completedToday = new Set(
+        data.completions
+          .filter(c => c.date === todayIso)
+          .map(c => `${c.person}::${c.chore}`)
+      );
+
+      const grid = document.getElementById("today-grid");
+      const items = [];
+
+      if (dinner && dinner.leads) {
+        const done = completedToday.has(`${dinner.leads}::Dinner lead`);
+        items.push(renderRow({
+          label: "Dinner lead",
+          detail: dinner.leads + (dinner.menu ? ` · ${dinner.menu}` : ""),
+          person: dinner.leads,
+          chore: "Dinner lead",
+          done,
+        }));
+      }
+      slots.forEach(s => {
+        const person = s.person || "";
+        const done = person && completedToday.has(`${person}::${s.role}`);
+        items.push(renderRow({
+          label: s.role,
+          detail: person || "Open — sign up in the sheet",
+          person,
+          chore: s.role,
+          done,
+        }));
+      });
+
+      grid.innerHTML = items.join("") || `<div class="lead">Nothing scheduled yet for today.</div>`;
+    }
+
+    function renderRow({ label, detail, person, chore, done }) {
+      const safePerson = (person || "").replace(/"/g, "&quot;");
+      return `
+        <div class="today-row ${done ? "done" : ""}">
+          <div class="label">${label}<small>${detail}</small></div>
+          ${person
+            ? (done
+                ? `<span class="done-tag">✓ Done</span>`
+                : `<button class="btn small" data-person="${safePerson}" data-chore="${chore}">I did this</button>`)
+            : `<span class="pill muted">Open</span>`}
+        </div>`;
+    }
+
+    // ---- Tap "I did this" ----
+    document.getElementById("today-grid").addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-person]");
+      if (!btn) return;
+      const person = btn.dataset.person;
+      const chore = btn.dataset.chore;
+      btn.disabled = true;
+      const res = await window.TAHOE_DATA.markDone({ person, date: todayIso, chore });
+      if (res.ok) {
+        // refetch (mock array is mutated in place; live mode will re-pull)
+        data = await window.TAHOE_DATA.fetchAll();
+        renderAll();
+        showToast(`${person} did ${chore}. Glory.`, () => {
+          window.TAHOE_DATA.undoDone({ person, date: todayIso, chore }).then(async () => {
+            data = await window.TAHOE_DATA.fetchAll();
+            renderAll();
+          });
+        });
+      } else {
+        showToast("Already marked on this device.");
+        btn.disabled = false;
+      }
+    });
+
+    // ---- Heatmap ----
+    function renderHeatmap() {
+      const adults = data.people.filter(p => p.role === "adult");
+      const counts = {}; // person -> { date: count }
+      adults.forEach(p => counts[p.name] = {});
+      data.completions.forEach(c => {
+        if (!counts[c.person]) return;
+        counts[c.person][c.date] = (counts[c.person][c.date] || 0) + 1;
+      });
+      // sort by total descending so most active people float to top
+      const totals = {};
+      adults.forEach(p => {
+        totals[p.name] = Object.values(counts[p.name]).reduce((a, b) => a + b, 0);
+      });
+      adults.sort((a, b) => totals[b.name] - totals[a.name] || a.name.localeCompare(b.name));
+
+      const scale = cfg.heatScale;
+      function color(n) {
+        if (!n) return scale[0];
+        if (n === 1) return scale[1];
+        if (n === 2) return scale[2];
+        if (n === 3) return scale[3];
+        return scale[4];
+      }
+
+      const cells = [];
+      cells.push(`<div class="h-name"></div>`);
+      cfg.days.forEach(d => {
+        cells.push(`<div class="h-head">${d.label}<br><small>${d.short}</small></div>`);
+      });
+      adults.forEach(p => {
+        const total = totals[p.name];
+        const title = cfg.titles.find(t => total >= t.min);
+        const titleTag = title ? `<span class="title-tag">${title.emoji}</span>` : "";
+        cells.push(`<div class="h-name" title="${total} chores">${p.name}${titleTag}</div>`);
+        cfg.days.forEach(d => {
+          const n = counts[p.name][d.date] || 0;
+          const isToday = d.date === todayIso;
+          const present = (p.days || []).includes(d.short);
+          const bg = present ? color(n) : "#fafafa";
+          cells.push(
+            `<div class="cell ${isToday ? "today" : ""}"
+                  style="--heat: ${bg}"
+                  data-count="${n}"
+                  title="${p.name} · ${d.label} ${d.short}: ${n} chore${n === 1 ? "" : "s"}${!present ? " (not here)" : ""}"></div>`
+          );
+        });
+      });
+      document.getElementById("heatmap").innerHTML = cells.join("");
+    }
+
+    // ---- Leaderboard ----
+    function renderLeaderboard() {
+      const adults = data.people.filter(p => p.role === "adult");
+      const totals = adults.map(p => ({
+        person: p.name,
+        count: data.completions.filter(c => c.person === p.name).length,
+      })).sort((a, b) => b.count - a.count);
+
+      const top = totals.slice(0, 8);
+      const html = top.map((row, i) => {
+        const title = cfg.titles.find(t => row.count >= t.min);
+        const titleStr = title ? `${title.emoji} ${title.title}` : "—";
+        const medal = ["🥇", "🥈", "🥉"][i] || (i + 1);
+        return `
+          <div class="lb-row">
+            <div class="rank">${medal}</div>
+            <div class="who">${row.person}<small>${titleStr}</small></div>
+            <div class="count">${row.count}</div>
+          </div>`;
+      }).join("");
+      document.getElementById("leaderboard").innerHTML = html || `<div class="lead">No chores done yet — be first!</div>`;
+    }
+
+    // ---- Kids board ----
+    function renderKids() {
+      const kids = data.people.filter(p => p.role === "kid");
+      const totals = kids.map(p => ({
+        person: p.name,
+        count: data.completions.filter(c => c.person === p.name).length,
+      })).sort((a, b) => b.count - a.count);
+
+      const top = totals.filter(t => t.count > 0).slice(0, 6);
+      if (top.length === 0) {
+        document.getElementById("kids-board").innerHTML =
+          `<div class="lead">No kid heroes yet. Leo is currently the front-runner of the imagined future.</div>`;
+        return;
+      }
+      document.getElementById("kids-board").innerHTML = top.map((row, i) => {
+        const badge = row.count >= 3 ? "🌟 Junior Czar" : row.count >= 2 ? "⭐ Big Helper" : "✨ Got involved";
+        return `
+          <div class="lb-row">
+            <div class="rank">${["🥇", "🥈", "🥉"][i] || (i + 1)}</div>
+            <div class="who">${row.person}<small>${badge}</small></div>
+            <div class="count">${row.count}</div>
+          </div>`;
+      }).join("");
+    }
+
+    // ---- Activity ticker ----
+    function renderTicker() {
+      const recent = [...data.completions]
+        .sort((a, b) => (b.at || "").localeCompare(a.at || ""))
+        .slice(0, 5);
+      if (recent.length === 0) return;
+      const el = document.getElementById("ticker");
+      el.innerHTML = recent.map(c => {
+        const when = c.at ? formatRelative(c.at) : "";
+        return `<div class="ticker-item">✓ <strong>${c.person}</strong> did <em>${c.chore}</em> ${when}</div>`;
+      }).join("");
+    }
+
+    function formatRelative(iso) {
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
+      } catch { return ""; }
+    }
+
+    function renderAll() {
+      renderToday();
+      renderHeatmap();
+      renderLeaderboard();
+      renderKids();
+      renderTicker();
+    }
+
+    // ---- Toast ----
+    let toastTimer;
+    function showToast(msg, onUndo) {
+      const toast = document.getElementById("toast");
+      document.getElementById("toast-msg").textContent = msg;
+      const undoBtn = document.getElementById("toast-undo");
+      undoBtn.hidden = !onUndo;
+      undoBtn.onclick = () => {
+        toast.classList.remove("show");
+        onUndo && onUndo();
+      };
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 4500);
+    }
+
+    renderAll();
+  })();
+</script>
+
+</body>
+</html>

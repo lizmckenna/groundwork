@@ -1,0 +1,67 @@
+// Tahoe 2026 — site configuration
+// Edit this file to wire the site up to your Google Sheet.
+
+window.TAHOE_CONFIG = {
+  // Paste your Apps Script Web App URL here after you deploy it.
+  // Until then, the site renders with realistic mock data so you can preview.
+  // See apps-script.gs for the ~2 minute setup.
+  appsScriptUrl: "",
+
+  // Demo mode: when there's no Apps Script URL, the heatmap pretends "today" is
+  // mid-reunion so you can see what the page will look like during the week.
+  demoTodayOverride: "2026-07-22",
+
+  // Reunion dates
+  startDate: "2026-07-20",
+  endDate: "2026-07-26",
+  location: "Four Ring Road, Teece House",
+  locationCity: "Lake Tahoe",
+
+  // Days of the reunion, in order
+  days: [
+    { label: "Mon", date: "2026-07-20", short: "7/20" },
+    { label: "Tue", date: "2026-07-21", short: "7/21" },
+    { label: "Wed", date: "2026-07-22", short: "7/22" },
+    { label: "Thu", date: "2026-07-23", short: "7/23" },
+    { label: "Fri", date: "2026-07-24", short: "7/24" },
+    { label: "Sat", date: "2026-07-25", short: "7/25" },
+    { label: "Sun", date: "2026-07-26", short: "7/26" },
+  ],
+
+  // Past-year photo albums. iCloud Shared Albums and Google Photos / Drive folder
+  // links both work — the photos page renders each as a "memory book" card.
+  photoAlbums: [
+    {
+      year: "Past years",
+      label: "Tahoe family album",
+      url: "https://www.icloud.com/sharedalbum/#B2PGY8gBYGeOxv6",
+      kind: "icloud",
+    },
+    {
+      year: "Past years",
+      label: "More Tahoe memories",
+      url: "https://www.icloud.com/sharedalbum/#B2PG6XBubwMvV9",
+      kind: "icloud",
+    },
+    // Add more albums here as you collect them, e.g.:
+    // { year: "2024", label: "Tahoe 2024", url: "https://...", kind: "google" },
+  ],
+
+  // Heatmap color scale (chores done that day → color)
+  heatScale: [
+    "#eef2f4", // 0 — empty
+    "#bfe1ec", // 1
+    "#7ec0d4", // 2
+    "#2c7da0", // 3
+    "#1a4d6e", // 4+
+  ],
+
+  // Silly titles awarded by total chore count (per reunion)
+  titles: [
+    { min: 12, title: "Chore Czar", emoji: "👑" },
+    { min: 8,  title: "Dish Vanquisher", emoji: "🧽" },
+    { min: 5,  title: "Salad Sultan", emoji: "🥗" },
+    { min: 3,  title: "Trash Hero", emoji: "🗑️" },
+    { min: 1,  title: "Pitching In", emoji: "🌲" },
+  ],
+};
