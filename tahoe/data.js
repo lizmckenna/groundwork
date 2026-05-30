@@ -181,22 +181,43 @@
   // ===================================================================
 
   async function fetchAll() {
+    const params = new URLSearchParams(window.location.search);
+    const forceMock = params.get("mock") === "1";
     const url = (window.TAHOE_CONFIG && window.TAHOE_CONFIG.appsScriptUrl) || "";
-    if (!url) {
-      return {
-        people: MOCK_PEOPLE,
-        dinnerLeads: DINNER_LEADS,
-        choreSlots: CHORE_SLOTS,
-        completions: MOCK_COMPLETIONS,
-        lodging: MOCK_LODGING,
-        schedule: MOCK_SCHEDULE,
-        mock: true,
-      };
+
+    if (forceMock || !url) {
+      return mockBundle();
     }
-    const res = await fetch(url);
-    const data = await res.json();
-    data.mock = false;
-    return data;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("bad status " + res.status);
+      const data = await res.json();
+      data.mock = false;
+      return data;
+    } catch (err) {
+      console.warn("Tahoe: live fetch failed, falling back to mock data.", err);
+      const bundle = mockBundle();
+      bundle.mockReason = "live-fetch-failed";
+      return bundle;
+    }
+  }
+
+  function mockBundle() {
+    return {
+      people: MOCK_PEOPLE,
+      dinnerLeads: DINNER_LEADS,
+      choreSlots: MOCK_CHORE_SLOTS_FOR_PREVIEW(),
+      completions: MOCK_COMPLETIONS,
+      lodging: MOCK_LODGING,
+      schedule: MOCK_SCHEDULE,
+      mock: true,
+    };
+  }
+
+  // Show the full chore roster in preview mode so each row has signup state
+  function MOCK_CHORE_SLOTS_FOR_PREVIEW() {
+    return CHORE_SLOTS;
   }
 
   // Mark a chore done. Dedupes per device via localStorage.
