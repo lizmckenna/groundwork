@@ -154,6 +154,7 @@ export default {
       if (url.pathname === '/house-meeting-signup' && request.method === 'POST') return await houseMeetingSignup(request, env);
       if (url.pathname === '/amendment5-signup' && request.method === 'POST') return await amendment5Signup(request, env);
       if (url.pathname === '/training-signup' && request.method === 'POST') return await trainingSignup(request, env);
+      if (url.pathname === '/launch-rsvp' && request.method === 'POST') return await launchRsvp(request, env);
       if (url.pathname === '/remind-signup' && request.method === 'POST') return await remindSignup(request, env);
       if (url.pathname === '/house-meeting-hosts' && request.method === 'GET') return await houseMeetingHosts(env);
       if (url.pathname === '/event-detail' && request.method === 'GET') return await eventDetail(env, url);
@@ -1264,6 +1265,157 @@ async function trainingSignup(request, env) {
 
   await invalidateReadCaches(env);
   return json({ ok: true, contact_id: contactId, events_logged: events.length, events });
+}
+
+// =========================================================================
+// /launch-rsvp — public regional-launch RSVP (parents4mopublicschools.org/launches/...).
+// Built to NEVER drop a signup: requires only a name + one way to reach them
+// (email OR phone). New people are created, not rejected. A possible duplicate
+// is preferable to a lost RSVP. All logistics (childcare, pizza, connection,
+// accessibility, free-text) are written into the contact_log notes so they show
+// in the launch's grid view immediately.
+// Body: { first, last, phone, email, zip, street_address, city, district, school,
+//   connection[], childcare(bool), childcare_kids, pizza(bool), accessibility,
+//   anything_else, recruited_by, launch, source, website(honeypot) }
+// =========================================================================
+async function launchRsvp(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:launchrsvp:${ip}`;
+  let count = 0;
+  try { count = parseInt(await env.KV_BINDING.get(rlKey) || '0'); } catch {}
+  if (count >= 30) return json({ error: 'too many requests, try again later' }, 429, { 'Retry-After': '300' });
+  try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
+
+  const body = await request.json();
+  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+
+  const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
+  const cFirst = clean(body.first);
+  const cLast = clean(body.last);
+  const cEmail = body.email ? String(body.email).toLowerCase().trim() : '';
+  const cPhone = body.phone ? String(body.phone).trim() : '';
+  // Minimal gate only: a name + at least one way to reach them. Everything else optional
+  // so we never reject (and never lose) a real signup.
+  if (!cFirst || !cLast) return json({ error: 'first and last name are required' }, 400);
+  if (!cEmail && !cPhone) return json({ error: 'please give an email or a phone number' }, 400);
+
+  const launch = clean(body.launch) || 'Northland Emergency Meeting 6/18';
+  const cZip = body.zip ? String(body.zip).trim() : '';
+  const connection = Array.isArray(body.connection) ? body.connection.filter(Boolean) : (body.connection ? [String(body.connection)] : []);
+  const today = todayCT();
+
+  // Dedupe by email then phone — but ALWAYS proceed (create) if no match.
+  let existingId = null;
+  try {
+    if (cEmail) {
+      const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+      if (r.records.length > 0) existingId = r.records[0].id;
+    }
+    if (!existingId && cPhone) {
+      const digits = cPhone.replace(/\D/g, '').slice(-10);
+      if (digits.length === 10) {
+        const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+        if (r2.records.length > 0) existingId = r2.records[0].id;
+      }
+    }
+  } catch (e) { /* lookup failed — fall through and create, never block the signup */ }
+
+  // Merge events_signed_up so the launch shows in the contact grid view too.
+  let existingEvents = [];
+  if (existingId) {
+    try {
+      const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${existingId}`);
+      const v = cur.fields && cur.fields.events_signed_up;
+      if (Array.isArray(v)) existingEvents = v;
+      else if (typeof v === 'string' && v) existingEvents = v.split(',').map(s => s.trim()).filter(Boolean);
+    } catch {}
+  }
+  const mergedEvents = Array.from(new Set([...existingEvents, launch]));
+
+  const baseFields = {
+    first: cFirst, last: cLast,
+    source: body.source || `launch rsvp · ${launch}`,
+    last_attempt_date: today,
+    events_signed_up: mergedEvents,
+  };
+  if (cEmail) baseFields.email = cEmail;
+  if (cPhone) baseFields.phone = cPhone;
+  if (cZip) baseFields.zip = cZip;
+  if (clean(body.street_address)) baseFields.street_address = clean(body.street_address);
+  if (clean(body.city)) baseFields.city = clean(body.city);
+  if (clean(body.district)) baseFields.district = clean(body.district);
+  if (clean(body.school)) baseFields.school = clean(body.school);
+  // NB: recruited_by is a linked-record field on contacts — writing a plain name
+  // string makes the create fail, so we keep "Recruited by: …" in the log notes only.
+  if (connection.length) baseFields.role = connection.join(', ');
+
+  const organizerId = deriveOrganizerId({ city: clean(body.city), zip: cZip });
+
+  let contactId = null;
+  let createdNew = false;
+  if (existingId) {
+    contactId = existingId;
+    try {
+      await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
+        method: 'PATCH', body: JSON.stringify({ fields: baseFields, typecast: true }),
+      });
+    } catch (e) { /* non-fatal — still log the RSVP below */ }
+  } else {
+    try {
+      const fields = { ...baseFields, leader_ladder: 'Prospect', assigned_organizer: [organizerId] };
+      const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+        method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }),
+      });
+      contactId = created.records[0].id;
+      createdNew = true;
+    } catch (e) {
+      // Last-resort retry with only the essential fields, so a bad optional value
+      // (e.g. a select option that doesn't exist) can never lose the signup.
+      try {
+        const minFields = { first: cFirst, last: cLast, source: baseFields.source, events_signed_up: mergedEvents };
+        if (cEmail) minFields.email = cEmail;
+        if (cPhone) minFields.phone = cPhone;
+        const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+          method: 'POST', body: JSON.stringify({ records: [{ fields: minFields }], typecast: true }),
+        });
+        contactId = created.records[0].id;
+        createdNew = true;
+      } catch (e2) {
+        return json({ error: 'could not save — please try again or email info@parents4mopublicschools.org' }, 500);
+      }
+    }
+  }
+
+  // Build a readable logistics blob for the grid's notes column.
+  const yn = (v) => v === true || v === 'true' || v === 'yes' || v === 'Yes' ? 'Yes' : (v === false || v === 'false' || v === 'no' || v === 'No' ? 'No' : '');
+  const parts = [];
+  if (connection.length) parts.push(`Connection: ${connection.join(', ')}`);
+  const cc = yn(body.childcare);
+  if (cc) parts.push(`Childcare: ${cc}${clean(body.childcare_kids) ? ` (${clean(body.childcare_kids)})` : ''}`);
+  const pz = yn(body.pizza);
+  if (pz) parts.push(`Pizza 5:30: ${pz}`);
+  if (clean(body.accessibility)) parts.push(`Accessibility: ${clean(body.accessibility)}`);
+  if (clean(body.recruited_by)) parts.push(`Recruited by: ${clean(body.recruited_by)}`);
+  if (clean(body.anything_else)) parts.push(`Notes: ${clean(body.anything_else)}`);
+  const notes = parts.join(' | ') || 'Launch RSVP';
+
+  try {
+    await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+      method: 'POST',
+      body: JSON.stringify({ records: [{ fields: {
+        Summary: `${today} — RSVP: ${launch} (${cFirst} ${cLast})`,
+        date: today,
+        method: 'Event RSVP',
+        result: 'Signed up',
+        event: launch,
+        contact: [contactId],
+        notes,
+      }}], typecast: true }),
+    });
+  } catch (e) { /* non-fatal — contact + events_signed_up already capture the RSVP */ }
+
+  await invalidateReadCaches(env);
+  return json({ ok: true, contact_id: contactId, created_new: createdNew, launch });
 }
 
 // =========================================================================
