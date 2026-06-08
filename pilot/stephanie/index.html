@@ -1477,7 +1477,8 @@ async function submitConfirmRow(row) {
     .filter(i => i.checked)
     .map(i => i.dataset.cmethod);
   const statusVal = row.querySelector('.qconfirm-status').value || null;
-  const sixNineVal = row.querySelector('.q69-status').value || null;
+  const q69El = row.querySelector('.q69-status');
+  const sixNineVal = q69El ? (q69El.value || null) : null;
   const status = row.querySelector('.qsave-status');
   const btn = row.querySelector('.qconfirm-save');
   if (methods.length === 0 && !statusVal && !sixNineVal) {
@@ -1492,7 +1493,7 @@ async function submitConfirmRow(row) {
     const res = await authFetch(`${WORKER}/confirm-log`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact_id: row.dataset.contactId, methods, status: statusVal, signup_6_9: sixNineVal }),
+      body: JSON.stringify({ contact_id: row.dataset.contactId, methods, status: statusVal, signup_6_9: sixNineVal, event: row.dataset.event || '5_26' }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -1519,7 +1520,7 @@ async function submitAttendance(row, attended) {
     const res = await authFetch(`${WORKER}/attendance-log`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact_id: row.dataset.contactId, attended }),
+      body: JSON.stringify({ contact_id: row.dataset.contactId, attended, event: row.dataset.event || '5_26' }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -1632,32 +1633,65 @@ async function fetchConfirmees69() {
       const tel = phoneToTel(c.phone);
       const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a>` : c.phone) : '';
       const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a>` : '';
+      const cf = c.confirm || { email_sent:false, text_sent:false, call_made:false, status:null };
+      const att = c.attendance || null;
+      const statusOpts = ['', 'Reminder sent', 'Confirmed', 'No answer', 'Cancelled'];
+      const statusSel = statusOpts.map(s => `<option value="${s}"${s===(cf.status||'')?' selected':''}>${s||'No update yet'}</option>`).join('');
+      const attPill = att === 'Attended' ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-green-soft);color:var(--gw-green);margin-left:6px;">Attended</span>` : att === 'No-show' ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-red-soft);color:var(--gw-red);margin-left:6px;">No-show</span>` : att === 'Walk-in' ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-purple-soft);color:var(--gw-purple-light);margin-left:6px;">Walk-in</span>` : '';
       const row = document.createElement('div');
       row.className = 'queue-row';
+      if (cf.status === 'Confirmed') row.classList.add('row-confirmed');
+      if (att === 'Attended' || att === 'Walk-in') row.classList.add('row-attended');
       row.dataset.contactId = c.id;
+      row.dataset.event = '6_9';
       row.innerHTML = `
         <div class="qmain">
           <span class="qnum">${String(i+1).padStart(2,'0')}</span>
           <div class="qperson">
-            <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a><span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-green-soft);color:var(--gw-green);margin-left:6px;">6/9 Signed up</span></div>
+            <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a>${confirmStatusPill(cf.status)}${attPill}</div>
             <div class="qmeta">${escapeHtml([c.school, c.district].filter(Boolean).join(' · ') || '—')}</div>
-            <span class="qsignal" style="background:rgba(82,82,91,0.15);color:var(--text-tertiary);">last activity · ${escapeHtml(c.last_attempt_date || 'unknown date')}</span>
+            <span class="qsignal" style="background:var(--gw-green-soft);color:var(--gw-green);">6/9 signed up · ${escapeHtml(c.last_attempt_date || 'unknown date')}</span>
             ${c.source ? `<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase;">source: ${escapeHtml(c.source)}</div>` : ''}
           </div>
           <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
           <div class="qchecks-col">
+            <div class="qchecks">
+              <label class="qcheck grey"><input type="checkbox" data-cmethod="emailed" ${cf.email_sent?'checked':''}> Emailed Zoom</label>
+              <label class="qcheck grey"><input type="checkbox" data-cmethod="texted" ${cf.text_sent?'checked':''}> Texted</label>
+              <label class="qcheck grey"><input type="checkbox" data-cmethod="called" ${cf.call_made?'checked':''}> Called</label>
+            </div>
+            <div class="qchecks">
+              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;">Status</label>
+              <select class="qconfirm-status" style="background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;">
+                ${statusSel}
+              </select>
+            </div>
+            <div class="qchecks" style="border-top:1px dashed var(--border);padding-top:10px;">
+              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;">6/9 Day of</label>
+              <button class="att-btn att-attended" data-att="yes" style="padding:6px 12px;border-radius:6px;background:${att==='Attended'?'var(--gw-green)':'transparent'};color:${att==='Attended'?'white':'var(--gw-green)'};border:1px solid var(--gw-green);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✓ Attended</button>
+              <button class="att-btn att-noshow" data-att="no" style="padding:6px 12px;border-radius:6px;background:${att==='No-show'?'var(--gw-red)':'transparent'};color:${att==='No-show'?'white':'var(--gw-red)'};border:1px solid var(--gw-red);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✗ No-show</button>
+              <span class="att-status" style="font-size:11px;color:var(--text-tertiary);"></span>
+            </div>
             <div class="qsave-row">
               <button class="qzoom-btn-69" title="Send the 6/9 Emergency Meeting Zoom email" ${c.email ? '' : 'disabled'} style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--gw-purple);border:1px solid var(--gw-purple);font-size:12px;font-weight:600;cursor:${c.email ? 'pointer' : 'not-allowed'};font-family:inherit;opacity:${c.email ? '1' : '0.4'};">✉ Send 6/9 Zoom</button>
-              <span class="qzoom-status" style="font-size:11px;color:var(--text-tertiary);"></span>
+              <button class="qsave-btn qconfirm-save">Save</button>
+              <span class="qsave-status"></span>
             </div>
           </div>
         </div>`;
+      row.dataset.attState = att || '';
       chost69.appendChild(row);
+      row.querySelector('.qconfirm-save').addEventListener('click', () => submitConfirmRow(row));
+      row.querySelectorAll('.att-btn').forEach(b => b.addEventListener('click', () => {
+        const clicked = b.dataset.att === 'yes' ? 'Attended' : 'No-show';
+        const next = (row.dataset.attState === clicked) ? null : (b.dataset.att === 'yes');
+        submitAttendance(row, next);
+      }));
       const zb = row.querySelector('.qzoom-btn-69');
       if (zb) zb.addEventListener('click', async () => {
         if (!c.email) return;
         if (!confirm(`Send the 6/9 Emergency Meeting Zoom email to ${c.email} right now?`)) return;
-        const status = row.querySelector('.qzoom-status');
+        const status = row.querySelector('.qsave-status');
         zb.disabled = true; status.textContent = 'Sending…'; status.style.color = 'var(--text-tertiary)';
         try {
           const r = await authFetch(`${WORKER}/send-zoom-email`, {

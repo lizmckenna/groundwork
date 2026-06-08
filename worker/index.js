@@ -16,6 +16,13 @@ const EVENTS_TBL = 'tblHJG5AJagnOr33U';
 const METHOD_MAP = { called: 'Call', texted: 'Text', emailed: 'Email' };
 const METHOD_REVERSE = { Call: 'called', Text: 'texted', Email: 'emailed' };
 const CONFIRM_EVENT = 'Confirm 5/26';
+// Per-event labels for confirm/attendance tracking, keyed by the dashboard's event key.
+// Lets the same confirm/attendance/zoom endpoints serve both the 5/26 and 6/9 tabs.
+const EVENT_META = {
+  '5_26': { confirmEvent: 'Confirm 5/26', attendEvent: 'Orientation 5/26',     confirmField: 'confirm_5_26_status', attendField: 'attendance_5_26_status', confirmTag: '5/26 confirm', attendTag: '5/26 orientation' },
+  '6_9':  { confirmEvent: 'Confirm 6/9',  attendEvent: '6/9 Emergency Meeting', confirmField: 'confirm_6_9_status',  attendField: 'attendance_6_9_status',  confirmTag: '6/9 confirm',  attendTag: '6/9 emergency meeting' },
+};
+function eventMeta(key){ return EVENT_META[key] || EVENT_META['5_26']; }
 const LANEE_ID = 'rec0OmDN68hlffkTn';
 const STEPHANIE_ID = 'recnnEdYIPcclnPLY';
 const LANEE_COUNTIES = ['jackson', 'cass', 'johnson', 'platte', 'clay', 'lafayette', 'buchanan', 'ray'];
@@ -1904,7 +1911,7 @@ async function getConfirmees(env, urlObj) {
 
   const confirmLogs = [];
   let offset = null;
-  const lf = `{event}='${CONFIRM_EVENT}'`;
+  const lf = `{event}='${eventMeta(eventParam).confirmEvent}'`;
   do {
     let lq = `?filterByFormula=${encodeURIComponent(lf)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=date`;
     if (offset) lq += `&offset=${offset}`;
@@ -1915,7 +1922,7 @@ async function getConfirmees(env, urlObj) {
 
   // Attendance logs (Orientation 5/26 + method='Event attendance' + result='Attended' or 'No-show')
   const attendanceByContact = {};
-  const af = `AND({event}='Orientation 5/26',{method}='Event attendance',OR({result}='Attended',{result}='No-show',{result}='Walk-in'))`;
+  const af = `AND({event}='${eventMeta(eventParam).attendEvent}',{method}='Event attendance',OR({result}='Attended',{result}='No-show',{result}='Walk-in'))`;
   offset = null;
   do {
     let aq = `?filterByFormula=${encodeURIComponent(af)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=result&fields%5B%5D=date`;
@@ -1970,7 +1977,8 @@ async function getConfirmees(env, urlObj) {
 
 async function confirmLog(request, env) {
   const body = await request.json();
-  const { contact_id, methods = [], status = null, notes = '', signup_6_9 = null } = body;
+  const { contact_id, methods = [], status = null, notes = '', signup_6_9 = null, event = '5_26' } = body;
+  const meta = eventMeta(event);
   if (!contact_id) return json({ error: 'contact_id required' }, 400);
   const ALLOWED_STATUSES = [null, '', 'Confirmed', 'No answer', 'Declined', 'Cancelled', 'Reminder sent'];
   if (!ALLOWED_STATUSES.includes(status)) return json({ error: 'invalid status' }, 400);
@@ -1980,7 +1988,7 @@ async function confirmLog(request, env) {
   const date = todayCT();
   const result = status || 'Reminder sent';
 
-  const dupFilter = `AND({date}=DATETIME_PARSE('${date}'),{event}='${CONFIRM_EVENT}')`;
+  const dupFilter = `AND({date}=DATETIME_PARSE('${date}'),{event}='${meta.confirmEvent}')`;
   const dupes = [];
   let offset = null;
   do {
@@ -2002,9 +2010,9 @@ async function confirmLog(request, env) {
   const records = effectiveMethods.map(m => {
     const method = METHOD_MAP[m] || m;
     const f = {
-      Summary: `${date} — ${method} (5/26 confirm)`,
+      Summary: `${date} — ${method} (${meta.confirmTag})`,
       date, method, result,
-      event: CONFIRM_EVENT,
+      event: meta.confirmEvent,
       contact: [contact_id],
     };
     if (notes) f.notes = notes;
@@ -2019,7 +2027,7 @@ async function confirmLog(request, env) {
     try {
       await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ fields: { confirm_5_26_status: status }, typecast: true }),
+        body: JSON.stringify({ fields: { [meta.confirmField]: status }, typecast: true }),
       });
     } catch (e) { /* field may not exist yet — non-fatal */ }
   }
@@ -2975,7 +2983,8 @@ async function adminReassignWebsiteSignups(request, env) {
 // =========================================================================
 async function attendanceLog(request, env) {
   const body = await request.json();
-  const { contact_id, attended } = body;
+  const { contact_id, attended, event = '5_26' } = body;
+  const meta = eventMeta(event);
   if (!contact_id) return json({ error: 'contact_id required' }, 400);
   // attended: true → Attended, false → No-show, null → clear (delete only)
   if (attended !== true && attended !== false && attended !== null) {
@@ -2983,8 +2992,8 @@ async function attendanceLog(request, env) {
   }
   const date = todayCT();
 
-  // Delete any prior attendance log for this contact for the 5/26 event
-  const dupFilter = `AND({event}='Orientation 5/26',{method}='Event attendance',OR({result}='Attended',{result}='No-show'))`;
+  // Delete any prior attendance log for this contact for this event
+  const dupFilter = `AND({event}='${meta.attendEvent}',{method}='Event attendance',OR({result}='Attended',{result}='No-show'))`;
   const dupes = [];
   let offset = null;
   do {
@@ -3007,7 +3016,7 @@ async function attendanceLog(request, env) {
     try {
       await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ fields: { attendance_5_26_status: null }, typecast: true }),
+        body: JSON.stringify({ fields: { [meta.attendField]: null }, typecast: true }),
       });
     } catch (e) {}
     await invalidateReadCaches(env);
@@ -3019,11 +3028,11 @@ async function attendanceLog(request, env) {
     method: 'POST',
     body: JSON.stringify({
       records: [{ fields: {
-        Summary: `${date} — ${result} (5/26 orientation)`,
+        Summary: `${date} — ${result} (${meta.attendTag})`,
         date,
         method: 'Event attendance',
         result,
-        event: 'Orientation 5/26',
+        event: meta.attendEvent,
         contact: [contact_id],
       }}],
       typecast: true,
@@ -3033,7 +3042,7 @@ async function attendanceLog(request, env) {
   try {
     await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ fields: { attendance_5_26_status: result }, typecast: true }),
+      body: JSON.stringify({ fields: { [meta.attendField]: result }, typecast: true }),
     });
   } catch (e) {}
   await invalidateReadCaches(env);
