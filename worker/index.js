@@ -580,6 +580,33 @@ export default {
         }
         return json(out);
       }
+      if (url.pathname === '/admin/backfill-dnc-flags' && request.method === 'POST') {
+        const k = request.headers.get('X-Admin-Key');
+        const authorized = (env.ADMIN_KEY && k === env.ADMIN_KEY) || (env.SETUP_KEY && k === env.SETUP_KEY);
+        if (!authorized) return json({ error: 'forbidden' }, 403);
+        const f = `{result}='Do not contact'`;
+        const byContact = {};
+        let offset = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=date`;
+          if (offset) q += `&offset=${offset}`;
+          const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+          for (const r of d.records) {
+            const cid = (r.fields.contact || [])[0];
+            if (!cid) continue;
+            if (!byContact[cid] || (r.fields.date || '') > byContact[cid]) byContact[cid] = r.fields.date || '';
+          }
+          offset = d.offset;
+        } while (offset);
+        const updates = Object.entries(byContact).map(([id, date]) => ({ id, fields: { dnc_flag_date: date } }));
+        let updated = 0;
+        for (let i = 0; i < updates.length; i += 10) {
+          await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: updates.slice(i, i + 10), typecast: true }) });
+          updated += Math.min(10, updates.length - i);
+        }
+        await invalidateReadCaches(env);
+        return json({ updated });
+      }
       if (url.pathname === '/admin/backfill-attempt-counts' && request.method === 'POST') {
         // Recompute attempt_count (Call/Text/Email logs) + one_on_one_booked
         // for every contact from the full log table.
@@ -645,7 +672,7 @@ export default {
         // 2. logs with outreach method + blank organizer
         const targets = [];
         {
-          const f = `AND(OR({method}='Call',{method}='Text',{method}='Email'),{organizer}=BLANK())`;
+          const f = `AND(OR({method}='Call',{method}='Text',{method}='Email',{method}='Other'),{organizer}=BLANK())`;
           let offset = null;
           do {
             let q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=organizer`;
@@ -1951,6 +1978,12 @@ async function amplifierLog(request, env) {
   if (cStreet) voterFields.street_address = cStreet;
   if (cZip) voterFields.zip = cZip;
   if (cCity) voterFields.city = cCity;
+  // Routing rule (Liz 6/11): amplifier voters stay with their amplifier UNLESS
+  // they asked for an onboarding call — only those route to staff by zip and
+  // enter the fresh lists (no last_attempt stamp: the amplifier touch is a
+  // referral, not a staff attempt).
+  const wantsCall = cInterests.some(i => /onboarding/i.test(i));
+  if (wantsCall) delete voterFields.last_attempt_date;
   // Interests are commitments — surface them on staff dashboards' ✦ pill
   if (cInterests.length) {
     try {
@@ -1977,7 +2010,7 @@ async function amplifierLog(request, env) {
       leader_ladder: "Prospect",
       source: `amplifier outreach \xB7 ${ampDisplayName || ampEmail}`
     };
-    if (cZip) {
+    if (wantsCall && cZip) {
       const orgId = deriveOrganizerId({ zip: cZip });
       if (orgId) fields.assigned_organizer = [orgId];
     }
@@ -2319,7 +2352,7 @@ async function getProspects(env, url) {
 // =========================================================================
 const PROSPECT_FIELDS = ['Name','first','last','phone','email','school','district','log_count','organized_by','leader_ladder',
   'last_attempt_date','last_attempt_method','last_attempt_result','next_step','last_attempt_by','last_attempt_note',
-  'attempt_count','one_on_one_booked','amendment5_commitments','house_meeting_commitments','commitments_added','house_meeting_date',
+  'attempt_count','one_on_one_booked','amendment5_commitments','house_meeting_commitments','commitments_added','house_meeting_date','dnc_flag_date',
   ...Object.values(EVENT_META).filter(m => m.signupField).map(m => m.signupField)];
 
 function rowFromRecord(r) {
@@ -2345,6 +2378,7 @@ function rowFromRecord(r) {
     hm_commitments: r.fields.house_meeting_commitments || '',
     commitments_added: r.fields.commitments_added || '',
     house_meeting_date: r.fields.house_meeting_date || null,
+    dnc_flag_date: r.fields.dnc_flag_date || null,
     // Upcoming signups (for the Commitments pill): { '6_23': 'Signed up', ... }
     signups: Object.fromEntries(Object.entries(EVENT_META)
       .filter(([, m]) => m.signupField && r.fields[m.signupField])
@@ -2519,7 +2553,7 @@ async function getContactHistory(env, urlObj) {
   if (!cid) return json({ error: 'id required' }, 400);
   // KV cache — repeat opens are instant; writes are rare enough that 10 min
   // staleness is fine for a history view.
-  const cacheKey = `cache:history:v3:${cid}`;
+  const cacheKey = `cache:history:v4:${cid}`;
   const cached = await cacheGet(env, cacheKey);
   if (cached) return json(cached);
 
@@ -2553,7 +2587,11 @@ async function getContactHistory(env, urlObj) {
     // (Skip/DNC, method 'Other'), commitments, and system rows are
     // classified separately so the Attempts pill stays clean.
     const m = r.fields.method;
-    const kind = ['Call', 'Text', 'Email'].includes(m) ? 'touch'
+    // Attempts = calls/texts/emails AND admin outcomes (Skip/Wrong number/
+    // Do not contact, method 'Other') — a DNC on a date, attributed to the
+    // caller, belongs in the attempt history (Liz 6/11). Commitments and
+    // event rows stay out.
+    const kind = ['Call', 'Text', 'Email', 'Other'].includes(m) ? 'touch'
       : (m === 'Commitment' || m === 'House meeting') ? 'commitment'
       : 'system';
     entries.push({
@@ -2767,6 +2805,7 @@ async function logOutcome(request, env) {
   }
   if (attemptCount != null) contactFields.attempt_count = attemptCount;
   if (outcome === 'oneonone') contactFields.one_on_one_booked = true;
+  if (outcome === 'do-not-contact') contactFields.dnc_flag_date = date;
   // Commitments made on calls (not just the A5 form): append a dated line to
   // commitments_added so the Commitments pill shows the full arc. A separate
   // method='Commitment' log row feeds conversion stats + history.

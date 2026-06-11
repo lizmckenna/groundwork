@@ -1079,6 +1079,7 @@ function buildOutreachRow(c, i) {
         <div class="qname"><a href="${airtableUrl(c.id)}" target="_blank" rel="noopener" title="Open in Airtable to edit (phone, email, school, etc.)" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a></div>
         <div class="qmeta">${metaLine(c)}</div>
         ${pillsLine(c)}
+        ${c.dnc_flag_date ? `<div><span class="qsignal" style="background:var(--gw-red-soft);color:var(--gw-red);font-weight:600;">⚠ asked not to be contacted · ${escapeHtml(c.dnc_flag_date)} — check Attempts before calling</span></div>` : ''}
         ${listContextLine(c)}
         ${lastTouchLine(c)}
       </div>
