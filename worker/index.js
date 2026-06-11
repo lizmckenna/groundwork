@@ -1836,9 +1836,9 @@ function safeRedirect(url) {
 }
 
 // =========================================================================
-// Amplifier stopgap endpoints — built in the parallel session 6/11, merged
-// here so BOTH workstreams live in one source file (the repo is the single
-// source of truth; never deploy from an uncommitted clone again).
+// Amplifier stopgap endpoints — owned by the parallel amplifier session,
+// merged 6/11 (second sync). THE REPO IS THE SINGLE SOURCE OF TRUTH:
+// git pull before every deploy.
 // =========================================================================
 async function amplifierLog(request, env) {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
@@ -1858,6 +1858,7 @@ async function amplifierLog(request, env) {
   const {
     amplifier_email,
     amplifier_name,
+    followup_voter_id,
     voter_first,
     voter_last,
     voter_phone,
@@ -1874,7 +1875,7 @@ async function amplifierLog(request, env) {
   if (!amplifier_email) return json({ error: "amplifier email required (tell us who you are)" }, 400);
   if (!voter_first || !voter_last) return json({ error: "voter first + last name are required" }, 400);
   if (!conversation_number) return json({ error: "pick which conversation (1, 2, or election day)" }, 400);
-  const clean = (s) => String(s || "").replace(/^[^\w\s'.-]+/, "").trim();
+  const clean = (s) => String(s || "").replace(/^[^\w\s'.-]+/.trim(), "clean");
   const ampEmail = String(amplifier_email).toLowerCase().trim();
   const cFirst = clean(voter_first);
   const cLast = clean(voter_last);
@@ -1912,7 +1913,23 @@ async function amplifierLog(request, env) {
     }
   }
   let voterId = null;
-  if (cPhone) {
+  if (followup_voter_id && /^rec[A-Za-z0-9]{14,}$/.test(String(followup_voter_id))) {
+    try {
+      const filter = `AND({method}='Amplifier conversation',FIND('Amplifier: ${ampDisplayName || ampEmail}',{notes})>0)`;
+      const data = await at(env, `/${BASE}/${CONTACT_LOG_TBL}?filterByFormula=${encodeURIComponent(filter)}&pageSize=100`);
+      for (const log of data.records) {
+        if ((log.fields.contact || []).includes(followup_voter_id)) {
+          voterId = followup_voter_id;
+          break;
+        }
+      }
+    } catch {
+    }
+    if (!voterId) {
+      return json({ error: "follow-up voter not in your list" }, 403);
+    }
+  }
+  if (!voterId && cPhone) {
     const digits = cPhone.replace(/\D/g, "").slice(-10);
     if (digits.length === 10) {
       const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
@@ -2129,7 +2146,6 @@ async function amplifierVoterUpdate(request, env) {
   }
   return json({ ok: true });
 }
-
 
 async function authStart(request, env) {
   const body = await request.json();
@@ -2491,7 +2507,7 @@ async function getContactHistory(env, urlObj) {
   if (!cid) return json({ error: 'id required' }, 400);
   // KV cache — repeat opens are instant; writes are rare enough that 10 min
   // staleness is fine for a history view.
-  const cacheKey = `cache:history:v2:${cid}`;
+  const cacheKey = `cache:history:v3:${cid}`;
   const cached = await cacheGet(env, cacheKey);
   if (cached) return json(cached);
 
@@ -2521,8 +2537,15 @@ async function getContactHistory(env, urlObj) {
   for (const d of logPages) for (const r of d.records) {
     const orgRaw = r.fields.organizer;
     const orgIds = Array.isArray(orgRaw) ? orgRaw : (orgRaw ? [orgRaw] : []);
+    // Attempts = direct outreach only (Call/Text/Email). Admin actions
+    // (Skip/DNC, method 'Other'), commitments, and system rows are
+    // classified separately so the Attempts pill stays clean.
+    const m = r.fields.method;
+    const kind = ['Call', 'Text', 'Email'].includes(m) ? 'touch'
+      : (m === 'Commitment' || m === 'House meeting') ? 'commitment'
+      : 'system';
     entries.push({
-      kind: 'touch',
+      kind,
       date: r.fields.date || null,
       method: r.fields.method || null,
       result: r.fields.result || null,
