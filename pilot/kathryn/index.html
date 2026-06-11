@@ -589,7 +589,7 @@
       </div>
     </div>
 
-    <!-- Per-event metrics: flake + turnout update per event, straight from the log -->
+    <!-- Per-event metrics, straight from the log -->
     <div class="ev-strip" id="ev-strip"></div>
 
     <div id="walkin-form" style="display:none;background:var(--bg-elevated);border:1px solid var(--border-hover);border-radius:10px;padding:18px;margin-bottom:18px;">
@@ -682,7 +682,7 @@
 
     <div class="section-head">
       <h2>Event report cards</h2>
-      <span class="mono">turnout · flake rate · confirmed-vs-came · conversion to action</span>
+      <span class="mono">turnout · confirmed-vs-came · conversion to action</span>
     </div>
     <div id="event-reports">
       <div style="padding:24px;text-align:center;color:var(--text-tertiary);">Loading event stats…</div>
@@ -957,7 +957,7 @@ function toggleCommitsPop(span) {
   const items = c ? commitmentsOf(c) : [];
   pop.innerHTML = `<h4>Commitments</h4>` + (items.length
     ? items.map(it => `<div class="qhistory-row"><span class="hd">${escapeHtml(it.kind)}</span><span class="hev">${escapeHtml(it.text)}</span></div>`).join('')
-    : '<div style="color:var(--text-tertiary);font-size:12px;">No commitments yet — that\'s the ask.</div>')
+    : '<div style="color:var(--text-tertiary);font-size:12px;">No commitments yet.</div>')
     + (c && c.next_step ? `<div class="qhistory-row"><span class="hd">next step</span><span>${escapeHtml(c.next_step)}</span></div>` : '');
   person.appendChild(pop);
 }
@@ -1025,7 +1025,7 @@ function outcomeOptions(c) {
 
   if (activeList === 'unconverted') {
     // They already came to an onboarding — NO onboarding options here
-    // (Ellen: "we're not trying to get them signed up again"). The asks:
+    // (Ellen: "we're not trying to get them signed up again"). Options:
     // 1-1 + trainings.
     opts.push({ v: 'oneonone', label: '1-1 booked' });
     opts.push(...nextOf('hm', 3));
@@ -1192,9 +1192,9 @@ const LIST_HINTS = {
   fresh: 'People never attempted before. First touch.',
   unreached: 'Attempted with no answer, due again after 4 days. Oldest first, with the suggested next channel. People drop off for good after 5 attempts.',
   unconverted: ORGANIZER === 'kathryn'
-    ? 'Came to an onboarding and committed to ONLY house meeting and/or amplifier. The ask: sign them up for a training date.'
+    ? 'Came to an onboarding and committed to ONLY house meeting and/or amplifier.'
     : 'Came to an onboarding, no training signup or 1-1 yet. They fall off once either happens.',
-  training_followup: 'Came to a training. The ask: schedule their house meeting or get their amplifier tracker going.',
+  training_followup: 'Came to a training.',
 };
 (function fillListPicker() {
   const lp = document.getElementById('list-picker');
@@ -2036,7 +2036,7 @@ async function loadEventReports() {
           <div class="day-bar-seg" style="width:${(att/maxSign)*100}%;background:var(--gw-purple);"></div>
           <div class="day-bar-seg" style="width:${(Math.max(0,(s.signups||0)-att)/maxSign)*100}%;background:var(--border-hover);"></div>
         </div>
-        <div class="day-bar-counts" style="width:300px;">${s.signups || 0} reg · ${att} came${s.turnout_rate != null ? ` · ${s.turnout_rate}% turnout` : ''}${s.flake_rate != null ? ` · ${s.flake_rate}% flake` : ''}${s.conversion?.rate != null ? ` · ${s.conversion.rate}% → action` : ''}</div>
+        <div class="day-bar-counts" style="width:300px;">${s.signups || 0} reg · ${att} came${s.turnout_rate != null ? ` · ${s.turnout_rate}% turnout` : ''}${s.conversion?.rate != null ? ` · ${s.conversion.rate}% → action` : ''}</div>
       </div>`;
     }).join('');
 
