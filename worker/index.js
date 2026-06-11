@@ -1875,7 +1875,7 @@ async function amplifierLog(request, env) {
   if (!amplifier_email) return json({ error: "amplifier email required (tell us who you are)" }, 400);
   if (!voter_first || !voter_last) return json({ error: "voter first + last name are required" }, 400);
   if (!conversation_number) return json({ error: "pick which conversation (1, 2, or election day)" }, 400);
-  const clean = (s) => String(s || "").replace(/^[^\w\s'.-]+/.trim(), "clean");
+  const clean = (s) => String(s || '').replace(/^[^\w\s'.-]+/, '').trim();
   const ampEmail = String(amplifier_email).toLowerCase().trim();
   const cFirst = clean(voter_first);
   const cLast = clean(voter_last);
