@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
-<title>Groundwork — LaNee · MOI Pilot</title>
+<title>Groundwork — Kathryn · MOI Pilot</title>
 <link rel="icon" type="image/svg+xml" href="/groundwork/favicon.svg">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
@@ -458,7 +458,7 @@
         <line x1="50" y1="50" x2="28.35" y2="62.5" stroke="#5371ff" stroke-width="1.5"/><line x1="50" y1="50" x2="28.35" y2="37.5" stroke="#5371ff" stroke-width="1.5"/>
       </svg>
       <div>
-        <span class="brand-name">Groundwork<span class="user-pill">LaNee</span></span>
+        <span class="brand-name">Groundwork<span class="user-pill">Kathryn</span></span>
         <small class="brand-sub">MOI Pilot · Missouri</small>
       </div>
     </a>
@@ -477,7 +477,7 @@
 
   <div class="tab-pane active" data-pane="today">
     <section class="hero">
-      <div class="eyebrow" id="hero-eyebrow">Onramp calls · LaNee Bridewell</div>
+      <div class="eyebrow" id="hero-eyebrow">Follow-up calls · Kathryn</div>
       <h1>Turn the list out to 6/23.</h1>
       <p class="lede">Every call, text, and email moves someone toward the next No on 5 Onboarding. Missing info on a row is a data gap in Airtable, not a dashboard bug — click the amber chip to fix it at the source.</p>
     </section>
@@ -651,7 +651,7 @@
 
 <footer>
   <div class="container">
-    <div>Groundwork · LaNee · Missouri pilot · launched May 2026</div>
+    <div>Groundwork · Kathryn · Missouri pilot · launched May 2026</div>
     <div><a href="mailto:emckenna@hks.harvard.edu">emckenna@hks.harvard.edu</a></div>
   </div>
 </footer>
@@ -659,7 +659,7 @@
 <script>
 // === Live Airtable wiring via Cloudflare Worker ===
 const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
-const ORGANIZER = 'lanee'; // server-side filters /prospects, /confirmees, /queue-count by this organizer's contacts
+const ORGANIZER = 'kathryn'; // server-side filters /prospects, /confirmees, /queue-count by this organizer's contacts
 
 // === Event registry — keep in sync with the worker's EVENT_META ===
 // CURRENT = the event we're turning people out to right now.
@@ -766,7 +766,7 @@ function lastTouchLine(c) {
 }
 
 // --- Cached counters: paint last-known values from localStorage on boot ---
-const COUNTER_CACHE_KEY = 'gw_lanee_counter_cache_v2';
+const COUNTER_CACHE_KEY = 'gw_kathryn_counter_cache_v2';
 function readCounterCache() {
   try { return JSON.parse(localStorage.getItem(COUNTER_CACHE_KEY) || '{}'); }
   catch (e) { return {}; }
@@ -932,7 +932,7 @@ function renderQueue() {
 // activeList: which slice of the base we're calling through (fresh /
 // unreached / unconverted). pageSize: how many per batch — LaNee wanted
 // more than 5; default 10, max 25 so each row still gets real attention.
-let activeList = localStorage.getItem('gw-call-list') || 'fresh';
+let activeList = localStorage.getItem('gw-call-list') || 'unconverted';
 let pageSize = parseInt(localStorage.getItem('gw-page-size') || '10');
 
 const LIST_HINTS = {

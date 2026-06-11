@@ -3,8 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
 <meta name="robots" content="noindex,nofollow">
 <title>Groundwork — Stephanie · MOI Pilot</title>
 <link rel="icon" type="image/svg+xml" href="/groundwork/favicon.svg">
@@ -379,6 +377,50 @@
     .stat-row { grid-template-columns: 1fr; }
   }
 </style>
+<style>
+/* === A1+ additions: condensed rows, fix-chips, metric strip, day bars === */
+.metric-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+@media (max-width: 760px) { .metric-strip { grid-template-columns: 1fr; } }
+.metric-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.metric-card .mc-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 8px; }
+.metric-card .mc-big { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; color: var(--text-primary); line-height: 1.1; }
+.metric-card .mc-sub { font-size: 11.5px; color: var(--text-tertiary); margin-top: 6px; line-height: 1.45; }
+.metric-card .mc-funnel { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.metric-card .mc-funnel b { font-size: 26px; font-weight: 700; color: var(--text-primary); }
+.metric-card .mc-funnel .arrow { color: var(--text-tertiary); font-size: 13px; }
+/* Missing data = cleanliness problem, not dashboard problem */
+.fix-chip { display: inline-flex; align-items: center; gap: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; border: 1px dashed var(--gw-orange, #d97706); color: var(--gw-orange, #b45309); background: rgba(217,119,6,0.07); text-decoration: none; }
+.fix-chip:hover { background: rgba(217,119,6,0.15); }
+/* Condensed outcome select on queue rows */
+.qoutcome { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.qoutcome-select { background: var(--bg-elevated); border: 1px solid var(--border-hover); color: var(--text-primary); padding: 8px 10px; border-radius: 6px; font-size: 12.5px; font-family: inherit; min-width: 190px; }
+.qlast-touch { margin-top: 6px; font-size: 11px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.03em; }
+.qlast-touch b { color: var(--text-secondary); font-weight: 600; }
+/* Day bars — attempts vs outcomes, compact */
+.day-bar-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.day-bar-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text-tertiary); width: 72px; flex-shrink: 0; text-align: right; }
+.day-bar-row.today .day-bar-label { color: var(--gw-purple); font-weight: 700; }
+.day-bar-track { flex: 1; height: 16px; background: var(--bg-elevated); border-radius: 4px; overflow: hidden; display: flex; }
+.day-bar-seg { height: 100%; }
+.day-bar-counts { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text-tertiary); width: 200px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Event tab metric strip */
+.ev-strip { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 18px; }
+.ev-stat { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; min-width: 96px; }
+.ev-stat .v { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+.ev-stat .l { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 2px; }
+.ev-picker { background: var(--bg-elevated); border: 1px solid var(--border-hover); color: var(--text-primary); padding: 8px 12px; border-radius: 8px; font-size: 13px; font-family: inherit; }
+/* Per-event report cards on Stats tab */
+.report-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }
+.report-card h3 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+.report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.report-grid .rg { background: var(--bg-elevated); border-radius: 8px; padding: 10px 12px; }
+.report-grid .rg .v { font-size: 19px; font-weight: 700; color: var(--text-primary); }
+.report-grid .rg .l { font-size: 10px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 2px; }
+.method-matrix { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12px; }
+.method-matrix th, .method-matrix td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+.method-matrix th:first-child, .method-matrix td:first-child { text-align: left; }
+.method-matrix th { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); }
+</style>
 </head>
 <body>
 
@@ -422,10 +464,9 @@
     </a>
     <nav class="tab-nav">
       <a href="#" class="active" data-tab="today">Today</a>
-      <a href="#" data-tab="confirms">5/26 Event Tracking</a>
-      <a href="#" data-tab="confirms69">6/9 Event Tracking</a>
+      <a href="#" data-tab="event" id="event-tab-link">Event tracking</a>
       <a href="#" data-tab="find">Find contact</a>
-      <a href="#" data-tab="stats">More stats</a>
+      <a href="#" data-tab="stats">Stats</a>
       <a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9?blocks=hide" target="_blank" rel="noopener" style="color:var(--gw-purple);">Airtable ↗</a>
       <button id="theme-toggle" title="Toggle theme" style="background:transparent;border:1px solid var(--border-hover);border-radius:6px;padding:6px 10px;color:var(--text-secondary);cursor:pointer;font-size:14px;font-family:inherit;margin-left:6px;">☾</button>
     </nav>
@@ -436,93 +477,68 @@
 
   <div class="tab-pane active" data-pane="today">
     <section class="hero">
-      <div class="eyebrow">Week of May 18 · Stephanie Rittgers</div>
-      <h1>Two numbers that matter right now.</h1>
-      <p class="lede">Every call, text, and email feeds these two metrics. Everything else is downstream of getting people to the 5/26 Orientation and booking 1-1s.</p>
-      <p class="lede" style="margin-top:8px;font-size:13px;color:var(--text-tertiary);">Your queue: contacts outside KC-metro counties (Jackson, Cass, Johnson, Platte, Clay, Lafayette, Buchanan, Ray).</p>
+      <div class="eyebrow" id="hero-eyebrow">Onramp calls · Stephanie Rittgers</div>
+      <h1>Turn the list out to 6/23.</h1>
+      <p class="lede">Every call, text, and email moves someone toward the next No on 5 Onboarding. Missing info on a row is a data gap in Airtable, not a dashboard bug — click the amber chip to fix it at the source.</p>
     </section>
 
-    <!-- Org-wide 5/26 turnout (everyone: website, FB ads, LaNee, Stephanie) -->
-    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:16px;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-        <div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:4px;">5/26 Orientation · org-wide turnout</div>
-          <div style="font-size:24px;font-weight:700;letter-spacing:-0.02em;color:var(--text-primary);"><span id="org-count">—</span> <span style="font-size:14px;font-weight:500;color:var(--text-tertiary);">of <span id="org-target">30</span> RSVPs</span></div>
+    <div class="metric-strip">
+      <div class="metric-card">
+        <div class="mc-label">Today · your outreach</div>
+        <div class="mc-funnel">
+          <b id="t-attempts">0</b><span class="arrow">attempts</span>
+          <b id="t-reached">0</b><span class="arrow">reached</span>
+          <b id="t-signups">0</b><span class="arrow">signups</span>
         </div>
-        <div style="font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;">all sources: web + cold calls + FB ads</div>
+        <div class="mc-sub" id="t-rate">contact rate —</div>
       </div>
-      <div style="height:6px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;">
-        <div id="org-bar" style="height:100%;background:var(--gw-purple);width:0%;transition:width 0.6s;"></div>
+      <div class="metric-card">
+        <div class="mc-label">6/23 Onboarding · org-wide funnel</div>
+        <div class="mc-funnel">
+          <b id="ev-signups">—</b><span class="arrow">signed up →</span>
+          <b id="ev-confirmed">—</b><span class="arrow">confirmed</span>
+        </div>
+        <div style="height:5px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;margin-top:10px;">
+          <div id="ev-bar" style="height:100%;background:var(--gw-purple);width:0%;transition:width 0.6s;"></div>
+        </div>
+        <div class="mc-sub">goal 30 in the (Zoom) room · all sources</div>
       </div>
-    </div>
-
-    <section class="big-metrics">
-      <div class="big-card signup">
-        <div class="bc-label">Your goal · cold-call signups</div>
-        <div class="bc-question">Sign-ups from your calls</div>
-        <div class="bc-progress">
-          <span class="bc-current" id="m-signup-current">0</span>
-          <span class="bc-divider">/</span>
-          <span class="bc-target" id="m-signup-target">20</span>
-        </div>
-        <div class="bc-bar"><div id="m-signup-bar" style="width:0%"></div></div>
-        <div class="bc-foot">
-          <span>commitments logged</span>
-          <span class="bc-percent" id="m-signup-pct">0% to goal</span>
-        </div>
-      </div>
-
-      <div class="big-card oneonone">
-        <div class="bc-label">Secondary · This week's 1-1s</div>
-        <div class="bc-question">1-1 meetings booked</div>
-        <div class="bc-progress">
-          <span class="bc-current" id="m-oneonone-current">0</span>
-          <span class="bc-divider">/</span>
-          <span class="bc-target" id="m-oneonone-target">1</span>
-        </div>
-        <div class="bc-bar"><div id="m-oneonone-bar" style="width:0%"></div></div>
-        <div class="bc-foot">
-          <span>weekly target ramps to 5/wk by May 25</span>
-          <span class="bc-percent" id="m-oneonone-pct">0% to goal</span>
-        </div>
-      </div>
-    </section>
-
-    <div class="stat-row">
-      <div class="stat-mini">
-        <span class="sml">Attempts today</span>
-        <span class="smv" id="stat-attempts">0<em>/ 50</em></span>
-      </div>
-      <div class="stat-mini">
-        <span class="sml">Conversations today</span>
-        <div class="smv-right">
-          <span class="smv" id="stat-convos">0<em>/ 10</em></span>
-          <span class="stat-rate" id="stat-rate">— contact rate</span>
-        </div>
+      <div class="metric-card">
+        <div class="mc-label">6/9 Onboarding → action</div>
+        <div class="mc-big" id="conv-rate">—</div>
+        <div class="mc-sub" id="conv-detail">attendees who took a next step (commitment, training, house meeting, or 1-1) since 6/9</div>
       </div>
     </div>
 
     <div class="section-head">
-      <h2>Outreach grid · cumulative</h2>
-      <span class="mono">your effort over time · today on top</span>
+      <h2>Outreach · attempts and outcomes by day</h2>
+      <span class="mono">last 14 days · today highlighted</span>
     </div>
     <div class="outreach-grid-wrap">
       <div id="grid-days"></div>
-      <!-- Legacy fixed 50-grid kept hidden for backward compat with other code paths -->
-      <div class="outreach-grid" id="grid" style="display:none;"></div>
       <div class="legend">
-        <span class="legend-item"><span class="legend-swatch"></span>Not yet attempted</span>
         <span class="legend-item"><span class="legend-swatch grey"></span>Attempted · no answer</span>
-        <span class="legend-item"><span class="legend-swatch light-purple"></span>Connected · conversation</span>
-        <span class="legend-item"><span class="legend-swatch purple"></span>Signed up for 5/26</span>
+        <span class="legend-item"><span class="legend-swatch light-purple"></span>Conversation</span>
+        <span class="legend-item"><span class="legend-swatch purple"></span>Signed up</span>
         <span class="legend-item"><span class="legend-swatch green"></span>1-1 booked</span>
       </div>
     </div>
 
-    <div class="section-head">
-      <h2>Up next · 5 to call</h2>
-      <span class="mono"><span id="queue-total">—</span> total in your queue · warmest leads first</span>
+    <div class="section-head" style="flex-wrap:wrap;gap:10px;">
+      <h2 style="margin-right:auto;">Call list</h2>
+      <select id="list-picker" class="ev-picker" title="Switch which list you're calling through">
+        <option value="fresh">Fresh prospects · warmest first</option>
+        <option value="unreached">Attempted, not reached · cadence due</option>
+        <option value="unconverted">Came to an onboarding · book the 1-1</option>
+      </select>
+      <select id="page-size" class="ev-picker" title="How many people per batch">
+        <option value="5">5 at a time</option>
+        <option value="10" selected>10 at a time</option>
+        <option value="25">25 at a time</option>
+      </select>
+      <span class="mono"><span id="queue-total">—</span> in queue</span>
     </div>
+    <p class="mono" id="list-hint" style="font-size:11px;color:var(--text-tertiary);margin:-6px 0 12px;letter-spacing:0.04em;"></p>
     <div class="queue-wrap" id="queue"></div>
 
     <div class="batch-nav">
@@ -539,23 +555,29 @@
     </div>
   </div>
 
-  <div class="tab-pane" data-pane="confirms">
+  <div class="tab-pane" data-pane="event">
     <section class="hero">
-      <div class="eyebrow">5/26 Orientation · before, during, after</div>
-      <h1>Track the event end-to-end.</h1>
-      <p class="lede">Before 5/26: contact each signup to confirm. On 5/26: mark who actually showed up and add any walk-ins. After: see who attended.</p>
+      <div class="eyebrow" id="ev-eyebrow">Event tracking · before, during, after</div>
+      <h1 id="ev-title">Track the event end-to-end.</h1>
+      <p class="lede">Before the event: contact each signup to confirm. On the day: mark who showed up and add walk-ins. After: the numbers roll into Stats automatically.</p>
     </section>
 
-    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin:48px 0 18px;gap:24px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin:40px 0 14px;gap:24px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border);">
       <div>
-        <h2 style="font-size:18px;font-weight:600;letter-spacing:-0.01em;margin:0 0 6px;">5/26 sign-ups</h2>
+        <h2 style="font-size:18px;font-weight:600;letter-spacing:-0.01em;margin:0 0 6px;" id="ev-h2">Sign-ups</h2>
         <div class="mono" style="font-size:11px;color:var(--text-tertiary);letter-spacing:0.06em;">Confirm before the event · mark attended on the day</div>
       </div>
-      <button id="walkin-open" style="padding:10px 18px;border-radius:8px;background:var(--gw-purple);color:white;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;">+ Add walk-in</button>
+      <div style="display:flex;gap:10px;align-items:center;flex-shrink:0;">
+        <select id="event-picker" class="ev-picker" title="Switch event — past events are archived here"></select>
+        <button id="walkin-open" style="padding:10px 18px;border-radius:8px;background:var(--gw-purple);color:white;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">+ Add walk-in</button>
+      </div>
     </div>
 
+    <!-- Per-event metrics: flake + turnout update per event, straight from the log -->
+    <div class="ev-strip" id="ev-strip"></div>
+
     <div id="walkin-form" style="display:none;background:var(--bg-elevated);border:1px solid var(--border-hover);border-radius:10px;padding:18px;margin-bottom:18px;">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:12px;">New walk-in · 5/26 orientation</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:12px;" id="wi-title">New walk-in</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <input id="wi-first" placeholder="First name *" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
         <input id="wi-last" placeholder="Last name *" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
@@ -572,24 +594,7 @@
       <div style="font-size:11px;color:var(--text-tertiary);margin-top:10px;">Name required. Email or phone strongly preferred. We'll match against existing contacts to avoid duplicates.</div>
     </div>
 
-    <div class="queue-wrap" id="confirms-queue"></div>
-  </div>
-
-  <div class="tab-pane" data-pane="confirms69">
-    <section class="hero">
-      <div class="eyebrow">6/9 Emergency Meeting · before, during, after</div>
-      <h1>Track 6/9 sign-ups end-to-end.</h1>
-      <p class="lede">Everyone who said yes to the 6/9 Emergency Meeting. Before 6/9: contact each person to confirm. On 6/9: mark who actually showed up.</p>
-    </section>
-
-    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin:48px 0 18px;gap:24px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border);">
-      <div>
-        <h2 style="font-size:18px;font-weight:600;letter-spacing:-0.01em;margin:0 0 6px;">6/9 sign-ups</h2>
-        <div class="mono" style="font-size:11px;color:var(--text-tertiary);letter-spacing:0.06em;">Confirm before the event · mark attended on the day</div>
-      </div>
-    </div>
-
-    <div class="queue-wrap" id="confirms69-queue"></div>
+    <div class="queue-wrap" id="event-queue"></div>
   </div>
 
   <div class="tab-pane" data-pane="find">
@@ -634,20 +639,11 @@
     </div>
 
     <div class="section-head">
-      <h2>Coming in next iteration</h2>
-      <span class="mono">when the Worker is wired</span>
+      <h2>Event report cards</h2>
+      <span class="mono">turnout · flake rate · confirmed-vs-came · conversion to action</span>
     </div>
-    <div class="stats-tba">
-      <h3>Time-series + intelligence layer</h3>
-      <p>Once Airtable data flows live, this section gets:</p>
-      <ul>
-        <li>Attempts + conversions over time</li>
-        <li>Sign-up rate by event</li>
-        <li>Flake rate (committed but no-show)</li>
-        <li>Conversion by leader-ladder tier</li>
-        <li>Network/relational map · who organized whom</li>
-        <li>Profile of "likely to commit"</li>
-      </ul>
+    <div id="event-reports">
+      <div style="padding:24px;text-align:center;color:var(--text-tertiary);">Loading event stats…</div>
     </div>
   </div>
 
@@ -661,21 +657,23 @@
 </footer>
 
 <script>
-// === Render outreach grid: 50 empty squares to start ===
-(function renderGrid() {
-  const grid = document.getElementById('grid');
-  for (let i = 0; i < 50; i++) {
-    const d = document.createElement('div');
-    d.className = 'dot';
-    d.dataset.idx = i;
-    grid.appendChild(d);
-  }
-})();
-
 // === Live Airtable wiring via Cloudflare Worker ===
 const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
-function todayCT() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date()); }
 const ORGANIZER = 'stephanie'; // server-side filters /prospects, /confirmees, /queue-count by this organizer's contacts
+
+// === Event registry — keep in sync with the worker's EVENT_META ===
+// CURRENT = the event we're turning people out to right now.
+// NEXT = the one after (PDF ask: "the next two available to check off").
+// Past events stay reachable through the Event-tracking picker (the archive).
+const EVENTS = {
+  '6_23': { label: '6/23 No on 5 Onboarding', short: '6/23', date: '2026-06-23', signup: true },
+  '7_7':  { label: '7/7 No on 5 Onboarding',  short: '7/7',  date: '2026-07-07', signup: true },
+  '6_9':  { label: '6/9 No on 5 Onboarding',  short: '6/9',  date: '2026-06-09', signup: true, past: true },
+  '5_26': { label: '5/26 Orientation',         short: '5/26', date: '2026-05-26', signup: false, past: true },
+};
+const CURRENT_EVENT = '6_23';
+const NEXT_EVENT = '7_7';
+function todayCT() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date()); }
 const authHeaders = (extra = {}) => ({
   'X-Groundwork-Session': localStorage.getItem('gw-session') || '',
   ...extra,
@@ -708,30 +706,13 @@ function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// Next-step options conditional on outcome (key matches outcome combo)
+// Next-step options conditional on outcome. Event-signup entries are generated
+// from EVENTS so a new event only needs a registry entry.
 const NEXT_STEP_OPTIONS = {
   connected: [
     'Schedule follow-up call within 7 days',
     'Send info packet about MOI',
     'Note their key issue + circle back',
-    'Other (write below)',
-  ],
-  'signed-up': [
-    'Send 5/26 calendar invite',
-    'Add to reminder text list for 5/25',
-    'Send personal text day-of 5/26',
-    'Other (write below)',
-  ],
-  'signed-up-5-26': [
-    'Send 5/26 calendar invite',
-    'Add to reminder text list for 5/25',
-    'Send personal text day-of 5/26',
-    'Other (write below)',
-  ],
-  'signed-up-6-9': [
-    'Send 6/9 calendar invite',
-    'Add to reminder text list for 6/8',
-    'Send personal text day-of 6/9',
     'Other (write below)',
   ],
   oneonone: [
@@ -740,29 +721,48 @@ const NEXT_STEP_OPTIONS = {
     'Prep 1-1 questions document',
     'Other (write below)',
   ],
-  'signed-up+oneonone': [
-    'Send 5/26 invite + 1-1 calendar invite',
-    'Day-before reminders for both (5/25 + 1-1)',
-    'Send 5/26 calendar invite',
-    'Send calendar invite for the 1-1',
-    'Prep 1-1 questions document',
-    'Other (write below)',
-  ],
 };
+for (const [k, ev] of Object.entries(EVENTS)) {
+  if (!ev.signup) continue;
+  NEXT_STEP_OPTIONS[`signed-up-${k.replace('_','-')}`] = [
+    `Send ${ev.short} Zoom email (button on Event tracking tab)`,
+    `Add to reminder text list for day before ${ev.short}`,
+    `Send personal text day-of ${ev.short}`,
+    'Other (write below)',
+  ];
+}
 
 const qhost = document.getElementById('queue');
 
+function airtableUrl(id) {
+  return `https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${id}`;
+}
+// Missing fields render as amber "fix in Airtable" chips — the gap is in the
+// DATA, not the dashboard. One click opens the record to fill it in.
+function fixChip(c, label) {
+  return `<a class="fix-chip" href="${airtableUrl(c.id)}" target="_blank" rel="noopener" title="This contact is missing ${label} in Airtable — click to add it at the source">+ ${label} ↗</a>`;
+}
 function metaLine(c) {
   const parts = [];
-  if (c.school) parts.push(c.school);
-  if (c.district) parts.push(c.district);
-  return parts.join(' · ') || '—';
+  if (c.school) parts.push(escapeHtml(c.school)); else parts.push(fixChip(c, 'school'));
+  if (c.district) parts.push(escapeHtml(c.district)); else parts.push(fixChip(c, 'district'));
+  return parts.join(' · ');
 }
 function signalLine(c) {
   if (c.log_count >= 5) return `★ ${c.log_count} prior events · warm`;
   if (c.organized_by_count > 0) return 'in network · organized';
   if (c.log_count > 0) return `${c.log_count} prior events`;
   return c.leader_ladder ? c.leader_ladder.toLowerCase() : 'new lead';
+}
+// "Who last contacted this person and what happened" — PDF requirement for
+// onramp + reminder calls. Built from the contact's denormalized last-attempt
+// fields (full history lives in Airtable, one click away).
+function lastTouchLine(c) {
+  if (!c.last_attempt_date) return '';
+  const bits = [`<b>Last try:</b> ${escapeHtml(c.last_attempt_method || '?')} · ${escapeHtml(c.last_attempt_date)}`];
+  if (c.last_attempt_result) bits.push(escapeHtml(c.last_attempt_result));
+  if (c.next_step) bits.push(`next: ${escapeHtml(c.next_step)}`);
+  return `<div class="qlast-touch">${bits.join(' · ')}</div>`;
 }
 
 // --- Cached counters: paint last-known values from localStorage on boot ---
@@ -779,17 +779,6 @@ function writeCounterCache(patch) {
 }
 function renderCachedCounters() {
   const c = readCounterCache();
-  if (c.orgCount != null) {
-    const el = document.getElementById('org-count'); if (el) el.textContent = c.orgCount;
-    const t = document.getElementById('org-target'); if (t && c.orgTarget) t.textContent = c.orgTarget;
-    const bar = document.getElementById('org-bar'); if (bar && c.orgTarget) bar.style.width = `${Math.min(100, Math.round((c.orgCount/c.orgTarget)*100))}%`;
-  }
-  if (c.laneeCount != null) {
-    const el = document.getElementById('m-signup-current'); if (el) el.textContent = c.laneeCount;
-    const t = document.getElementById('m-signup-target'); if (t && c.laneeTarget) t.textContent = c.laneeTarget;
-    const bar = document.getElementById('m-signup-bar'); if (bar && c.laneeTarget) bar.style.width = `${Math.min(100, Math.round((c.laneeCount/c.laneeTarget)*100))}%`;
-    const pctEl = document.getElementById('m-signup-pct'); if (pctEl && c.laneeTarget) pctEl.textContent = `${Math.round((c.laneeCount/c.laneeTarget)*100)}% to goal`;
-  }
   if (c.queueCount != null) {
     const el = document.getElementById('queue-total'); if (el) el.textContent = Number(c.queueCount).toLocaleString();
   }
@@ -811,120 +800,173 @@ function contactLinks(c) {
     ? (tel
         ? `<div><a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a></div>`
         : `<div>${c.phone}</div>`)
-    : '';
+    : `<div>${fixChip(c, 'phone')}</div>`;
   const emailHtml = c.email
     ? `<div><a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a></div>`
-    : '';
-  return phoneHtml + emailHtml || '<div style="color:var(--text-tertiary)">no contact info</div>';
+    : `<div>${fixChip(c, 'email')}</div>`;
+  return phoneHtml + emailHtml;
+}
+
+// One condensed row used by BOTH the Today queue and Find results.
+// Old UI had 7 checkboxes + a hidden admin menu per row; now it's 3 method
+// chips + ONE "what happened" select (admin actions live at the bottom of
+// the same select).
+function outcomeOptions(c) {
+  const isUnconverted = activeList === 'unconverted';
+  const opts = [];
+  opts.push({ v: '', label: 'No answer (default)' });
+  opts.push({ v: 'connected', label: 'Conversation' });
+  // 1-1 first on the unconverted list — booking the 1-1 IS the goal there.
+  const oneOnOne = { v: 'oneonone', label: isUnconverted ? '★ 1-1 booked (the goal)' : '1-1 booked' };
+  const signups = Object.entries(EVENTS)
+    .filter(([, ev]) => ev.signup && !ev.past)
+    .map(([k, ev]) => ({ v: `signed-up-${k.replace('_','-')}`, label: `Signed up: ${ev.short}` }));
+  if (isUnconverted) opts.push(oneOnOne, ...signups);
+  else opts.push(...signups, oneOnOne);
+  opts.push({ v: '__div', label: '──────────' });
+  opts.push({ v: 'skipped', label: '⊘ Skip (not a prospect)' });
+  opts.push({ v: 'wrong-number', label: '✕ Wrong number' });
+  opts.push({ v: 'do-not-contact', label: '⊗ Remove from call list' });
+  return opts.map(o => o.v === '__div'
+    ? `<option disabled>${o.label}</option>`
+    : `<option value="${o.v}">${o.label}</option>`).join('');
+}
+
+function listContextLine(c) {
+  // Per-list context chip under the name
+  if (activeList === 'unreached' && c.cadence) {
+    const due = c.cadence.due
+      ? `<span class="qsignal" style="background:rgba(217,119,6,0.12);color:var(--gw-orange,#b45309);">cadence due · ${c.cadence.days_since}d since last try · try ${escapeHtml(c.cadence.try_next)}</span>`
+      : `<span class="qsignal">tried ${c.cadence.days_since}d ago · wait for the 48h window</span>`;
+    return due;
+  }
+  if (activeList === 'unconverted' && c.attended_event) {
+    return `<span class="qsignal" style="background:var(--gw-green-soft);color:var(--gw-green);">came to ${escapeHtml(c.attended_event)} · goal: book the 1-1</span>`;
+  }
+  return `<span class="qsignal">${signalLine(c)}</span>`;
+}
+
+function buildOutreachRow(c, i) {
+  const row = document.createElement('div');
+  row.className = 'queue-row';
+  if (savedIds.has(c.id)) row.classList.add('row-complete');
+  row.dataset.idx = i;
+  row.dataset.contactId = c.id;
+  row.innerHTML = `
+    <div class="qmain">
+      <span class="qnum">${String(i+1).padStart(2,'0')}</span>
+      <div class="qperson">
+        <div class="qname"><a href="${airtableUrl(c.id)}" target="_blank" rel="noopener" title="Open in Airtable to edit (phone, email, school, etc.)" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a></div>
+        <div class="qmeta">${metaLine(c)}</div>
+        ${listContextLine(c)}
+        ${lastTouchLine(c)}
+      </div>
+      <div class="qcontact">${contactLinks(c)}</div>
+      <div class="qchecks-col">
+        <div class="qchecks">
+          <label class="qcheck grey"><input type="checkbox" data-outcome="called"> Called</label>
+          <label class="qcheck grey"><input type="checkbox" data-outcome="texted"> Texted</label>
+          <label class="qcheck grey"><input type="checkbox" data-outcome="emailed"> Emailed</label>
+        </div>
+        <div class="qoutcome">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;">What happened</span>
+          <select class="qoutcome-select">${outcomeOptions(c)}</select>
+        </div>
+        <input type="text" class="qnotes" placeholder="Notes (optional — out of town until July, has a neighbor to bring, etc.)" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:12.5px;font-family:inherit;">
+        <div class="qsave-row">
+          <button class="qsave-btn">Save</button>
+          <button class="qundo-btn" style="display:none;">Undo</button>
+          <span class="qsave-status"></span>
+        </div>
+      </div>
+    </div>
+    <div class="qnextstep">
+      <span class="qnext-label">Next step</span>
+      <div>
+        <select class="qnext-select">
+          <option value="">Choose a next step...</option>
+        </select>
+        <input type="text" class="qfree" placeholder="Type your own next step...">
+        <div class="qmissing-flag">⚐ A next step is required when you connect</div>
+      </div>
+    </div>
+  `;
+  // Wire events
+  row.querySelectorAll('.qcheck input').forEach(input => {
+    input.addEventListener('change', () => updateRow(row));
+  });
+  row.querySelector('.qoutcome-select').addEventListener('change', () => updateRow(row));
+  const select = row.querySelector('.qnext-select');
+  const freebox = row.querySelector('.qfree');
+  select?.addEventListener('change', () => updateRow(row));
+  freebox?.addEventListener('input', () => updateRow(row));
+  row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row));
+  row.querySelector('.qundo-btn').addEventListener('click', () => {
+    if (confirm('Undo this save? This will delete the record from Airtable.')) undoSave(row);
+  });
+  if (savedIds.has(c.id)) {
+    row.querySelector('.qsave-btn').style.display = 'none';
+    const _u = row.querySelector('.qundo-btn'); if (_u) _u.style.display = 'inline-flex';
+    const st = row.querySelector('.qsave-status');
+    st.textContent = '✓ Saved';
+    st.style.color = 'var(--gw-green)';
+  }
+  return row;
 }
 
 function renderQueue() {
   qhost.innerHTML = '';
   if (queue.length === 0) {
-    qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">No hot prospects available right now.</div>`;
+    const msg = activeList === 'unreached'
+      ? 'Nobody in the follow-up window right now. Switch to Fresh prospects.'
+      : activeList === 'unconverted'
+        ? 'Everyone who attended an onboarding has a next step logged. 🎉'
+        : 'No hot prospects available right now.';
+    qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">${msg}</div>`;
     return;
   }
-  queue.forEach((c, i) => {
-    const row = document.createElement('div');
-    row.className = 'queue-row';
-    if (savedIds.has(c.id)) row.classList.add('row-complete');
-    row.dataset.idx = i;
-    row.dataset.contactId = c.id;
-    row.innerHTML = `
-      <div class="qmain">
-        <span class="qnum">${String(i+1).padStart(2,'0')}</span>
-        <div class="qperson">
-          <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit (phone, email, school, etc.)" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${c.name || '(no name)'}</a></div>
-          <div class="qmeta">${metaLine(c)}</div>
-          <span class="qsignal">${signalLine(c)}</span>
-        </div>
-        <div class="qcontact">${contactLinks(c)}</div>
-        <div class="qchecks-col">
-          <div class="qchecks-grouped">
-            <div class="check-group">
-              <div class="check-group-label">How you reached out</div>
-              <div class="check-group-items">
-                <label class="qcheck grey"><input type="checkbox" data-outcome="called"> Called</label>
-                <label class="qcheck grey"><input type="checkbox" data-outcome="texted"> Texted</label>
-                <label class="qcheck grey"><input type="checkbox" data-outcome="emailed"> Emailed</label>
-              </div>
-            </div>
-            <div class="check-group-divider"></div>
-            <div class="check-group">
-              <div class="check-group-label">What happened</div>
-              <div class="check-group-items">
-                <label class="qcheck light-purple"><input type="checkbox" data-outcome="connected"> Connected</label>
-                <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up-5-26"> Signed up: 5/26</label>
-                <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up-6-9"> Signed up: 6/9</label>
-                <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
-              </div>
-            </div>
-          </div>
-          <input type="text" class="qnotes" placeholder="Notes (optional — quick observation, what happened, etc.)" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:12.5px;font-family:inherit;">
-          <div class="qsave-row">
-            <button class="qsave-btn">Save</button>
-            <button class="qundo-btn" style="display:none;">Undo</button>
-            <span class="qsave-status"></span>
-            <details class="qadmin-menu">
-              <summary title="More actions">⋮</summary>
-              <div class="qadmin-popover">
-                <button class="qadmin-btn" data-admin="skipped" title="Take this person out of your queue without an outreach attempt">⊘ Skip</button>
-                <button class="qadmin-btn" data-admin="wrong-number">✕ Wrong number</button>
-                <button class="qadmin-btn" data-admin="do-not-contact" style="color:var(--gw-red);">⊗ Remove from call list</button>
-              </div>
-            </details>
-          </div>
-        </div>
-      </div>
-      <div class="qnextstep">
-        <span class="qnext-label">Next step</span>
-        <div>
-          <select class="qnext-select">
-            <option value="">Choose a next step...</option>
-          </select>
-          <input type="text" class="qfree" placeholder="Type your own next step...">
-          <div class="qmissing-flag">⚐ A next step is required when you connect</div>
-        </div>
-      </div>
-    `;
-    qhost.appendChild(row);
-    // Wire events for this row
-    row.querySelectorAll('.qcheck input').forEach(input => {
-      input.addEventListener('change', () => updateRow(row));
-    });
-    const select = row.querySelector('.qnext-select');
-    const freebox = row.querySelector('.qfree');
-    select?.addEventListener('change', () => updateRow(row));
-    freebox?.addEventListener('input', () => updateRow(row));
-    row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row));
-    row.querySelector('.qundo-btn').addEventListener('click', () => {
-      if (confirm('Undo this save? This will delete the record from Airtable.')) undoSave(row);
-    });
-    row.querySelectorAll('.qadmin-btn').forEach(btn => {
-      btn.addEventListener('click', () => submitAdmin(row, btn.dataset.admin));
-    });
-    // If this contact was already saved this session, restore the Saved state
-    if (savedIds.has(c.id)) {
-      row.querySelector('.qsave-btn').style.display = 'none';
-      { const _u = row.querySelector('.qundo-btn'); if (_u) _u.style.display = 'inline-flex'; }
-      const st = row.querySelector('.qsave-status');
-      st.textContent = '✓ Saved';
-      st.style.color = 'var(--gw-green)';
-    }
-  });
+  queue.forEach((c, i) => qhost.appendChild(buildOutreachRow(c, i)));
+}
+
+// === Call-list state ===
+// activeList: which slice of the base we're calling through (fresh /
+// unreached / unconverted). pageSize: how many per batch — LaNee wanted
+// more than 5; default 10, max 25 so each row still gets real attention.
+let activeList = localStorage.getItem('gw-call-list') || 'fresh';
+let pageSize = parseInt(localStorage.getItem('gw-page-size') || '10');
+
+const LIST_HINTS = {
+  fresh: 'People we have never reached (or who cooled off 7+ days). Warmest first.',
+  unreached: 'Attempted in the last 10 days with no answer — the 24-48h cadence ladder. Oldest attempt first, with the suggested next channel.',
+  unconverted: 'Came to an onboarding but no 1-1, commitment, or next signup yet. These are the filter/follow-up calls — the ask is the 1-1.',
+};
+
+function applyListUI() {
+  const lp = document.getElementById('list-picker');
+  const ps = document.getElementById('page-size');
+  if (lp) lp.value = activeList;
+  if (ps) ps.value = String(pageSize);
+  const hint = document.getElementById('list-hint');
+  if (hint) hint.textContent = LIST_HINTS[activeList] || '';
+}
+
+function resetBatches() {
+  batches.length = 0;
+  shownIds.clear();
+  currentBatchIdx = -1;
 }
 
 async function fetchNextBatch() {
   try {
     qhost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
-    // Pull a bigger pool, filter client-side (savedIds + shownIds), then take 5
-    const res = await authFetch(`${WORKER}/prospects?n=${20 + shownIds.size}&organizer=${ORGANIZER}`);
+    // Pull a bigger pool, filter client-side (savedIds + shownIds), then take pageSize
+    const res = await authFetch(`${WORKER}/call-list?list=${activeList}&n=${pageSize * 3 + shownIds.size}&organizer=${ORGANIZER}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const all = await res.json();
     const fresh = all
       .filter(c => !shownIds.has(c.id))  // skip anyone already shown in a prior batch
       .filter(c => (c.phone && c.phone.trim()) || (c.email && c.email.trim()))
-      .slice(0, 5);
+      .slice(0, pageSize);
     fresh.forEach(c => shownIds.add(c.id));  // remember everyone shown this batch
     batches.push({ contacts: fresh, completed: new Set() });
     currentBatchIdx = batches.length - 1;
@@ -935,6 +977,20 @@ async function fetchNextBatch() {
     qhost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load: ${e.message}</div>`;
   }
 }
+
+document.getElementById('list-picker')?.addEventListener('change', (e) => {
+  activeList = e.target.value;
+  localStorage.setItem('gw-call-list', activeList);
+  applyListUI();
+  resetBatches();
+  fetchNextBatch();
+});
+document.getElementById('page-size')?.addEventListener('change', (e) => {
+  pageSize = parseInt(e.target.value);
+  localStorage.setItem('gw-page-size', String(pageSize));
+  resetBatches();
+  fetchNextBatch();
+});
 
 function showBatch(idx) {
   if (idx < 0 || idx >= batches.length) return;
@@ -968,7 +1024,7 @@ async function submitAdmin(row, adminOutcome) {
     'wrong-number': 'Mark this number as wrong / out of service? They will not come back in your queue.',
     'do-not-contact': 'Mark this person as "do not contact"? They will be removed from the call list permanently.',
   };
-  if (!confirm(confirmText[adminOutcome] || 'Apply this action?')) return;
+  if (!confirm(confirmText[adminOutcome] || 'Apply this action?')) return false;
   const notes = (row.querySelector('.qnotes')?.value || '').trim();
   const status = row.querySelector('.qsave-status');
   const saveBtn = row.querySelector('.qsave-btn');
@@ -991,23 +1047,20 @@ async function submitAdmin(row, adminOutcome) {
     row.classList.add('row-complete');
     sessionActions.push({ contact_id: row.dataset.contactId, methods: [], outcome: adminOutcome, gridIdx: -1 });
     updateBatchNav();
+    return true;
   } catch (e) {
     status.textContent = `✕ ${e.message}`;
     status.style.color = 'var(--gw-red)';
     saveBtn.disabled = false;
+    return false;
   }
 }
 
 async function submitRow(row) {
-  const checks = {};
-  row.querySelectorAll('.qcheck input').forEach(i => { checks[i.dataset.outcome] = i.checked; });
-  const methods = ['called','texted','emailed'].filter(m => checks[m]);
-  let outcome = null;
-  if (checks.oneonone) outcome = 'oneonone';
-  else if (checks['signed-up-5-26']) outcome = 'signed-up-5-26';
-  else if (checks['signed-up-6-9']) outcome = 'signed-up-6-9';
-  else if (checks['signed-up']) outcome = 'signed-up';  // legacy
-  else if (checks.connected) outcome = 'connected';
+  const methods = rowMethods(row);
+  const rawOutcome = rowOutcome(row);
+  // Empty select = attempted, no answer (the worker defaults that result)
+  const outcome = rawOutcome || null;
   const select = row.querySelector('.qnext-select');
   const freebox = row.querySelector('.qfree');
   const next_step = (select.value && !select.value.startsWith('Other'))
@@ -1019,7 +1072,7 @@ async function submitRow(row) {
     status.style.color = 'var(--gw-red)';
     return;
   }
-  if ((outcome === 'connected' || outcome === 'signed-up' || outcome === 'signed-up-5-26' || outcome === 'signed-up-6-9' || outcome === 'oneonone') && !next_step) {
+  if (outcome && !next_step) {
     status.textContent = '✕ Next step required for conversations';
     status.style.color = 'var(--gw-red)';
     return;
@@ -1044,20 +1097,10 @@ async function submitRow(row) {
     { const _u = row.querySelector('.qundo-btn'); if (_u) _u.style.display = 'inline-flex'; }
     savedIds.add(row.dataset.contactId);
     row.classList.add('row-complete');
-    // One grid square per person (not per method)
-    const gridIdx = nextGridIdx;
-    nextGridIdx++;
-    // Normalize the new event-specific signup outcomes back to plain 'signed-up'
-    // for grid/metric purposes — the CSS dot styling only knows the legacy names.
-    const normOutcome = (outcome === 'signed-up-5-26' || outcome === 'signed-up-6-9') ? 'signed-up' : outcome;
-    sessionActions.push({ contact_id: row.dataset.contactId, methods, outcome: normOutcome, gridIdx });
-    const dots = document.querySelectorAll('#grid .dot');
-    const dotState = normOutcome || 'attempted';
-    if (dots[gridIdx]) dots[gridIdx].dataset.s = dotState;
+    sessionActions.push({ contact_id: row.dataset.contactId, methods, outcome: outcome ? normalizedOutcome(outcome) : null });
     recomputeMetrics();
     updateBatchNav();
-    // If a signup, refresh org-wide counter
-    if (outcome === 'signed-up' || outcome === 'signed-up-5-26' || outcome === 'signed-up-6-9' || outcome === 'oneonone') loadCounters();
+    if (outcome && outcome !== 'connected') loadFunnelCards();
     loadCumulativeGrid();
   } catch (e) {
     status.textContent = `✕ Save failed: ${e.message}`;
@@ -1094,7 +1137,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
     const r = await fetch(`${WORKER}/auth/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, redirect_url: location.origin + location.pathname }),
+      body: JSON.stringify({ email }),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     msg.textContent = `✓ Check ${email} for a sign-in link (expires in 10 min).`;
@@ -1146,9 +1189,10 @@ async function bootAuth() {
     hideLogin();
     // Paint cached counters instantly so the page doesn't flash zeros
     renderCachedCounters();
+    applyListUI();
     // Fire everything in parallel — none of these depend on each other
     Promise.all([
-      loadCounters(),
+      loadFunnelCards(),
       loadTodayStats(),
       fetchNextBatch(),
       loadQueueCount(),
@@ -1157,7 +1201,9 @@ async function bootAuth() {
   }
 })();
 
-// Cumulative grid: day-by-day rows of outreach attempts
+// Outreach by day: one compact stacked bar per day — attempts split by
+// outcome — plus plain-number counts. Replaces the old 50-dot rows, which
+// were mostly empty padding squares and got overwhelming fast.
 async function loadCumulativeGrid() {
   let byDate = {};
   try {
@@ -1167,109 +1213,92 @@ async function loadCumulativeGrid() {
       byDate = data.by_date || {};
     }
   } catch (e) {}
-  // Fallback: if no history (e.g., endpoint not deployed), at least populate today
-  // from the in-page sessionActions so the user sees their current grid.
+  // Fallback: populate today from in-page sessionActions if history is empty
   if (!byDate[todayCT()]) {
-    const today = todayCT();
     try {
-      byDate[today] = (sessionActions || []).map(a => ({
-        contact_id: a.contact_id, methods: a.methods || [], outcome: a.outcome,
-      }));
-    } catch (e) { byDate[today] = []; }
+      byDate[todayCT()] = (sessionActions || [])
+        .filter(a => !ADMIN_OUTCOMES.includes(a.outcome))
+        .map(a => ({ contact_id: a.contact_id, methods: a.methods || [], outcome: a.outcome }));
+    } catch (e) { byDate[todayCT()] = []; }
   }
-  try {
-    const today = todayCT();
-    const TODAY_GOAL = 50;
-    const wrap = document.getElementById('grid-days');
-    if (!wrap) return;
-    wrap.innerHTML = '';
-    // Build list: oldest past days at top, then today, then future days (Thu, Fri) at bottom
-    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    const todayDate = new Date(today + 'T00:00:00');
-    // Add up to 2 future days (chronological: +1, +2)
-    const futureDates = [];
-    for (let i = 1; i <= 2; i++) {
-      const f = new Date(todayDate);
-      f.setDate(todayDate.getDate() + i);
-      futureDates.push(f.toISOString().split('T')[0]);
+  const wrap = document.getElementById('grid-days');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const today = todayCT();
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  // Always show the last 14 days (incl. empty ones) so the rhythm is visible
+  const days = [];
+  const t = new Date(today + 'T00:00:00');
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(t); d.setDate(t.getDate() - i);
+    days.push(d.toISOString().split('T')[0]);
+  }
+  // Scale bars against the busiest day (min 10 so a 2-call day doesn't fill the row)
+  const maxDay = Math.max(10, ...days.map(d => (byDate[d] || []).length));
+  const SEG_COLORS = {
+    attempted: 'var(--border-hover)',
+    connected: 'var(--gw-purple-soft, #c4b5fd)',
+    'signed-up': 'var(--gw-purple)',
+    oneonone: 'var(--gw-green)',
+  };
+  for (const d of days) {
+    const actions = byDate[d] || [];
+    const counts = { attempted: 0, connected: 0, 'signed-up': 0, oneonone: 0 };
+    for (const a of actions) {
+      const state = a.outcome === 'oneonone' ? 'oneonone'
+                  : (a.outcome && String(a.outcome).startsWith('signed-up')) ? 'signed-up'
+                  : a.outcome === 'connected' ? 'connected'
+                  : 'attempted';
+      counts[state]++;
     }
-    const pastDates = Object.keys(byDate).filter(d => d !== today).sort(); // oldest first
-    const ordered = [...pastDates, today, ...futureDates];
-    // Spillover: any day's overflow (>TODAY_GOAL) rolls into the next day's row as filled squares
-    let spillover = [];
-    for (let idx = 0; idx < ordered.length; idx++) {
-      const d = ordered[idx];
-      const dayActions = byDate[d] || [];
-      const combined = [...spillover, ...dayActions];
-      const visible = combined.slice(0, TODAY_GOAL);
-      spillover = combined.slice(TODAY_GOAL);
-      const isToday = d === today;
-      const isFuture = d > today;
-      const row = document.createElement('div');
-      row.className = 'day-row' + (isToday ? ' today' : isFuture ? ' future' : '');
-      const dt = new Date(d + 'T00:00:00');
-      const label = document.createElement('div');
-      label.className = 'day-label';
-      label.textContent = `${dayNames[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()}`;
-      row.appendChild(label);
-      const sq = document.createElement('div');
-      sq.className = 'day-squares';
-      for (const a of visible) {
-        const dot = document.createElement('div');
-        dot.className = 'dot';
-        const state = a.outcome === 'oneonone' ? 'oneonone'
-                    : (a.outcome === 'signed-up' || a.outcome === 'signed-up-5-26' || a.outcome === 'signed-up-6-9') ? 'signed-up'
-                    : a.outcome === 'connected' ? 'connected'
-                    : 'attempted';
-        dot.dataset.s = state;
-        sq.appendChild(dot);
-      }
-      // Pad to TODAY_GOAL with outline squares so every row aligns at 50
-      for (let i = visible.length; i < TODAY_GOAL; i++) {
-        const dot = document.createElement('div');
-        dot.className = 'dot';
-        sq.appendChild(dot);
-      }
-      row.appendChild(sq);
-      wrap.appendChild(row);
-    }
-  } catch (e) {}
+    const total = actions.length;
+    const dt = new Date(d + 'T00:00:00');
+    const row = document.createElement('div');
+    row.className = 'day-bar-row' + (d === today ? ' today' : '');
+    const segs = ['oneonone','signed-up','connected','attempted']
+      .filter(k => counts[k] > 0)
+      .map(k => `<div class="day-bar-seg" style="width:${(counts[k]/maxDay)*100}%;background:${SEG_COLORS[k]};" title="${counts[k]} ${k}"></div>`)
+      .join('');
+    const bits = [];
+    if (total) bits.push(`${total} attempted`);
+    const reached = counts.connected + counts['signed-up'] + counts.oneonone;
+    if (reached) bits.push(`${reached} reached`);
+    if (counts['signed-up']) bits.push(`${counts['signed-up']} signed up`);
+    if (counts.oneonone) bits.push(`${counts.oneonone} 1-1`);
+    row.innerHTML = `
+      <div class="day-bar-label">${dayNames[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()}</div>
+      <div class="day-bar-track">${segs}</div>
+      <div class="day-bar-counts">${bits.join(' · ') || '<span style="opacity:0.4">—</span>'}</div>`;
+    wrap.appendChild(row);
+  }
 }
 
-// Fetch + render: org-wide turnout (everyone) AND this organizer's cumulative cold-call signups
-async function loadCounters() {
+// Funnel cards: 6/23 org-wide signups → confirmed (from /event-stats), and
+// the 6/9 onboarding → action conversion (Ellen's metric: 1-1s weighted).
+async function loadFunnelCards() {
   try {
-    // Two parallel calls: unfiltered for org-wide, organizer-filtered for individual
-    const [orgRes, mineRes] = await Promise.all([
-      authFetch(`${WORKER}/confirmees`),
-      authFetch(`${WORKER}/confirmees?organizer=${ORGANIZER}`),
+    const [curRes, prevRes] = await Promise.all([
+      authFetch(`${WORKER}/event-stats?event=${CURRENT_EVENT}`),
+      authFetch(`${WORKER}/event-stats?event=6_9`),
     ]);
-    if (!orgRes.ok || !mineRes.ok) return;
-    const orgList = await orgRes.json();
-    const mineList = await mineRes.json();
-
-    // Org-wide turnout (all sources)
-    const orgCount = orgList.length;
-    const orgTarget = 30;
-    document.getElementById('org-count').textContent = orgCount;
-    document.getElementById('org-target').textContent = orgTarget;
-    const orgPct = Math.round((orgCount/orgTarget)*100);
-    document.getElementById('org-bar').style.width = `${Math.min(100, orgPct)}%`;
-
-    // This organizer's cold-call signups — exclude any form-based signup
-    // (Google Form import, website form, walk-in). Only her direct outreach counts.
-    const FORM_SOURCES = ['website','form','google','walk-in'];
-    const mineCount = mineList.filter(c => {
-      const src = (c.source || '').toLowerCase();
-      return !FORM_SOURCES.some(s => src.includes(s));
-    }).length;
-    const mineTarget = 20;
-    const pct = Math.round((mineCount / mineTarget) * 100);
-    document.getElementById('m-signup-current').textContent = mineCount;
-    document.getElementById('m-signup-target').textContent = mineTarget;
-    document.getElementById('m-signup-bar').style.width = `${Math.min(100, pct)}%`;
-    document.getElementById('m-signup-pct').textContent = `${pct}% to goal`;
-    writeCounterCache({ orgCount, orgTarget, laneeCount: mineCount, laneeTarget: mineTarget });
+    if (curRes.ok) {
+      const s = await curRes.json();
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set('ev-signups', s.signups ?? '—');
+      set('ev-confirmed', s.confirm_status?.Confirmed ?? 0);
+      const bar = document.getElementById('ev-bar');
+      if (bar) bar.style.width = `${Math.min(100, Math.round(((s.signups || 0) / 30) * 100))}%`;
+    }
+    if (prevRes.ok) {
+      const s = await prevRes.json();
+      const conv = s.conversion || {};
+      const el = document.getElementById('conv-rate');
+      const det = document.getElementById('conv-detail');
+      if (el) el.textContent = conv.rate == null ? '—' : `${conv.rate}%`;
+      if (det) det.textContent = conv.attendees
+        ? `${conv.with_action} of ${conv.attendees} attendees took a next step · ${conv.with_one_on_one} booked a 1-1 (${conv.one_on_one_rate}%)`
+        : 'attendees who took a next step (commitment, training, house meeting, or 1-1) since 6/9';
+    }
   } catch (e) {}
 }
 
@@ -1278,18 +1307,13 @@ async function loadTodayStats() {
     const res = await authFetch(`${WORKER}/today-stats?organizer=${ORGANIZER}`);
     if (!res.ok) return;
     const data = await res.json();
-    const dots = document.querySelectorAll('#grid .dot');
     const OUTREACH_METHODS = ['called', 'texted', 'emailed', '1-1'];
     for (const action of (data.actions || [])) {
-      // Only show actions where LaNee actively called/texted/emailed/1-1'd
+      // Only count actions where they actively called/texted/emailed/1-1'd
       const hasOutreach = (action.methods || []).some(m => OUTREACH_METHODS.includes(m));
       if (!hasOutreach) continue;
-      const gridIdx = nextGridIdx;
-      nextGridIdx++;
-      sessionActions.push({ ...action, gridIdx });
+      sessionActions.push({ ...action });
       savedIds.add(action.contact_id);
-      const state = action.outcome || 'attempted';
-      if (dots[gridIdx]) dots[gridIdx].dataset.s = state;
     }
     recomputeMetrics();
   } catch (e) {
@@ -1321,54 +1345,106 @@ qhost.addEventListener('click', (e) => {
   updateBatchNav();
 });
 
-// === Confirm 5/26 tab ===
-const chost = document.getElementById('confirms-queue');
+// === Event tracking tab (generic — one pane, every event, past = archive) ===
+const chost = document.getElementById('event-queue');
+let activeEventKey = CURRENT_EVENT;
 
-function confirmStatusPill(status) {
-  if (!status) return '';
-  const map = {
-    'Confirmed':     { bg: 'var(--gw-green-soft)', color: 'var(--gw-green)' },
-    'Declined':      { bg: 'var(--gw-red-soft)',   color: 'var(--gw-red)' },
-    'Cancelled':     { bg: 'var(--gw-red-soft)',   color: 'var(--gw-red)' },
-    'No answer':     { bg: 'rgba(82,82,91,0.15)',  color: 'var(--text-tertiary)' },
-    'Reminder sent': { bg: 'var(--gw-purple-soft)', color: 'var(--gw-purple-light)' },
-  };
-  const c = map[status] || { bg: 'var(--bg-elevated)', color: 'var(--text-tertiary)' };
-  return `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:${c.bg};color:${c.color};margin-left:6px;">${status}</span>`;
+function populateEventPicker() {
+  const picker = document.getElementById('event-picker');
+  if (!picker) return;
+  const current = Object.entries(EVENTS).filter(([, ev]) => !ev.past);
+  const past = Object.entries(EVENTS).filter(([, ev]) => ev.past);
+  picker.innerHTML =
+    current.map(([k, ev]) => `<option value="${k}">${ev.label}${k === CURRENT_EVENT ? ' · current' : ' · upcoming'}</option>`).join('') +
+    `<option disabled>── Past events ──</option>` +
+    past.map(([k, ev]) => `<option value="${k}">${ev.label} · archived</option>`).join('');
+  picker.value = activeEventKey;
+  picker.addEventListener('change', () => {
+    activeEventKey = picker.value;
+    applyEventHeader();
+    fetchEventTracking();
+    loadEventStrip();
+  });
 }
 
-async function fetchConfirmees() {
+function applyEventHeader() {
+  const ev = EVENTS[activeEventKey];
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('ev-eyebrow', `${ev.label} · before, during, after`);
+  set('ev-title', ev.past ? `${ev.short} — archived event.` : `Track ${ev.short} end-to-end.`);
+  set('ev-h2', `${ev.short} sign-ups`);
+  set('wi-title', `New walk-in · ${ev.label}`);
+}
+
+// Per-event metric strip — flake + turnout update per event (PDF ask)
+async function loadEventStrip() {
+  const host = document.getElementById('ev-strip');
+  if (!host) return;
+  host.innerHTML = '<div style="padding:8px;color:var(--text-tertiary);font-size:12px;">Loading stats…</div>';
+  try {
+    const r = await authFetch(`${WORKER}/event-stats?event=${activeEventKey}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const s = await r.json();
+    const stat = (v, l) => `<div class="ev-stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+    host.innerHTML = [
+      stat(s.signups ?? '—', 'signed up'),
+      stat(s.confirm_status?.Confirmed ?? 0, 'confirmed'),
+      stat((s.attended || 0) + (s.walk_in || 0), 'attended'),
+      stat(s.no_show ?? 0, 'no-shows'),
+      stat(s.turnout_rate == null ? '—' : `${s.turnout_rate}%`, 'turnout'),
+      stat(s.flake_rate == null ? '—' : `${s.flake_rate}%`, 'flake rate'),
+    ].join('');
+  } catch (e) {
+    host.innerHTML = '';
+  }
+}
+
+async function fetchEventTracking() {
+  const evMeta = EVENTS[activeEventKey];
   chost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
   try {
-    const res = await authFetch(`${WORKER}/confirmees?organizer=${ORGANIZER}`);
+    const res = await authFetch(`${WORKER}/confirmees?event=${activeEventKey}&organizer=${ORGANIZER}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const list = await res.json();
     if (list.length === 0) {
-      chost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">No 5/26 sign-ups yet. Check back after Stephanie starts logging.</div>`;
+      chost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">No ${evMeta.short} sign-ups yet. Mark "Signed up: ${evMeta.short}" in the Today tab to add people here.</div>`;
       return;
     }
+    // Day-of attendance buttons show from event day until 6 days after
+    const today = todayCT();
+    const eventDate = evMeta.date;
+    const sixAfter = (() => { const d = new Date(eventDate + 'T00:00:00'); d.setDate(d.getDate() + 6); return d.toISOString().split('T')[0]; })();
+    const inAttendanceWindow = today >= eventDate && today <= sixAfter;
+    const showAttendance = inAttendanceWindow || evMeta.past;
+    // Cross-sell: from the CURRENT event's tab you can mark the NEXT one
+    const nextEv = (activeEventKey === CURRENT_EVENT && EVENTS[NEXT_EVENT]) ? NEXT_EVENT : null;
+
     chost.innerHTML = '';
     list.forEach((c, i) => {
       const tel = phoneToTel(c.phone);
-      const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a>` : c.phone) : '';
-      const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a>` : '';
+      const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a>` : c.phone) : fixChip(c, 'phone');
+      const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a>` : fixChip(c, 'email');
       const cf = c.confirm || { email_sent:false, text_sent:false, call_made:false, status:null };
       const att = c.attendance || null;
       const statusOpts = ['', 'Reminder sent', 'Confirmed', 'No answer', 'Cancelled'];
       const statusSel = statusOpts.map(s => `<option value="${s}"${s===(cf.status||'')?' selected':''}>${s||'No update yet'}</option>`).join('');
       const attPill = att === 'Attended' ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-green-soft);color:var(--gw-green);margin-left:6px;">Attended</span>` : att === 'No-show' ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-red-soft);color:var(--gw-red);margin-left:6px;">No-show</span>` : att === 'Walk-in' ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-purple-soft);color:var(--gw-purple-light);margin-left:6px;">Walk-in</span>` : '';
+      const zoomChip = cf.email_sent
+        ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-purple-soft);color:var(--gw-purple-light);margin-left:6px;" title="A Zoom email for this event has gone out">✉ zoom sent</span>`
+        : '';
       const row = document.createElement('div');
       row.className = 'queue-row';
       if (cf.status === 'Confirmed') row.classList.add('row-confirmed');
       if (att === 'Attended' || att === 'Walk-in') row.classList.add('row-attended');
       row.dataset.contactId = c.id;
+      row.dataset.event = activeEventKey;
       row.innerHTML = `
         <div class="qmain">
           <span class="qnum">${String(i+1).padStart(2,'0')}</span>
           <div class="qperson">
-            <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a>${confirmStatusPill(cf.status)}${attPill}</div>
-            <div class="qmeta">${escapeHtml([c.school, c.district].filter(Boolean).join(' · ') || '—')}</div>
-            <span class="qsignal" style="background:rgba(82,82,91,0.15);color:var(--text-tertiary);">signed up · ${escapeHtml(c.last_attempt_date || 'unknown date')}</span>
+            <div class="qname"><a href="${airtableUrl(c.id)}" target="_blank" rel="noopener" title="Open in Airtable to edit" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a>${confirmStatusPill(cf.status)}${attPill}${zoomChip}</div>
+            <div class="qmeta">${metaLine(c)}</div>
+            <span class="qsignal" style="background:var(--gw-green-soft);color:var(--gw-green);">${evMeta.short} signed up · ${escapeHtml(c.last_attempt_date || 'unknown date')}</span>
             ${c.source ? `<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase;">source: ${escapeHtml(c.source)}</div>` : ''}
           </div>
           <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
@@ -1384,35 +1460,30 @@ async function fetchConfirmees() {
                 ${statusSel}
               </select>
             </div>
+            ${nextEv ? `
             <div class="qchecks">
-              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gw-orange,#f59e0b);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;" title="Same Zoom link as 5/26">6/9 Mtg</label>
-              <select class="q69-status" style="background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;">
-                <option value=""${!c.signup_6_9?' selected':''}>—</option>
-                <option value="Signed up"${c.signup_6_9==='Signed up'?' selected':''}>Signed up</option>
-                <option value="Maybe"${c.signup_6_9==='Maybe'?' selected':''}>Maybe</option>
-                <option value="Not interested"${c.signup_6_9==='Not interested'?' selected':''}>Not interested</option>
+              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gw-orange,#b45309);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;" title="Can't make ${evMeta.short}? Sign them up for ${EVENTS[nextEv].short} instead">${EVENTS[nextEv].short} instead?</label>
+              <select class="qnext-event" style="background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;">
+                <option value="">—</option>
+                <option value="Signed up">Signed up</option>
+                <option value="Maybe">Maybe</option>
+                <option value="Not interested">Not interested</option>
               </select>
-            </div>
-            <div class="qchecks dayof-526" style="border-top:1px dashed var(--border);padding-top:10px;">
-              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;">5/26 Day of</label>
+            </div>` : ''}
+            ${showAttendance ? `
+            <div class="qchecks" style="border-top:1px dashed var(--border);padding-top:10px;">
+              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;">${evMeta.short} Day of</label>
               <button class="att-btn att-attended" data-att="yes" style="padding:6px 12px;border-radius:6px;background:${att==='Attended'?'var(--gw-green)':'transparent'};color:${att==='Attended'?'white':'var(--gw-green)'};border:1px solid var(--gw-green);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✓ Attended</button>
               <button class="att-btn att-noshow" data-att="no" style="padding:6px 12px;border-radius:6px;background:${att==='No-show'?'var(--gw-red)':'transparent'};color:${att==='No-show'?'white':'var(--gw-red)'};border:1px solid var(--gw-red);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✗ No-show</button>
               <span class="att-status" style="font-size:11px;color:var(--text-tertiary);"></span>
-            </div>
+            </div>` : ''}
             <div class="qsave-row">
-              <div class="zoom-dropdown" style="position:relative;display:inline-block;">
-                <button class="qzoom-btn" title="Send a branded Zoom confirmation email" ${c.email ? '' : 'disabled'} style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--gw-purple);border:1px solid var(--gw-purple);font-size:12px;font-weight:600;cursor:${c.email ? 'pointer' : 'not-allowed'};font-family:inherit;opacity:${c.email ? '1' : '0.4'};">✉ Send Zoom ▾</button>
-                <div class="zoom-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--bg-elevated);border:1px solid var(--border-hover);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:10;min-width:180px;overflow:hidden;">
-                  <button class="zoom-opt" data-event="5_26" style="display:block;width:100%;padding:10px 14px;background:transparent;color:var(--text-primary);border:none;text-align:left;font-size:12px;font-family:inherit;cursor:pointer;">5/26 Orientation</button>
-                  <button class="zoom-opt" data-event="6_9" style="display:block;width:100%;padding:10px 14px;background:transparent;color:var(--text-primary);border:none;text-align:left;font-size:12px;font-family:inherit;cursor:pointer;border-top:1px solid var(--border);">6/9 Emergency Mtg</button>
-                </div>
-              </div>
+              <button class="qzoom-btn" title="Send the ${evMeta.label} Zoom email" ${c.email ? '' : 'disabled'} style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--gw-purple);border:1px solid var(--gw-purple);font-size:12px;font-weight:600;cursor:${c.email ? 'pointer' : 'not-allowed'};font-family:inherit;opacity:${c.email ? '1' : '0.4'};">✉ Send ${evMeta.short} Zoom</button>
               <button class="qsave-btn qconfirm-save">Save</button>
               <span class="qsave-status"></span>
             </div>
           </div>
         </div>`;
-      // Stash current attendance state on the row so handler can detect toggle-off
       row.dataset.attState = att || '';
       chost.appendChild(row);
       row.querySelector('.qconfirm-save').addEventListener('click', () => submitConfirmRow(row));
@@ -1421,32 +1492,31 @@ async function fetchConfirmees() {
         const next = (row.dataset.attState === clicked) ? null : (b.dataset.att === 'yes');
         submitAttendance(row, next);
       }));
-      const zoomBtn = row.querySelector('.qzoom-btn');
-      const zoomMenu = row.querySelector('.zoom-menu');
-      if (zoomBtn && zoomMenu) {
-        zoomBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          document.querySelectorAll('.zoom-menu').forEach(m => { if (m !== zoomMenu) m.style.display = 'none'; });
-          zoomMenu.style.display = zoomMenu.style.display === 'block' ? 'none' : 'block';
-        });
-        row.querySelectorAll('.zoom-opt').forEach(opt => {
-          opt.addEventListener('mouseover', () => opt.style.background = 'var(--bg-secondary)');
-          opt.addEventListener('mouseout', () => opt.style.background = 'transparent');
-          opt.addEventListener('click', () => {
-            zoomMenu.style.display = 'none';
-            sendZoomEmail(row, c.email, opt.dataset.event);
-          });
-        });
-      }
+      const zb = row.querySelector('.qzoom-btn');
+      if (zb) zb.addEventListener('click', () => sendZoomEmail(row, c.email, activeEventKey));
     });
   } catch (e) {
-    chost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load: ${e.message} (worker may need redeploy to add /confirmees endpoint)</div>`;
+    chost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load: ${e.message}</div>`;
   }
 }
+function confirmStatusPill(status) {
+  if (!status) return '';
+  const map = {
+    'Confirmed':     { bg: 'var(--gw-green-soft)', color: 'var(--gw-green)' },
+    'Declined':      { bg: 'var(--gw-red-soft)',   color: 'var(--gw-red)' },
+    'Cancelled':     { bg: 'var(--gw-red-soft)',   color: 'var(--gw-red)' },
+    'No answer':     { bg: 'rgba(82,82,91,0.15)',  color: 'var(--text-tertiary)' },
+    'Reminder sent': { bg: 'var(--gw-purple-soft)', color: 'var(--gw-purple-light)' },
+  };
+  const c = map[status] || { bg: 'var(--bg-elevated)', color: 'var(--text-tertiary)' };
+  return `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:${c.bg};color:${c.color};margin-left:6px;">${status}</span>`;
+}
+
+// (legacy fetchConfirmees removed — fetchEventTracking above replaces it)
 
 async function sendZoomEmail(row, emailAddr, eventKey) {
   if (!emailAddr) return;
-  const label = eventKey === '6_9' ? '6/9 Emergency Meeting' : '5/26 Orientation';
+  const label = EVENTS[eventKey]?.label || eventKey;
   if (!confirm(`Send the ${label} Zoom email to ${emailAddr} right now?`)) return;
   const status = row.querySelector('.qsave-status');
   const btn = row.querySelector('.qzoom-btn');
@@ -1457,14 +1527,14 @@ async function sendZoomEmail(row, emailAddr, eventKey) {
     const res = await authFetch(`${WORKER}/send-zoom-email`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact_id: row.dataset.contactId, organizer: ORGANIZER, event: eventKey || '5_26' }),
+      body: JSON.stringify({ contact_id: row.dataset.contactId, organizer: ORGANIZER, event: eventKey }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     status.textContent = `✓ Sent to ${data.sent_to}`;
     status.style.color = 'var(--gw-green)';
-    // Refresh the confirm tab so the new email_sent state shows
-    setTimeout(() => fetchConfirmees(), 1200);
+    // Refresh the tab so the new email_sent state shows
+    setTimeout(() => fetchEventTracking(), 1200);
   } catch (e) {
     status.textContent = `✕ ${e.message}`;
     status.style.color = 'var(--gw-red)';
@@ -1477,12 +1547,13 @@ async function submitConfirmRow(row) {
     .filter(i => i.checked)
     .map(i => i.dataset.cmethod);
   const statusVal = row.querySelector('.qconfirm-status').value || null;
-  const q69El = row.querySelector('.q69-status');
-  const sixNineVal = q69El ? (q69El.value || null) : null;
+  // "Next event instead?" select (e.g. can't make 6/23 → signed up for 7/7)
+  const nextEl = row.querySelector('.qnext-event');
+  const nextVal = nextEl ? (nextEl.value || null) : null;
   const status = row.querySelector('.qsave-status');
   const btn = row.querySelector('.qconfirm-save');
-  if (methods.length === 0 && !statusVal && !sixNineVal) {
-    status.textContent = '✕ Check a box, pick a status, or set 6/9';
+  if (methods.length === 0 && !statusVal && !nextVal) {
+    status.textContent = '✕ Check a box, pick a status, or set the next event';
     status.style.color = 'var(--gw-red)';
     return;
   }
@@ -1493,14 +1564,20 @@ async function submitConfirmRow(row) {
     const res = await authFetch(`${WORKER}/confirm-log`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact_id: row.dataset.contactId, methods, status: statusVal, signup_6_9: sixNineVal, event: row.dataset.event || '5_26' }),
+      body: JSON.stringify({
+        contact_id: row.dataset.contactId,
+        methods,
+        status: statusVal,
+        event: row.dataset.event || activeEventKey,
+        next_signup: nextVal ? { event: NEXT_EVENT, value: nextVal } : null,
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     status.textContent = '✓ Saved';
     status.style.color = 'var(--gw-green)';
     btn.disabled = false;
-    // Toggle the subtle purple left-border when the new status is Confirmed
+    // Toggle the full-row green wash when the new status is Confirmed
     row.classList.toggle('row-confirmed', statusVal === 'Confirmed');
   } catch (e) {
     status.textContent = `✕ ${e.message}`;
@@ -1526,6 +1603,7 @@ async function submitAttendance(row, attended) {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     status.textContent = data.result ? `✓ ${data.result}` : '✓ Cleared';
     status.style.color = attended === null ? 'var(--text-tertiary)' : 'var(--gw-green)';
+    // Update each button: solid if it matches current state, ghost otherwise
     btns.forEach(b => {
       b.disabled = false;
       const isYes = b.dataset.att === 'yes';
@@ -1538,8 +1616,10 @@ async function submitAttendance(row, attended) {
         b.style.color = isActive ? 'white' : 'var(--gw-red)';
       }
     });
+    // Update the row state + green wash + the inline pill next to the name
     row.dataset.attState = attended === true ? 'Attended' : attended === false ? 'No-show' : '';
     row.classList.toggle('row-attended', attended === true);
+    // Remove the existing pill (if any) and re-render
     const nameEl = row.querySelector('.qname');
     if (nameEl) {
       nameEl.querySelectorAll('span').forEach(s => {
@@ -1591,7 +1671,7 @@ walkinSave.addEventListener('click', async () => {
     const res = await authFetch(`${WORKER}/walkin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ first, last, email, phone, school, role, organizer: ORGANIZER }),
+      body: JSON.stringify({ first, last, email, phone, school, role, organizer: ORGANIZER, event: activeEventKey }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -1602,7 +1682,8 @@ walkinSave.addEventListener('click', async () => {
       walkinForm.style.display = 'none';
       ['wi-first','wi-last','wi-email','wi-phone','wi-school','wi-role'].forEach(id => document.getElementById(id).value = '');
       status.textContent = '';
-      fetchConfirmees();
+      fetchEventTracking();
+      loadEventStrip();
     }, 1200);
   } catch (e) {
     status.textContent = `✕ ${e.message}`;
@@ -1612,130 +1693,84 @@ walkinSave.addEventListener('click', async () => {
   }
 });
 
-// Hook tab click to load confirms
-document.querySelector('.tab-nav a[data-tab="confirms"]').addEventListener('click', fetchConfirmees);
-document.querySelector('.tab-nav a[data-tab="confirms69"]').addEventListener('click', fetchConfirmees69);
+// Hook tab clicks: event pane + analytics load on demand
+populateEventPicker();
+applyEventHeader();
+document.querySelector('.tab-nav a[data-tab="event"]').addEventListener('click', () => {
+  fetchEventTracking();
+  loadEventStrip();
+});
+document.querySelector('.tab-nav a[data-tab="stats"]').addEventListener('click', loadEventReports);
 
-// === 6/9 Event Tracking tab ===
-const chost69 = document.getElementById('confirms69-queue');
-async function fetchConfirmees69() {
-  chost69.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
+// === Analytics: per-event report cards + over-time view ===
+let eventReportsLoaded = false;
+async function loadEventReports() {
+  if (eventReportsLoaded) return;
+  const host = document.getElementById('event-reports');
+  if (!host) return;
   try {
-    const res = await authFetch(`${WORKER}/confirmees?event=6_9&organizer=${ORGANIZER}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const list = await res.json();
-    if (list.length === 0) {
-      chost69.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">No 6/9 sign-ups yet. Mark "Signed up: 6/9" in the Today tab to add people here.</div>`;
-      return;
-    }
-    chost69.innerHTML = '';
-    list.forEach((c, i) => {
-      const tel = phoneToTel(c.phone);
-      const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a>` : c.phone) : '';
-      const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a>` : '';
-      const cf = c.confirm || { email_sent:false, text_sent:false, call_made:false, status:null };
-      const att = c.attendance || null;
-      const statusOpts = ['', 'Reminder sent', 'Confirmed', 'No answer', 'Cancelled'];
-      const statusSel = statusOpts.map(s => `<option value="${s}"${s===(cf.status||'')?' selected':''}>${s||'No update yet'}</option>`).join('');
-      const attPill = att === 'Attended' ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-green-soft);color:var(--gw-green);margin-left:6px;">Attended</span>` : att === 'No-show' ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-red-soft);color:var(--gw-red);margin-left:6px;">No-show</span>` : att === 'Walk-in' ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;padding:2px 8px;border-radius:999px;background:var(--gw-purple-soft);color:var(--gw-purple-light);margin-left:6px;">Walk-in</span>` : '';
-      const row = document.createElement('div');
-      row.className = 'queue-row';
-      if (cf.status === 'Confirmed') row.classList.add('row-confirmed');
-      if (att === 'Attended' || att === 'Walk-in') row.classList.add('row-attended');
-      row.dataset.contactId = c.id;
-      row.dataset.event = '6_9';
-      row.innerHTML = `
-        <div class="qmain">
-          <span class="qnum">${String(i+1).padStart(2,'0')}</span>
-          <div class="qperson">
-            <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a>${confirmStatusPill(cf.status)}${attPill}</div>
-            <div class="qmeta">${escapeHtml([c.school, c.district].filter(Boolean).join(' · ') || '—')}</div>
-            <span class="qsignal" style="background:var(--gw-green-soft);color:var(--gw-green);">6/9 signed up · ${escapeHtml(c.last_attempt_date || 'unknown date')}</span>
-            ${c.source ? `<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase;">source: ${escapeHtml(c.source)}</div>` : ''}
-          </div>
-          <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
-          <div class="qchecks-col">
-            <div class="qchecks">
-              <label class="qcheck grey"><input type="checkbox" data-cmethod="emailed" ${cf.email_sent?'checked':''}> Emailed Zoom</label>
-              <label class="qcheck grey"><input type="checkbox" data-cmethod="texted" ${cf.text_sent?'checked':''}> Texted</label>
-              <label class="qcheck grey"><input type="checkbox" data-cmethod="called" ${cf.call_made?'checked':''}> Called</label>
-            </div>
-            <div class="qchecks">
-              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;">Status</label>
-              <select class="qconfirm-status" style="background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;">
-                ${statusSel}
-              </select>
-            </div>
-            <div class="qchecks" style="border-top:1px dashed var(--border);padding-top:10px;">
-              <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;align-self:center;margin-right:6px;">6/9 Day of</label>
-              <button class="att-btn att-attended" data-att="yes" style="padding:6px 12px;border-radius:6px;background:${att==='Attended'?'var(--gw-green)':'transparent'};color:${att==='Attended'?'white':'var(--gw-green)'};border:1px solid var(--gw-green);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✓ Attended</button>
-              <button class="att-btn att-noshow" data-att="no" style="padding:6px 12px;border-radius:6px;background:${att==='No-show'?'var(--gw-red)':'transparent'};color:${att==='No-show'?'white':'var(--gw-red)'};border:1px solid var(--gw-red);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✗ No-show</button>
-              <span class="att-status" style="font-size:11px;color:var(--text-tertiary);"></span>
-            </div>
-            <div class="qsave-row">
-              <button class="qzoom-btn-69" title="Send the 6/9 Emergency Meeting Zoom email" ${c.email ? '' : 'disabled'} style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--gw-purple);border:1px solid var(--gw-purple);font-size:12px;font-weight:600;cursor:${c.email ? 'pointer' : 'not-allowed'};font-family:inherit;opacity:${c.email ? '1' : '0.4'};">✉ Send 6/9 Zoom</button>
-              <button class="qsave-btn qconfirm-save">Save</button>
-              <span class="qsave-status"></span>
-            </div>
-          </div>
-        </div>`;
-      row.dataset.attState = att || '';
-      chost69.appendChild(row);
-      row.querySelector('.qconfirm-save').addEventListener('click', () => submitConfirmRow(row));
-      row.querySelectorAll('.att-btn').forEach(b => b.addEventListener('click', () => {
-        const clicked = b.dataset.att === 'yes' ? 'Attended' : 'No-show';
-        const next = (row.dataset.attState === clicked) ? null : (b.dataset.att === 'yes');
-        submitAttendance(row, next);
-      }));
-      const zb = row.querySelector('.qzoom-btn-69');
-      if (zb) zb.addEventListener('click', async () => {
-        if (!c.email) return;
-        if (!confirm(`Send the 6/9 Emergency Meeting Zoom email to ${c.email} right now?`)) return;
-        const status = row.querySelector('.qsave-status');
-        zb.disabled = true; status.textContent = 'Sending…'; status.style.color = 'var(--text-tertiary)';
-        try {
-          const r = await authFetch(`${WORKER}/send-zoom-email`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contact_id: c.id, organizer: ORGANIZER, event: '6_9' }),
-          });
-          const d = await r.json();
-          if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-          status.textContent = `✓ Sent to ${d.sent_to}`;
-          status.style.color = 'var(--gw-green)';
-        } catch (e) {
-          status.textContent = `✕ ${e.message}`;
-          status.style.color = 'var(--gw-red)';
-          zb.disabled = false;
-        }
-      });
-    });
+    const keys = Object.keys(EVENTS).sort((a, b) => EVENTS[a].date.localeCompare(EVENTS[b].date));
+    const results = await Promise.all(keys.map(k =>
+      authFetch(`${WORKER}/event-stats?event=${k}`).then(r => r.ok ? r.json() : null).catch(() => null)
+    ));
+    const stats = results.filter(Boolean);
+    if (!stats.length) { host.innerHTML = '<div style="padding:24px;color:var(--text-tertiary);">No event stats yet.</div>'; return; }
+    eventReportsLoaded = true;
+
+    // Over-time strip: one row per event — registrations / attended / flake / conversion
+    const maxSign = Math.max(1, ...stats.map(s => s.signups || 0));
+    const overTime = stats.map(s => {
+      const att = (s.attended || 0) + (s.walk_in || 0);
+      return `
+      <div class="day-bar-row">
+        <div class="day-bar-label" style="width:96px;">${escapeHtml(EVENTS[s.event]?.short || s.event)}</div>
+        <div class="day-bar-track" title="${s.signups} signed up · ${att} attended">
+          <div class="day-bar-seg" style="width:${(att/maxSign)*100}%;background:var(--gw-purple);"></div>
+          <div class="day-bar-seg" style="width:${(Math.max(0,(s.signups||0)-att)/maxSign)*100}%;background:var(--border-hover);"></div>
+        </div>
+        <div class="day-bar-counts" style="width:300px;">${s.signups || 0} reg · ${att} came${s.turnout_rate != null ? ` · ${s.turnout_rate}% turnout` : ''}${s.flake_rate != null ? ` · ${s.flake_rate}% flake` : ''}${s.conversion?.rate != null ? ` · ${s.conversion.rate}% → action` : ''}</div>
+      </div>`;
+    }).join('');
+
+    const cards = stats.slice().reverse().map(s => {
+      const m = s.by_confirm_method || {};
+      const matrixRows = ['call','text','email','none'].map(k => {
+        const b = m[k] || { attended: 0, no_show: 0 };
+        const tot = b.attended + b.no_show;
+        const rate = tot ? Math.round((b.attended / tot) * 100) : null;
+        return `<tr><td>${k === 'none' ? 'not confirmed' : 'confirmed by ' + k}</td><td>${b.attended}</td><td>${b.no_show}</td><td>${rate == null ? '—' : rate + '%'}</td></tr>`;
+      }).join('');
+      const conv = s.conversion || {};
+      return `
+      <div class="report-card">
+        <h3>${escapeHtml(s.label || s.event)} <span style="font-weight:400;color:var(--text-tertiary);font-size:12px;">· ${s.date || ''}</span></h3>
+        <div class="report-grid">
+          <div class="rg"><div class="v">${s.signups ?? '—'}</div><div class="l">signed up</div></div>
+          <div class="rg"><div class="v">${s.confirm_status?.Confirmed ?? 0}</div><div class="l">confirmed</div></div>
+          <div class="rg"><div class="v">${(s.attended || 0) + (s.walk_in || 0)}</div><div class="l">attended</div></div>
+          <div class="rg"><div class="v">${s.no_show ?? 0}</div><div class="l">no-shows</div></div>
+          <div class="rg"><div class="v">${s.turnout_rate == null ? '—' : s.turnout_rate + '%'}</div><div class="l">turnout</div></div>
+          <div class="rg"><div class="v">${s.flake_rate == null ? '—' : s.flake_rate + '%'}</div><div class="l">flake rate</div></div>
+          <div class="rg"><div class="v">${conv.rate == null ? '—' : conv.rate + '%'}</div><div class="l">→ any action</div></div>
+          <div class="rg"><div class="v">${conv.one_on_one_rate == null ? '—' : conv.one_on_one_rate + '%'}</div><div class="l">→ 1-1 booked</div></div>
+        </div>
+        <table class="method-matrix">
+          <thead><tr><th>Did confirmation work?</th><th>came</th><th>no-show</th><th>show rate</th></tr></thead>
+          <tbody>${matrixRows}</tbody>
+        </table>
+      </div>`;
+    }).join('');
+
+    host.innerHTML = `
+      <div class="report-card">
+        <h3>Across events <span style="font-weight:400;color:var(--text-tertiary);font-size:12px;">· purple = attended, gray = signed up but didn't come</span></h3>
+        ${overTime}
+      </div>
+      ${cards}`;
   } catch (e) {
-    chost69.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load: ${e.message}</div>`;
+    host.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load event stats: ${e.message}</div>`;
   }
 }
-
-// Close zoom dropdowns on outside click
-document.addEventListener('click', () => {
-  document.querySelectorAll('.zoom-menu').forEach(m => m.style.display = 'none');
-});
-
-// Date-based hiding: hide 5/26 Day of buttons until 5/26 arrives, then hide
-// 6 days after (5/26 → ~6/1) to keep the tab clean once we're focused on 6/9.
-function applyDateBasedVisibility() {
-  const today = new Date();
-  const eventDate = new Date('2026-05-26T00:00:00');
-  const sixDaysAfter = new Date('2026-06-02T00:00:00');
-  const isInWindow = today >= eventDate && today < sixDaysAfter;
-  document.querySelectorAll('.dayof-526').forEach(el => {
-    el.style.display = isInWindow ? '' : 'none';
-  });
-}
-const _origFetch = fetchConfirmees;
-fetchConfirmees = async function(...args) {
-  await _origFetch.apply(this, args);
-  applyDateBasedVisibility();
-};
 
 // === Find contact tab ===
 const findHost = document.getElementById('find-results');
@@ -1754,85 +1789,9 @@ async function runSearch() {
       findHost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">No matches.</div>`;
       return;
     }
-    // Render with the same queue UI — swap queue/qhost temporarily so renderQueue targets findHost.
-    const prevHost = qhost; // closure-captured, but we'll override by mutating queue + DOM
-    const prevQueue = queue.slice();
-    queue = list;
-    // renderQueue uses the module-level `qhost`. Inline a clone that writes into findHost.
+    // Same condensed row UI as the Today queue — one code path.
     findHost.innerHTML = '';
-    list.forEach((c, i) => {
-      const row = document.createElement('div');
-      row.className = 'queue-row';
-      if (savedIds.has(c.id)) row.classList.add('row-complete');
-      row.dataset.idx = i;
-      row.dataset.contactId = c.id;
-      const tel = phoneToTel(c.phone);
-      const phoneHtml = c.phone ? (tel ? `<a href="tel:${tel}" style="color:var(--text-primary)">${c.phone}</a> · <a href="sms:${tel}" style="color:var(--text-primary)">text</a>` : c.phone) : '';
-      const emailHtml = c.email ? `<a href="mailto:${c.email}" style="color:var(--text-primary)">${c.email}</a>` : '';
-      const status = c.last_attempt_result ? `<span class="qsignal" style="background:var(--bg-elevated);color:var(--text-tertiary);">${escapeHtml(c.last_attempt_result)} · ${escapeHtml(c.last_attempt_date || '')}</span>` : `<span class="qsignal">${escapeHtml(c.leader_ladder || 'not yet contacted')}</span>`;
-      row.innerHTML = `
-        <div class="qmain">
-          <span class="qnum">${String(i+1).padStart(2,'0')}</span>
-          <div class="qperson">
-            <div class="qname"><a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/${c.id}" target="_blank" rel="noopener" title="Open in Airtable to edit" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a></div>
-            <div class="qmeta">${escapeHtml([c.school, c.district].filter(Boolean).join(' · ') || '—')}</div>
-            ${status}
-          </div>
-          <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
-          <div class="qchecks-col">
-            <div class="qchecks-grouped">
-              <div class="check-group">
-                <div class="check-group-label">How you reached out</div>
-                <div class="check-group-items">
-                  <label class="qcheck grey"><input type="checkbox" data-outcome="called"> Called</label>
-                  <label class="qcheck grey"><input type="checkbox" data-outcome="texted"> Texted</label>
-                  <label class="qcheck grey"><input type="checkbox" data-outcome="emailed"> Emailed</label>
-                </div>
-              </div>
-              <div class="check-group-divider"></div>
-              <div class="check-group">
-                <div class="check-group-label">What happened</div>
-                <div class="check-group-items">
-                  <label class="qcheck light-purple"><input type="checkbox" data-outcome="connected"> Connected</label>
-                  <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up-5-26"> Signed up: 5/26</label>
-                  <label class="qcheck purple"><input type="checkbox" data-outcome="signed-up-6-9"> Signed up: 6/9</label>
-                  <label class="qcheck green"><input type="checkbox" data-outcome="oneonone"> 1-1 booked</label>
-                </div>
-              </div>
-            </div>
-            <input type="text" class="qnotes" placeholder="Notes (optional)" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:12.5px;font-family:inherit;">
-            <div class="qsave-row">
-              <button class="qsave-btn">Save</button>
-              <span class="qsave-status"></span>
-              <details class="qadmin-menu">
-                <summary title="More actions">⋮</summary>
-                <div class="qadmin-popover">
-                  <button class="qadmin-btn" data-admin="skipped" title="Take this person out of your queue without an outreach attempt">⊘ Skip</button>
-                  <button class="qadmin-btn" data-admin="wrong-number">✕ Wrong number</button>
-                  <button class="qadmin-btn" data-admin="do-not-contact" style="color:var(--gw-red);">⊗ Remove from call list</button>
-                </div>
-              </details>
-            </div>
-          </div>
-        </div>
-        <div class="qnextstep">
-          <span class="qnext-label">Next step</span>
-          <div>
-            <select class="qnext-select"><option value="">Choose a next step...</option></select>
-            <input type="text" class="qfree" placeholder="Type your own next step...">
-            <div class="qmissing-flag">⚐ A next step is required when you connect</div>
-          </div>
-        </div>`;
-      findHost.appendChild(row);
-      row.querySelectorAll('.qcheck input').forEach(input => input.addEventListener('change', () => updateRow(row)));
-      const sel = row.querySelector('.qnext-select');
-      const fre = row.querySelector('.qfree');
-      sel?.addEventListener('change', () => updateRow(row));
-      fre?.addEventListener('input', () => updateRow(row));
-      row.querySelector('.qsave-btn').addEventListener('click', () => submitRow(row));
-      row.querySelectorAll('.qadmin-btn').forEach(b => b.addEventListener('click', () => submitAdmin(row, b.dataset.admin)));
-    });
-    queue = prevQueue; // restore — search rows are self-contained
+    list.forEach((c, i) => findHost.appendChild(buildOutreachRow(c, i)));
   } catch (e) {
     findHost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Search failed: ${e.message}</div>`;
   }
@@ -1841,24 +1800,22 @@ document.getElementById('find-btn').addEventListener('click', runSearch);
 document.getElementById('find-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
 
 // === Interaction logic ===
-function rankOutcome(checks) {
-  // Dot color = highest single outcome (green > purple > light-purple > grey)
-  if (checks.oneonone) return 'oneonone';
-  if (checks['signed-up-5-26'] || checks['signed-up-6-9'] || checks['signed-up']) return 'signed-up';
-  if (checks.connected) return 'connected';
-  if (checks.called || checks.texted || checks.emailed) return 'attempted';
-  return null;
+const ADMIN_OUTCOMES = ['skipped', 'wrong-number', 'do-not-contact'];
+function rowOutcome(row) {
+  // Outcome comes from the single "What happened" select.
+  return row.querySelector('.qoutcome-select')?.value || '';
 }
-
-function optionsKey(checks) {
-  // Combined-outcome key used to look up next-step options.
-  const isSignup = checks['signed-up-5-26'] || checks['signed-up-6-9'] || checks['signed-up'];
-  if (isSignup && checks.oneonone) return 'signed-up+oneonone';
-  // Map the new event-specific outcomes to their own option lists if available,
-  // else fall back to the generic 'signed-up' bucket.
-  if (checks['signed-up-5-26'] && !checks.oneonone) return 'signed-up-5-26';
-  if (checks['signed-up-6-9'] && !checks.oneonone) return 'signed-up-6-9';
-  return rankOutcome(checks);
+function rowMethods(row) {
+  const m = [];
+  row.querySelectorAll('.qcheck input').forEach(i => { if (i.checked) m.push(i.dataset.outcome); });
+  return m;
+}
+function normalizedOutcome(outcome) {
+  // Grid/metric bucket: green > purple > light-purple > grey
+  if (outcome === 'oneonone') return 'oneonone';
+  if (outcome.startsWith('signed-up')) return 'signed-up';
+  if (outcome === 'connected') return 'connected';
+  return 'attempted';
 }
 
 async function undoSave(row) {
@@ -1886,13 +1843,12 @@ async function undoSave(row) {
     status.style.color = 'var(--text-tertiary)';
     // Full resync from server: clear local state, reload today's truth
     sessionActions.length = 0;
-    nextGridIdx = 0;
     savedIds.clear();
-    document.querySelectorAll('#grid .dot').forEach(d => d.removeAttribute('data-s'));
     await loadTodayStats();
-    await loadCounters();
+    await loadFunnelCards();
     recomputeMetrics();
     updateBatchNav();
+    loadCumulativeGrid();
   } catch (e) {
     status.textContent = `✕ Undo failed: ${e.message}`;
     status.style.color = 'var(--gw-red)';
@@ -1900,10 +1856,17 @@ async function undoSave(row) {
 }
 
 function updateRow(row) {
+  const outcome = rowOutcome(row);
+
+  // Admin actions act immediately (same behavior as the old ⋮ menu buttons)
+  if (ADMIN_OUTCOMES.includes(outcome)) {
+    const sel = row.querySelector('.qoutcome-select');
+    submitAdmin(row, outcome).then(ok => { if (!ok && sel) sel.value = ''; });
+    return;
+  }
+
   // If the row was previously saved and the user is now editing again,
   // re-enable the Save button so they can capture the update as a new log.
-  // (e.g. logged Call+Text earlier, now got a text response — re-saves as
-  // "connected" with a fresh log entry.)
   if (row.classList.contains('row-complete')) {
     row.classList.remove('row-complete');
     const saveBtn = row.querySelector('.qsave-btn');
@@ -1913,34 +1876,26 @@ function updateRow(row) {
     const status = row.querySelector('.qsave-status');
     if (status) { status.textContent = 'edit to update'; status.style.color = 'var(--text-tertiary)'; }
   }
-  const checks = {};
-  row.querySelectorAll('.qcheck input').forEach(input => {
-    checks[input.dataset.outcome] = input.checked;
-  });
-  const top = rankOutcome(checks);
-  const optsKey = optionsKey(checks);
-  // Note: grid dots only fill on Save (persistent), not on pre-save checkbox changes
-  // Next-step dropdown
+
+  const optsKey = outcome.startsWith('signed-up') ? outcome : normalizedOutcome(outcome);
+  // Next-step dropdown — required whenever a real connection happened
   const nsblock = row.querySelector('.qnextstep');
   const select = row.querySelector('.qnext-select');
   const freebox = row.querySelector('.qfree');
   const missing = row.querySelector('.qmissing-flag');
-  const needsNextStep = (top === 'connected' || top === 'signed-up' || top === 'oneonone');
+  const needsNextStep = !!outcome && outcome !== '';
   nsblock.classList.toggle('show', needsNextStep);
   if (needsNextStep) {
-    // Only rebuild options if the combo changed, so we don't wipe a user's selection.
     if (row.dataset.optsKey !== optsKey) {
-      const opts = NEXT_STEP_OPTIONS[optsKey] || [];
+      const opts = NEXT_STEP_OPTIONS[optsKey] || NEXT_STEP_OPTIONS.connected || [];
       select.innerHTML = '<option value="">Choose a next step...</option>' + opts.map(o => `<option value="${o}">${o}</option>`).join('');
       row.dataset.optsKey = optsKey;
     }
   } else {
     row.dataset.optsKey = '';
   }
-  // Reveal free-text input when "Other" is selected
   const isOther = select.value && select.value.startsWith('Other');
   freebox.classList.toggle('show', isOther);
-  // A "next step" is logged if either a non-Other option is picked OR free text is filled
   const hasNext = (select.value && !select.value.startsWith('Other')) || (freebox.value && freebox.value.trim());
   const showFlag = needsNextStep && !hasNext;
   row.classList.toggle('warn-no-next', showFlag);
@@ -1949,29 +1904,22 @@ function updateRow(row) {
 }
 
 function recomputeMetrics() {
-  // Pull from persistent sessionActions so metrics survive batch changes
-  let attempts = 0, convos = 0, signups = 0, oneones = 0;
+  // "Today" card: the count of the thing you're tracking today —
+  // attempts, people actually reached, and signups (incl. 1-1s).
+  let attempts = 0, reached = 0, signups = 0;
   for (const a of sessionActions) {
-    attempts++;  // one attempt per person, regardless of how many methods
-    if (a.outcome === 'connected' || a.outcome === 'signed-up' || a.outcome === 'signed-up-5-26' || a.outcome === 'signed-up-6-9' || a.outcome === 'oneonone') convos++;
-    if (a.outcome === 'signed-up' || a.outcome === 'signed-up-5-26' || a.outcome === 'signed-up-6-9' || a.outcome === 'oneonone') signups++;
-    if (a.outcome === 'oneonone') oneones++;
+    const admin = ADMIN_OUTCOMES.includes(a.outcome);
+    if (admin) continue;             // skips/wrong numbers aren't outreach
+    attempts++;                      // one attempt per person
+    if (a.outcome === 'connected' || a.outcome === 'signed-up' || a.outcome === 'oneonone') reached++;
+    if (a.outcome === 'signed-up' || a.outcome === 'oneonone') signups++;
   }
-  // Flag counter: count currently-visible rows that need a next step
-  let flagged = 0;
-  document.querySelectorAll('.queue-row.warn-no-next').forEach(() => flagged++);
-  // Mini-stats (just from current queue; in live version this'd be week-total from Airtable)
-  document.getElementById('stat-attempts').innerHTML = `${attempts}<em>/ 50</em>`;
-  document.getElementById('stat-convos').innerHTML = `${convos}<em>/ 10</em>`;
-  // Contact rate = conversations / attempts
-  const rate = attempts > 0 ? Math.round((convos / attempts) * 100) : null;
-  document.getElementById('stat-rate').textContent = rate === null ? '— contact rate' : `${rate}% contact rate`;
-  // Big cards
-  // signup count is owned by loadCounters (cumulative, not session-based)
-  document.getElementById('m-oneonone-current').textContent = oneones;
-  document.getElementById('m-oneonone-bar').style.width = `${Math.min(100, oneones*100)}%`;
-  document.getElementById('m-oneonone-pct').textContent = `${Math.min(100, oneones*100)}% to goal`;
-  // Flag counter element was removed (next-step is required on save), no-op
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('t-attempts', attempts);
+  set('t-reached', reached);
+  set('t-signups', signups);
+  const rate = attempts > 0 ? Math.round((reached / attempts) * 100) : null;
+  set('t-rate', rate === null ? 'contact rate —' : `contact rate ${rate}%`);
 }
 
 // Theme toggle (default light, persist in localStorage)

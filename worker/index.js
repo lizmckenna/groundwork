@@ -19,10 +19,18 @@ const CONFIRM_EVENT = 'Confirm 5/26';
 // Per-event labels for confirm/attendance tracking, keyed by the dashboard's event key.
 // Lets the same confirm/attendance/zoom endpoints serve both the 5/26 and 6/9 tabs.
 const EVENT_META = {
-  '5_26': { confirmEvent: 'Confirm 5/26', attendEvent: 'Orientation 5/26',     confirmField: 'confirm_5_26_status', attendField: 'attendance_5_26_status', confirmTag: '5/26 confirm', attendTag: '5/26 orientation' },
-  '6_9':  { confirmEvent: 'Confirm 6/9',  attendEvent: '6/9 Emergency Meeting', confirmField: 'confirm_6_9_status',  attendField: 'attendance_6_9_status',  confirmTag: '6/9 confirm',  attendTag: '6/9 emergency meeting' },
+  '5_26': { date: '2026-05-26', label: '5/26 Orientation',          confirmEvent: 'Confirm 5/26', attendEvent: 'Orientation 5/26',      confirmField: 'confirm_5_26_status', attendField: 'attendance_5_26_status', signupField: null,                  confirmTag: '5/26 confirm', attendTag: '5/26 orientation' },
+  '6_9':  { date: '2026-06-09', label: '6/9 No on 5 Onboarding',    confirmEvent: 'Confirm 6/9',  attendEvent: '6/9 Emergency Meeting',  confirmField: 'confirm_6_9_status',  attendField: 'attendance_6_9_status',  signupField: 'signup_6_9_status',   confirmTag: '6/9 confirm',  attendTag: '6/9 emergency meeting' },
+  '6_23': { date: '2026-06-23', label: '6/23 No on 5 Onboarding',   confirmEvent: 'Confirm 6/23', attendEvent: '6/23 No on 5 Onboarding', confirmField: 'confirm_6_23_status', attendField: 'attendance_6_23_status', signupField: 'signup_6_23_status', confirmTag: '6/23 confirm', attendTag: '6/23 onboarding' },
+  '7_7':  { date: '2026-07-07', label: '7/7 No on 5 Onboarding',    confirmEvent: 'Confirm 7/7',  attendEvent: '7/7 No on 5 Onboarding',  confirmField: 'confirm_7_7_status',  attendField: 'attendance_7_7_status',  signupField: 'signup_7_7_status',  confirmTag: '7/7 confirm',  attendTag: '7/7 onboarding' },
 };
 function eventMeta(key){ return EVENT_META[key] || EVENT_META['5_26']; }
+// Outcome key (dashboard) → event meta key, for the Today-tab signup buttons.
+const SIGNUP_OUTCOME_EVENTS = {
+  'signed-up-6-9':  '6_9',
+  'signed-up-6-23': '6_23',
+  'signed-up-7-7':  '7_7',
+};
 const LANEE_ID = 'rec0OmDN68hlffkTn';
 const STEPHANIE_ID = 'recnnEdYIPcclnPLY';
 const LANEE_COUNTIES = ['jackson', 'cass', 'johnson', 'platte', 'clay', 'lafayette', 'buchanan', 'ray'];
@@ -80,6 +88,7 @@ const ORGANIZER_PROFILE = {
   'lanee':     { name: 'LaNeé Bridewell',    group: 'Parents for Missouri Public Schools', reply_to: 'lanee4kckids@gmail.com' },
   'laneé':     { name: 'LaNeé Bridewell',    group: 'Parents for Missouri Public Schools', reply_to: 'lanee4kckids@gmail.com' },
   'stephanie': { name: 'Stephanie Rittgers', group: 'Parents for Missouri Public Schools', reply_to: 'srttgrs+civicwork@gmail.com' },
+  'kathryn':   { name: 'Kathryn',            group: 'Parents for Missouri Public Schools', reply_to: 'kathryn@rootedstrategy.com' },
 };
 // Legacy lookup, kept for any code still reading reply-to only.
 const ORGANIZER_REPLY_TO = Object.fromEntries(Object.entries(ORGANIZER_PROFILE).map(([k,v]) => [k, v.reply_to]));
@@ -114,14 +123,26 @@ const READ_CACHE_KEYS = [
   'cache:recent-activity:30',
   'cache:recent-activity:14:lanee',
   'cache:recent-activity:14:stephanie',
+  'cache:recent-activity:14:kathryn',
   'cache:today-stats:lanee',
   'cache:today-stats:stephanie',
+  'cache:today-stats:kathryn',
   'cache:org-contacts:lanee',
   'cache:org-contacts:stephanie',
+  'cache:org-contacts:kathryn',
   'cache:house-hosts',
   'queue:count',
   'queue:count:lanee',
   'queue:count:stephanie',
+  'queue:count:kathryn',
+  // Per-event confirmee + stats caches (60s TTL self-heals, but flush on writes too)
+  ...['5_26','6_9','6_23','7_7'].flatMap(ev => [
+    `cache:confirmees:${ev}:all`,
+    `cache:confirmees:${ev}:lanee`,
+    `cache:confirmees:${ev}:stephanie`,
+    `cache:confirmees:${ev}:kathryn`,
+    `cache:event-stats:${ev}`,
+  ]),
 ];
 async function cacheGet(env, key) {
   try {
@@ -451,6 +472,46 @@ export default {
         else out.errors.push({ status: r.status, body: await r.text() });
         return json(out);
       }
+      if (url.pathname === '/admin/setup-event-fields' && request.method === 'POST') {
+        // Creates the three per-event tracking fields (signup/confirm/attendance)
+        // for any EVENT_META key. Accepts ADMIN_KEY or SETUP_KEY so field setup
+        // for new events doesn't require the primary admin credential.
+        const k = request.headers.get('X-Admin-Key');
+        const authorized = (env.ADMIN_KEY && k === env.ADMIN_KEY) || (env.SETUP_KEY && k === env.SETUP_KEY);
+        if (!authorized) return json({ error: 'forbidden' }, 403);
+        const body = await request.json();
+        const meta = EVENT_META[body.event];
+        if (!meta) return json({ error: `unknown event key — add to EVENT_META first. Known: ${Object.keys(EVENT_META).join(', ')}` }, 400);
+        const out = { event: body.event, fields_created: [], errors: [] };
+        const defs = [];
+        if (meta.signupField) defs.push({ name: meta.signupField, type: 'singleSelect', options: { choices: [
+          { name: 'Signed up', color: 'greenBright' },
+          { name: 'Maybe', color: 'yellowBright' },
+          { name: 'Not interested', color: 'redLight2' },
+        ]}});
+        defs.push({ name: meta.confirmField, type: 'singleSelect', options: { choices: [
+          { name: 'Confirmed', color: 'greenBright' },
+          { name: 'Declined', color: 'redBright' },
+          { name: 'Cancelled', color: 'redLight2' },
+          { name: 'No answer', color: 'grayLight2' },
+          { name: 'Reminder sent', color: 'purpleLight2' },
+        ]}});
+        defs.push({ name: meta.attendField, type: 'singleSelect', options: { choices: [
+          { name: 'Attended', color: 'greenBright' },
+          { name: 'No-show', color: 'redBright' },
+          { name: 'Walk-in', color: 'purpleBright' },
+        ]}});
+        for (const f of defs) {
+          const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables/${CONTACTS_TBL}/fields`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(f),
+          });
+          if (r.ok) out.fields_created.push(f.name);
+          else out.errors.push({ field: f.name, status: r.status, body: await r.text() });
+        }
+        return json(out);
+      }
       if (url.pathname === '/admin/setup-6-9-field' && request.method === 'POST') {
         const k = request.headers.get('X-Admin-Key');
         if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
@@ -632,6 +693,7 @@ export default {
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
       if (url.pathname === '/prospects') return await getProspects(env, url);
+      if (url.pathname === '/call-list') return await getCallList(env, url);
       if (url.pathname === '/log' && request.method === 'POST') return await logOutcome(request, env);
       if (url.pathname === '/undo' && request.method === 'POST') return await undoSave(request, env);
       if (url.pathname === '/confirmees') return await getConfirmees(env, url);
@@ -639,6 +701,7 @@ export default {
       if (url.pathname === '/attendance-log' && request.method === 'POST') return await attendanceLog(request, env);
       if (url.pathname === '/walkin' && request.method === 'POST') return await walkinSignup(request, env);
       if (url.pathname === '/today-stats') return await getTodayStats(env, url);
+      if (url.pathname === '/event-stats') return await getEventStats(env, url);
       if (url.pathname === '/recent-activity') return await getRecentActivity(env, url);
       if (url.pathname === '/search') return await searchContacts(env, url);
       if (url.pathname === '/queue-count') return await getQueueCount(env, url);
@@ -1632,6 +1695,7 @@ const ORGANIZER_NAMES_LC = {
   'lanee':     'Bridewell',         // partial match — catches "LaNeé Bridewell" or "LaNee Bridewell"
   'laneé':     'Bridewell',
   'stephanie': 'Stephanie Rittgers',
+  'kathryn':   'Kathryn',           // partial match on first name — her queue is whoever's assigned to her
 };
 function organizerName(name) {
   if (!name) return null;
@@ -1656,6 +1720,8 @@ function prospectsFilter(organizerName_) {
     `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>7),`,
     `NOT({last_attempt_result}='Signed up'),`,
     `NOT({signup_6_9_status}='Signed up'),`,
+    `NOT({signup_6_23_status}='Signed up'),`,
+    `NOT({signup_7_7_status}='Signed up'),`,
     `NOT({last_attempt_result}='Skipped'),`,
     `NOT({last_attempt_result}='Wrong number'),`,
     `NOT({last_attempt_result}='Do not contact'),`,
@@ -1671,7 +1737,8 @@ async function getProspects(env, url) {
   const n = parseInt(url.searchParams.get('n') || '5');
   const organizer = url.searchParams.get('organizer');
   const filter = prospectsFilter(organizer);
-  const fields = ['Name','first','last','phone','email','school','district','log_count','organized_by','leader_ladder'];
+  const fields = ['Name','first','last','phone','email','school','district','log_count','organized_by','leader_ladder',
+                  'last_attempt_date','last_attempt_method','last_attempt_result','next_step'];
   let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=${n}`;
   q += `&sort%5B0%5D%5Bfield%5D=log_count&sort%5B0%5D%5Bdirection%5D=desc`;
   for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
@@ -1686,7 +1753,162 @@ async function getProspects(env, url) {
     log_count: r.fields.log_count || 0,
     organized_by_count: (r.fields.organized_by || []).length,
     leader_ladder: r.fields.leader_ladder || '',
+    // Last-touch context: who we are calling has usually been tried before.
+    // Surfacing what happened last time is the PDF's "see who last contacted
+    // that person" requirement for onramp calls.
+    last_attempt_date: r.fields.last_attempt_date || null,
+    last_attempt_method: r.fields.last_attempt_method || null,
+    last_attempt_result: r.fields.last_attempt_result || null,
+    next_step: r.fields.next_step || null,
   })));
+}
+
+// =========================================================================
+// /call-list?list=fresh|unreached|unconverted&organizer=X&n=25
+// Toggleable call lists — each list is a different slice of the base:
+//   fresh       — never reached / cooled off (the classic onramp queue)
+//   unreached   — attempted in the last 7 days, no answer yet. THE cadence
+//                 list: sorted oldest-attempt-first with a suggested next
+//                 channel (alternate from whatever was tried last).
+//   unconverted — came to an onboarding but hasn't taken a next step
+//                 (no 1-1 booked, no commitment, no future-event signup).
+//                 Primary goal on this list per Ellen: book the 1-1.
+// All lists return the same row shape as /prospects so the dashboard renders
+// them with one code path.
+// =========================================================================
+const PROSPECT_FIELDS = ['Name','first','last','phone','email','school','district','log_count','organized_by','leader_ladder',
+  'last_attempt_date','last_attempt_method','last_attempt_result','next_step'];
+
+function rowFromRecord(r) {
+  return {
+    id: r.id,
+    name: r.fields.Name || `${r.fields.first || ''} ${r.fields.last || ''}`.trim(),
+    phone: r.fields.phone || '',
+    email: r.fields.email || '',
+    school: r.fields.school || '',
+    district: r.fields.district || '',
+    log_count: r.fields.log_count || 0,
+    organized_by_count: (r.fields.organized_by || []).length,
+    leader_ladder: r.fields.leader_ladder || '',
+    last_attempt_date: r.fields.last_attempt_date || null,
+    last_attempt_method: r.fields.last_attempt_method || null,
+    last_attempt_result: r.fields.last_attempt_result || null,
+    next_step: r.fields.next_step || null,
+  };
+}
+
+async function getCallList(env, urlObj) {
+  const list = urlObj.searchParams.get('list') || 'fresh';
+  const organizer = urlObj.searchParams.get('organizer');
+  const n = parseInt(urlObj.searchParams.get('n') || '25');
+
+  if (list === 'fresh') {
+    // Same as /prospects
+    return await getProspects(env, urlObj);
+  }
+
+  const orgFullName = organizerName(organizer);
+  const orgClause = orgFullName ? `,FIND('${orgFullName}',{assigned_organizer}&'')>0` : '';
+  const schoolExcl = EXCLUDED_SCHOOL_PATTERNS.map(p => `FIND('${p}',LOWER({school}&''))=0`).join(',');
+  const roleExcl = EXCLUDED_ROLES.map(r => `FIND('${r}',{role}&'')=0`).join(',');
+
+  if (list === 'unreached') {
+    const filter = [
+      `AND(`,
+      `{last_attempt_result}='No answer',`,
+      `{last_attempt_date}!=BLANK(),`,
+      `DATETIME_DIFF(TODAY(),{last_attempt_date},'days')<=10,`,
+      `NOT({signup_6_9_status}='Signed up'),`,
+      `NOT({signup_6_23_status}='Signed up'),`,
+      `NOT({signup_7_7_status}='Signed up'),`,
+      `${schoolExcl},`,
+      `${roleExcl}`,
+      `${orgClause}`,
+      `)`,
+    ].join('');
+    let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=${n}`;
+    q += `&sort%5B0%5D%5Bfield%5D=last_attempt_date&sort%5B0%5D%5Bdirection%5D=asc`;
+    for (const f of PROSPECT_FIELDS) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+    const data = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    const today = todayCT();
+    return json(data.records.map(r => {
+      const row = rowFromRecord(r);
+      // Cadence hint: alternate channel from whatever was tried last,
+      // due once 48h have passed (Stephanie's ladder).
+      const daysSince = row.last_attempt_date
+        ? Math.floor((new Date(today) - new Date(row.last_attempt_date)) / 86400000)
+        : null;
+      const lastM = String(row.last_attempt_method || '').toLowerCase();
+      row.cadence = {
+        days_since: daysSince,
+        due: daysSince != null && daysSince >= 2,
+        try_next: lastM === 'email' ? 'call or text' : 'email',
+      };
+      return row;
+    }));
+  }
+
+  if (list === 'unconverted') {
+    // Attended ANY tracked event, no next step taken yet.
+    const attendClauses = Object.values(EVENT_META)
+      .map(m => `OR({${m.attendField}}='Attended',{${m.attendField}}='Walk-in')`)
+      .join(',');
+    const filter = [
+      `AND(`,
+      `OR(${attendClauses}),`,
+      `NOT({signup_6_23_status}='Signed up'),`,
+      `NOT({signup_7_7_status}='Signed up'),`,
+      `NOT({last_attempt_result}='Do not contact'),`,
+      `${schoolExcl},`,
+      `${roleExcl}`,
+      `${orgClause}`,
+      `)`,
+    ].join('');
+    const fields = [...PROSPECT_FIELDS, ...Object.values(EVENT_META).map(m => m.attendField)];
+    const candidates = [];
+    let offset = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100`;
+      for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+      if (offset) q += `&offset=${encodeURIComponent(offset)}`;
+      const page = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      candidates.push(...page.records);
+      offset = page.offset;
+    } while (offset);
+
+    // Exclude anyone who already booked a 1-1 or made a commitment.
+    const converted = new Set();
+    const cf = `OR({event}='1-1 meeting',{method}='Commitment',{method}='House meeting')`;
+    offset = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(cf)}&pageSize=100&fields%5B%5D=contact`;
+      if (offset) q += `&offset=${offset}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+      for (const r of d.records) {
+        const cid = (r.fields.contact || [])[0];
+        if (cid) converted.add(cid);
+      }
+      offset = d.offset;
+    } while (offset);
+
+    const rows = candidates
+      .filter(r => !converted.has(r.id))
+      .slice(0, n)
+      .map(r => {
+        const row = rowFromRecord(r);
+        // Which onboarding did they come to? (latest tracked event wins)
+        const attended = Object.entries(EVENT_META)
+          .filter(([, m]) => ['Attended', 'Walk-in'].includes(r.fields[m.attendField]))
+          .map(([k, m]) => ({ key: k, label: m.label, date: m.date }))
+          .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        row.attended_event = attended[0]?.label || null;
+        row.attended_event_date = attended[0]?.date || null;
+        return row;
+      });
+    return json(rows);
+  }
+
+  return json({ error: `unknown list '${list}' — use fresh, unreached, or unconverted` }, 400);
 }
 
 async function getQueueCount(env, urlObj) {
@@ -1721,11 +1943,15 @@ async function sendZoomEmailNow(request, env) {
 }
 
 function resolveOutcome(outcome, methodCount) {
+  // Event signups resolve via SIGNUP_OUTCOME_EVENTS so adding a future event
+  // only requires an EVENT_META entry + one line in that map.
+  if (SIGNUP_OUTCOME_EVENTS[outcome]) {
+    return { result: 'Signed up', event: eventMeta(SIGNUP_OUTCOME_EVENTS[outcome]).attendEvent };
+  }
   switch (outcome) {
     case 'oneonone':         return { result: 'Signed up',  event: '1-1 meeting' };
     case 'signed-up':        // backwards compat — treat as 5/26
     case 'signed-up-5-26':   return { result: 'Signed up',  event: 'Orientation 5/26' };
-    case 'signed-up-6-9':    return { result: 'Signed up',  event: '6/9 Emergency Meeting' };
     case 'connected':        return { result: 'Conversation', event: null };
     case 'skipped':          return { result: 'Skipped',     event: null };
     case 'wrong-number':     return { result: 'Wrong number', event: null };
@@ -1779,9 +2005,11 @@ async function logOutcome(request, env) {
 
   // last_attempt_result on the CONTACT gates the Today queue (signups skip the
   // 7-day re-call cycle) and the 5/26 confirm queue (last_attempt_result='Signed up').
-  // For a 6/9 signup we DON'T want them in the 5/26 confirm queue, so override
-  // to 'Conversation' — still keeps them out of the Today re-call rotation.
-  const contactLastResult = (outcome === 'signed-up-6-9') ? 'Conversation' : result;
+  // For event-specific signups we DON'T want them in the 5/26 legacy confirm
+  // queue, so override to 'Conversation' — still keeps them out of the Today
+  // re-call rotation.
+  const signupEventKey = SIGNUP_OUTCOME_EVENTS[outcome] || null;
+  const contactLastResult = signupEventKey ? 'Conversation' : result;
   const contactFields = {
     last_attempt_date: date,
     last_attempt_method: isAdmin ? 'Other' : (METHOD_MAP[methods[0]] || methods[0]),
@@ -1789,8 +2017,8 @@ async function logOutcome(request, env) {
   };
   // Event-specific denormalized status field — so each event has its own
   // confirm queue without colliding on last_attempt_result.
-  if (outcome === 'signed-up-6-9') {
-    contactFields.signup_6_9_status = 'Signed up';
+  if (signupEventKey && eventMeta(signupEventKey).signupField) {
+    contactFields[eventMeta(signupEventKey).signupField] = 'Signed up';
   }
   if (next_step) contactFields.next_step = next_step;
   await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
@@ -1799,8 +2027,8 @@ async function logOutcome(request, env) {
   });
 
   let confirmation_email_sent = false;
-  if (AUTO_CONFIRM_EMAIL && (outcome === 'signed-up' || outcome === 'signed-up-5-26' || outcome === 'signed-up-6-9')) {
-    const eventKey = outcome === 'signed-up-6-9' ? '6_9' : '5_26';
+  if (AUTO_CONFIRM_EMAIL && (outcome === 'signed-up' || outcome === 'signed-up-5-26' || signupEventKey)) {
+    const eventKey = signupEventKey || '5_26';
     try {
       const contact = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`);
       const cEmail = contact.fields.email;
@@ -1838,6 +2066,24 @@ const EMAIL_EVENTS = {
     intro_event: '<strong>Emergency Meeting on Public School Funding in Missouri</strong>',
     big_date_html: 'Tue, June 9<br/>7:30 PM CT',
     sign_off_date: 'June 9th',
+    zoom_link: 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1',
+  },
+  '6_23': {
+    subject: `You're in — No on 5 Onboarding · Tue 6/23 7:30 PM CT`,
+    preview: 'No on 5 Onboarding · Tue June 23 · 7:30 PM CT · Zoom',
+    eyebrow: 'No on 5 Onboarding · Public School Funding',
+    intro_event: '<strong>No on 5 Onboarding — protecting Missouri public school funding</strong>',
+    big_date_html: 'Tue, June 23<br/>7:30 PM CT',
+    sign_off_date: 'June 23rd',
+    zoom_link: 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1',
+  },
+  '7_7': {
+    subject: `You're in — No on 5 Onboarding · Tue 7/7 7:30 PM CT`,
+    preview: 'No on 5 Onboarding · Tue July 7 · 7:30 PM CT · Zoom',
+    eyebrow: 'No on 5 Onboarding · Public School Funding',
+    intro_event: '<strong>No on 5 Onboarding — protecting Missouri public school funding</strong>',
+    big_date_html: 'Tue, July 7<br/>7:30 PM CT',
+    sign_off_date: 'July 7th',
     zoom_link: 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1',
   },
 };
@@ -1974,6 +2220,8 @@ ${ev.preview}
   });
   if (!emailRes.ok) throw new Error(`email send failed: ${await emailRes.text()}`);
 
+  // Log against the EVENT'S confirm tag (was hardcoded to 'Confirm 5/26',
+  // which meant 6/9+ zoom sends never showed as email_sent on their tabs).
   await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
     method: 'POST',
     body: JSON.stringify({
@@ -1983,7 +2231,7 @@ ${ev.preview}
           date,
           method: 'Email',
           result: 'Reminder sent',
-          event: CONFIRM_EVENT,
+          event: eventMeta(String(eventKey || '5_26')).confirmEvent,
           contact: [contactId],
           notes: 'Auto-sent Zoom confirmation on signup',
         }
@@ -2038,14 +2286,16 @@ async function getConfirmees(env, urlObj) {
   // Pick which "signed up" field gates the queue. Default is 5/26 for back-compat.
   // 5/26 still uses {last_attempt_result}='Signed up' because that's the
   // historical source of truth before we introduced denormalized status fields.
-  const signupClause = eventParam === '6_9'
-    ? `{signup_6_9_status}='Signed up'`
+  const meta = eventMeta(eventParam);
+  const signupClause = meta.signupField
+    ? `{${meta.signupField}}='Signed up'`
     : `{last_attempt_result}='Signed up'`;
   const orgFullName = organizerName(organizer);
   const filter = orgFullName
     ? `AND(${signupClause},FIND('${orgFullName}',{assigned_organizer}&'')>0)`
     : signupClause;
   const fields = ['Name','first','last','phone','email','school','district','last_attempt_date','source','signup_6_9_status'];
+  if (meta.signupField && !fields.includes(meta.signupField)) fields.push(meta.signupField);
   // Paginate fully — no hard cap. Each page = 100 records.
   const allContacts = [];
   {
@@ -2122,6 +2372,7 @@ async function getConfirmees(env, urlObj) {
     confirm: stateByContact[r.id] || { email_sent: false, text_sent: false, call_made: false, status: null, last_date: null },
     attendance: attendanceByContact[r.id]?.result || null,
     signup_6_9: r.fields.signup_6_9_status || null,
+    signup_status: meta.signupField ? (r.fields[meta.signupField] || null) : (r.fields.last_attempt_result === 'Signed up' ? 'Signed up' : null),
   }));
   await cachePut(env, cacheKey, payload);
   return json(payload);
@@ -2183,32 +2434,41 @@ async function confirmLog(request, env) {
       });
     } catch (e) { /* field may not exist yet — non-fatal */ }
   }
-  // 6/9 emergency meeting tracking
-  if (signup_6_9) {
-    try {
-      await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ fields: { signup_6_9_status: signup_6_9 }, typecast: true }),
-      });
-      // Log it as an outreach record so we have history
-      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          records: [{ fields: {
-            Summary: `${date} — 6/9 invite: ${signup_6_9}`,
-            date,
-            method: 'Other',
-            result: signup_6_9,
-            event: '6/9 Emergency Meeting',
-            contact: [contact_id],
-          }}],
-          typecast: true,
-        }),
-      });
-    } catch (e) { /* non-fatal */ }
+  // Cross-event invite from a confirm tab ("can't make this one → sign up for
+  // the next onboarding"). Generic: next_signup = { event: '7_7', value: 'Signed up' }.
+  // signup_6_9 kept as the legacy form of the same thing.
+  const nextSignup = body.next_signup && body.next_signup.event && EVENT_META[body.next_signup.event]
+    ? body.next_signup
+    : (signup_6_9 ? { event: '6_9', value: signup_6_9 } : null);
+  if (nextSignup) {
+    const ALLOWED_NEXT = ['Signed up', 'Maybe', 'Not interested'];
+    const nm = eventMeta(nextSignup.event);
+    if (ALLOWED_NEXT.includes(nextSignup.value) && nm.signupField) {
+      try {
+        await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ fields: { [nm.signupField]: nextSignup.value }, typecast: true }),
+        });
+        // Log it as an outreach record so we have history
+        await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            records: [{ fields: {
+              Summary: `${date} — ${nm.label} invite: ${nextSignup.value}`,
+              date,
+              method: 'Other',
+              result: nextSignup.value,
+              event: nm.attendEvent,
+              contact: [contact_id],
+            }}],
+            typecast: true,
+          }),
+        });
+      } catch (e) { /* non-fatal */ }
+    }
   }
   await invalidateReadCaches(env);
-  return json({ ok: true, created_count: created.records.length, status: result, signup_6_9 });
+  return json({ ok: true, created_count: created.records.length, status: result, signup_6_9, next_signup: nextSignup });
 }
 
 async function searchContacts(env, url) {
@@ -2316,6 +2576,178 @@ async function getTodayStats(env, urlObj) {
   });
   const payload = { actions };
   await cachePut(env, cacheKey, payload);
+  return json(payload);
+}
+
+// =========================================================================
+// /event-stats?event=6_9 — per-event report card.
+// Returns the turnout funnel (signups → confirmed → attended), flake +
+// turnout rates, the came-vs-confirmed-by-method matrix ("of the people who
+// came, how were they confirmed?"), and onboarding→action conversion
+// (attendees who took ANY next action after the event date).
+// =========================================================================
+async function getEventStats(env, urlObj) {
+  const eventParam = urlObj.searchParams.get('event') || '5_26';
+  const meta = eventMeta(eventParam);
+  const cacheKey = `cache:event-stats:${eventParam}`;
+  const cached = await cacheGet(env, cacheKey);
+  if (cached) return json(cached);
+
+  // 1. Signups (same gate as the confirm queue)
+  const signupClause = meta.signupField
+    ? `{${meta.signupField}}='Signed up'`
+    : `{last_attempt_result}='Signed up'`;
+  const signupIds = new Set();
+  {
+    let offset = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(signupClause)}&pageSize=100&fields%5B%5D=Name`;
+      if (offset) q += `&offset=${encodeURIComponent(offset)}`;
+      const page = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      for (const r of page.records) signupIds.add(r.id);
+      offset = page.offset;
+    } while (offset);
+  }
+
+  // 2. Confirm logs → per-contact confirm state (methods + best status)
+  const confirmState = {};
+  {
+    const rank = { 'Confirmed': 5, 'Cancelled': 4, 'Declined': 3, 'No answer': 2, 'Reminder sent': 1 };
+    let offset = null;
+    const lf = `{event}='${meta.confirmEvent}'`;
+    do {
+      let lq = `?filterByFormula=${encodeURIComponent(lf)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=method&fields%5B%5D=result`;
+      if (offset) lq += `&offset=${offset}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${lq}`);
+      for (const r of d.records) {
+        const cid = (r.fields.contact || [])[0];
+        if (!cid) continue;
+        if (!confirmState[cid]) confirmState[cid] = { call: false, text: false, email: false, status: null };
+        const s = confirmState[cid];
+        if (r.fields.method === 'Call') s.call = true;
+        if (r.fields.method === 'Text') s.text = true;
+        if (r.fields.method === 'Email') s.email = true;
+        const res = r.fields.result;
+        if (res && (rank[res] || 0) > (rank[s.status] || 0)) s.status = res;
+      }
+      offset = d.offset;
+    } while (offset);
+  }
+
+  // 3. Attendance logs → most-recent result per contact
+  const attendance = {};
+  {
+    const af = `AND({event}='${meta.attendEvent}',{method}='Event attendance',OR({result}='Attended',{result}='No-show',{result}='Walk-in'))`;
+    let offset = null;
+    do {
+      let aq = `?filterByFormula=${encodeURIComponent(af)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=result&fields%5B%5D=date`;
+      if (offset) aq += `&offset=${offset}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${aq}`);
+      for (const r of d.records) {
+        const cid = (r.fields.contact || [])[0];
+        if (!cid) continue;
+        const prev = attendance[cid];
+        if (!prev || (r.fields.date && r.fields.date > prev.date)) {
+          attendance[cid] = { result: r.fields.result, date: r.fields.date };
+        }
+      }
+      offset = d.offset;
+    } while (offset);
+  }
+
+  // 4. Aggregate the funnel
+  const statusCounts = { Confirmed: 0, Declined: 0, Cancelled: 0, 'No answer': 0, 'Reminder sent': 0 };
+  for (const s of Object.values(confirmState)) {
+    if (s.status && statusCounts[s.status] != null) statusCounts[s.status]++;
+  }
+  let attended = 0, noShow = 0, walkIn = 0;
+  for (const a of Object.values(attendance)) {
+    if (a.result === 'Attended') attended++;
+    else if (a.result === 'No-show') noShow++;
+    else if (a.result === 'Walk-in') walkIn++;
+  }
+  // Flake = confirmed people who then no-showed / all confirmed with a known outcome
+  let confirmedAttended = 0, confirmedNoShow = 0;
+  for (const [cid, a] of Object.entries(attendance)) {
+    if (confirmState[cid]?.status === 'Confirmed') {
+      if (a.result === 'Attended' || a.result === 'Walk-in') confirmedAttended++;
+      if (a.result === 'No-show') confirmedNoShow++;
+    }
+  }
+  const flakeDen = confirmedAttended + confirmedNoShow;
+  const flake_rate = flakeDen > 0 ? Math.round((confirmedNoShow / flakeDen) * 100) : null;
+  const turnout_rate = signupIds.size > 0 ? Math.round(((attended + walkIn) / signupIds.size) * 100) : null;
+
+  // 5. Came vs confirmed, by method. Buckets: call > text > email > none.
+  const matrix = {
+    call:  { attended: 0, no_show: 0 },
+    text:  { attended: 0, no_show: 0 },
+    email: { attended: 0, no_show: 0 },
+    none:  { attended: 0, no_show: 0 },
+  };
+  for (const [cid, a] of Object.entries(attendance)) {
+    if (a.result === 'Walk-in') continue; // walk-ins were never in the confirm flow
+    const s = confirmState[cid];
+    const bucket = !s ? 'none' : s.call ? 'call' : s.text ? 'text' : s.email ? 'email' : 'none';
+    const key = a.result === 'Attended' ? 'attended' : a.result === 'No-show' ? 'no_show' : null;
+    if (key) matrix[bucket][key]++;
+  }
+
+  // 6. Conversion to action: attendees with any post-event action log.
+  const attendeeIds = Object.entries(attendance)
+    .filter(([, a]) => a.result === 'Attended' || a.result === 'Walk-in')
+    .map(([cid]) => cid);
+  let withAction = 0, withOneOnOne = 0;
+  if (attendeeIds.length > 0 && meta.date) {
+    const acted = new Set();
+    const oneOnOned = new Set();
+    const pf = `IS_AFTER({date},DATETIME_PARSE('${meta.date}'))`;
+    let offset = null;
+    do {
+      let pq = `?filterByFormula=${encodeURIComponent(pf)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=method&fields%5B%5D=event&fields%5B%5D=result`;
+      if (offset) pq += `&offset=${offset}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${pq}`);
+      for (const r of d.records) {
+        const cid = (r.fields.contact || [])[0];
+        if (!cid) continue;
+        const m = r.fields.method || '';
+        const ev = r.fields.event || '';
+        // 1-1s tracked separately — the conversion Ellen cares most about
+        if (ev === '1-1 meeting') oneOnOned.add(cid);
+        if (acted.has(cid)) continue;
+        const isAction = m === 'Commitment' || m === 'House meeting'
+          || ev === '1-1 meeting'
+          || /training|amplifier|house/i.test(ev)
+          || r.fields.result === 'Signed up';
+        if (isAction) acted.add(cid);
+      }
+      offset = d.offset;
+    } while (offset);
+    withAction = attendeeIds.filter(cid => acted.has(cid)).length;
+    withOneOnOne = attendeeIds.filter(cid => oneOnOned.has(cid)).length;
+  }
+
+  const payload = {
+    event: eventParam,
+    label: meta.label,
+    date: meta.date,
+    signups: signupIds.size,
+    confirm_status: statusCounts,
+    attended, no_show: noShow, walk_in: walkIn,
+    flake_rate,         // % of confirmed people who no-showed (null until attendance logged)
+    turnout_rate,       // attended+walk-in as % of signups
+    confirmed_attended: confirmedAttended,
+    confirmed_no_show: confirmedNoShow,
+    by_confirm_method: matrix,
+    conversion: {
+      attendees: attendeeIds.length,
+      with_action: withAction,
+      with_one_on_one: withOneOnOne,
+      rate: attendeeIds.length > 0 ? Math.round((withAction / attendeeIds.length) * 100) : null,
+      one_on_one_rate: attendeeIds.length > 0 ? Math.round((withOneOnOne / attendeeIds.length) * 100) : null,
+    },
+  };
+  await cachePut(env, cacheKey, payload, 120);
   return json(payload);
 }
 
@@ -3213,6 +3645,8 @@ async function walkinSignup(request, env) {
   if (!first || !last) return json({ error: 'first and last name required' }, 400);
   const orgId = organizerId(organizer) || STEPHANIE_ID;
   const date = todayCT();
+  // Which event this walk-in attended (defaults to 5/26 for back-compat)
+  const wMeta = eventMeta(String(body.event || '5_26'));
 
   const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
   const cFirst = clean(first);
@@ -3252,7 +3686,7 @@ async function walkinSignup(request, env) {
       last: cLast,
       leader_ladder: 'Prospect',
       assigned_organizer: [orgId],
-      source: 'walk-in 5/26',
+      source: `walk-in ${wMeta.label.split(' ')[0]}`,
       last_attempt_date: date,
       last_attempt_result: 'Signed up',
     };
@@ -3276,11 +3710,11 @@ async function walkinSignup(request, env) {
     method: 'POST',
     body: JSON.stringify({
       records: [{ fields: {
-        Summary: `${date} — Walk-in (5/26 orientation)`,
+        Summary: `${date} — Walk-in (${wMeta.attendTag})`,
         date,
         method: 'Event attendance',
         result: 'Attended',
-        event: 'Orientation 5/26',
+        event: wMeta.attendEvent,
         contact: [contactId],
         notes: created ? 'New walk-in contact' : `Walk-in (matched existing: ${existingName || contactId})`,
       }}],
@@ -3291,7 +3725,7 @@ async function walkinSignup(request, env) {
   try {
     await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ fields: { attendance_5_26_status: 'Walk-in' }, typecast: true }),
+      body: JSON.stringify({ fields: { [wMeta.attendField]: 'Walk-in' }, typecast: true }),
     });
   } catch (e) {}
 
