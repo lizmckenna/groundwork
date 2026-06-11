@@ -2470,12 +2470,12 @@ async function getCallList(env, urlObj) {
     // Drop off this list once they sign up for ANY training or book a 1-1
     // (Ellen call 6/11), or were tried in the last 4 days.
     const trainingExcl = Object.values(EVENT_META)
-      .filter(m => (m.type === 'hm' || m.type === 'amp') && m.signupField)
+      .filter(m => ['hm','amp','kyn'].includes(m.type) && m.signupField)
       .map(m => `NOT({${m.signupField}}='Signed up'),`)
       .join('');
     const filter = [
       `AND(`,
-      `OR(${attendClauses},{amendment5_commitments}!=BLANK()),`,
+      `OR(${attendClauses},TRIM({amendment5_commitments}&'')!=''),`,
       trainingExcl,
       `NOT({one_on_one_booked}),`,
       `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4),`,
