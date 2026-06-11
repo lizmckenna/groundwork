@@ -519,6 +519,113 @@ export default {
         }
         return json(out);
       }
+      if (url.pathname === '/admin/backfill-log-organizer' && request.method === 'POST') {
+        // Stamp `organizer` on historical outreach logs from the contact's
+        // assigned organizer. Valid because the lists never overlap: each
+        // contact is assigned to exactly ONE organizer, and only that
+        // organizer's dashboard ever surfaced them.
+        const k = request.headers.get('X-Admin-Key');
+        const authorized = (env.ADMIN_KEY && k === env.ADMIN_KEY) || (env.SETUP_KEY && k === env.SETUP_KEY);
+        if (!authorized) return json({ error: 'forbidden' }, 403);
+        const dryRun = url.searchParams.get('dry') === '1';
+        // 1. contact id → organizer display name
+        const orgByContact = {};
+        {
+          let offset = null;
+          do {
+            let q = `?pageSize=100&fields%5B%5D=assigned_organizer`;
+            if (offset) q += `&offset=${offset}`;
+            const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+            for (const r of d.records) {
+              const ids = r.fields.assigned_organizer || [];
+              if (ids.length) orgByContact[r.id] = ids[0];
+            }
+            offset = d.offset;
+          } while (offset);
+        }
+        // organizer record id → name
+        const orgNames = {};
+        {
+          const d = await at(env, `/${BASE}/tblxknZQg2W4JdTny?pageSize=100&fields%5B%5D=name`);
+          for (const r of d.records) orgNames[r.id] = r.fields.name || '';
+        }
+        // 2. logs with outreach method + blank organizer
+        const targets = [];
+        {
+          const f = `AND(OR({method}='Call',{method}='Text',{method}='Email'),{organizer}=BLANK())`;
+          let offset = null;
+          do {
+            let q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=organizer`;
+            if (offset) q += `&offset=${offset}`;
+            const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+            for (const r of d.records) {
+              const cid = (r.fields.contact || [])[0];
+              const orgRec = cid ? orgByContact[cid] : null;
+              const name = orgRec ? orgNames[orgRec] : null;
+              if (name) targets.push({ id: r.id, organizer: name });
+            }
+            offset = d.offset;
+          } while (offset);
+        }
+        if (dryRun) {
+          const byOrg = {};
+          targets.forEach(t => { byOrg[t.organizer] = (byOrg[t.organizer] || 0) + 1; });
+          return json({ dry_run: true, would_update: targets.length, by_organizer: byOrg });
+        }
+        let updated = 0; const errors = [];
+        for (let i = 0; i < targets.length; i += 10) {
+          const batch = targets.slice(i, i + 10).map(t => ({ id: t.id, fields: { organizer: t.organizer } }));
+          try {
+            await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+            updated += batch.length;
+          } catch (e) { errors.push({ at: i, error: e.message }); }
+        }
+        await invalidateReadCaches(env);
+        return json({ updated, total: targets.length, errors });
+      }
+      if (url.pathname === '/admin/backfill-event-dates' && request.method === 'POST') {
+        // Fill blank dates on event_attendance rows. dry=1 lists the distinct
+        // blank-date event names; apply with body {"mappings": {"substring": "YYYY-MM-DD"}}.
+        const k = request.headers.get('X-Admin-Key');
+        const authorized = (env.ADMIN_KEY && k === env.ADMIN_KEY) || (env.SETUP_KEY && k === env.SETUP_KEY);
+        if (!authorized) return json({ error: 'forbidden' }, 403);
+        const dryRun = url.searchParams.get('dry') === '1';
+        const rows = [];
+        {
+          const f = `{date}=BLANK()`;
+          let offset = null;
+          do {
+            let q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=event&fields%5B%5D=Summary`;
+            if (offset) q += `&offset=${offset}`;
+            const d = await at(env, `/${BASE}/${EVENT_ATTENDANCE_TBL}${q}`);
+            for (const r of d.records) rows.push({ id: r.id, event: r.fields.event || r.fields.Summary || '' });
+            offset = d.offset;
+          } while (offset);
+        }
+        if (dryRun) {
+          const names = {};
+          rows.forEach(r => { names[r.event] = (names[r.event] || 0) + 1; });
+          return json({ dry_run: true, blank_date_rows: rows.length, by_event_name: names });
+        }
+        const body = await request.json();
+        const mappings = body.mappings || {};
+        const updates = [];
+        for (const r of rows) {
+          for (const [substr, date] of Object.entries(mappings)) {
+            if (r.event.toLowerCase().includes(substr.toLowerCase())) { updates.push({ id: r.id, fields: { date } }); break; }
+          }
+        }
+        let updated = 0; const errors = [];
+        for (let i = 0; i < updates.length; i += 10) {
+          const batch = updates.slice(i, i + 10);
+          try {
+            await at(env, `/${BASE}/${EVENT_ATTENDANCE_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+            updated += batch.length;
+          } catch (e) { errors.push({ at: i, error: e.message }); }
+        }
+        await invalidateReadCaches(env);
+        return json({ updated, matched: updates.length, blank_total: rows.length, errors });
+      }
       if (url.pathname === '/admin/setup-pilot-fields' && request.method === 'POST') {
         // One-shot: attribution + note denormalization fields.
         const k = request.headers.get('X-Admin-Key');
@@ -1958,52 +2065,62 @@ async function getCallList(env, urlObj) {
 async function getContactHistory(env, urlObj) {
   const cid = urlObj.searchParams.get('id');
   if (!cid) return json({ error: 'id required' }, 400);
+  // KV cache — repeat opens are instant; writes are rare enough that 10 min
+  // staleness is fine for a history view.
+  const cacheKey = `cache:history:${cid}`;
+  const cached = await cacheGet(env, cacheKey);
+  if (cached) return json(cached);
+
   const contact = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
   const logIds = Array.isArray(contact.fields.contact_log) ? contact.fields.contact_log : [];
   const evIds = Array.isArray(contact.fields.event_attendance) ? contact.fields.event_attendance : [];
+
+  const chunkFetch = (ids, tbl, fields) => {
+    const jobs = [];
+    for (let i = 0; i < ids.length && i < 60; i += 10) {
+      const chunk = ids.slice(i, i + 10);
+      const f = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+      let q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=10`;
+      for (const fl of fields) q += `&fields%5B%5D=${encodeURIComponent(fl)}`;
+      jobs.push(at(env, `/${BASE}/${tbl}${q}`));
+    }
+    return jobs;
+  };
+  // All chunks in parallel — the old sequential version took seconds on
+  // history-heavy contacts.
+  const [logPages, evPages] = await Promise.all([
+    Promise.all(chunkFetch(logIds, CONTACT_LOG_TBL, ['date','method','result','event','notes','organizer'])),
+    Promise.all(chunkFetch(evIds, EVENT_ATTENDANCE_TBL, ['date','event','attended','notes'])),
+  ]);
+
   const entries = [];
-
-  // Outreach touches (calls/texts/emails/confirms) with notes + who
-  for (let i = 0; i < logIds.length && i < 60; i += 10) {
-    const chunk = logIds.slice(i, i + 10);
-    const f = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
-    const q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=10&fields%5B%5D=date&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=event&fields%5B%5D=notes&fields%5B%5D=organizer`;
-    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
-    for (const r of d.records) {
-      entries.push({
-        kind: 'touch',
-        date: r.fields.date || null,
-        method: r.fields.method || null,
-        result: r.fields.result || null,
-        event: r.fields.event || null,
-        notes: r.fields.notes || null,
-        organizer: r.fields.organizer || null,
-      });
-    }
+  for (const d of logPages) for (const r of d.records) {
+    entries.push({
+      kind: 'touch',
+      date: r.fields.date || null,
+      method: r.fields.method || null,
+      result: r.fields.result || null,
+      event: r.fields.event || null,
+      notes: r.fields.notes || null,
+      organizer: r.fields.organizer || null,
+    });
   }
-
-  // Historical event attendance (its own table — this is what the
-  // "N prior events" count on the call sheet refers to)
-  for (let i = 0; i < evIds.length && i < 60; i += 10) {
-    const chunk = evIds.slice(i, i + 10);
-    const f = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
-    const q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=10&fields%5B%5D=date&fields%5B%5D=event&fields%5B%5D=attended&fields%5B%5D=notes`;
-    const d = await at(env, `/${BASE}/${EVENT_ATTENDANCE_TBL}${q}`);
-    for (const r of d.records) {
-      entries.push({
-        kind: 'event',
-        date: r.fields.date || null,
-        method: 'Event',
-        result: r.fields.attended === false ? 'No-show' : 'Attended',
-        event: r.fields.event || null,
-        notes: r.fields.notes || null,
-        organizer: null,
-      });
-    }
+  for (const d of evPages) for (const r of d.records) {
+    entries.push({
+      kind: 'event',
+      date: r.fields.date || null,
+      method: 'Event',
+      result: r.fields.attended === false ? 'No-show' : 'Attended',
+      event: r.fields.event || null,
+      notes: r.fields.notes || null,
+      organizer: null,
+    });
   }
 
   entries.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-  return json({ contact_id: cid, name: contact.fields.Name || '', entries: entries.slice(0, 40) });
+  const payload = { contact_id: cid, name: contact.fields.Name || '', entries: entries.slice(0, 40) };
+  await cachePut(env, cacheKey, payload, 600);
+  return json(payload);
 }
 
 // =========================================================================
