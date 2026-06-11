@@ -754,6 +754,8 @@ const EVENTS = {
   'amp_6_27': { type: 'amp', label: 'Amplifier 6/27',    short: 'Amp 6/27', date: '2026-06-27', signup: true },
   'amp_7_6':  { type: 'amp', label: 'Amplifier 7/6',     short: 'Amp 7/6',  date: '2026-07-06', signup: true },
   'amp_7_21': { type: 'amp', label: 'Amplifier 7/21',    short: 'Amp 7/21', date: '2026-07-21', signup: true },
+  'kyn_6_23': { type: 'kyn', label: 'Know Your Neighbor 6/23', short: 'KYN 6/23', date: '2026-06-23', signup: true },
+  'kyn_7_25': { type: 'kyn', label: 'Know Your Neighbor 7/25', short: 'KYN 7/25', date: '2026-07-25', signup: true },
 };
 const _today = todayCT();
 for (const ev of Object.values(EVENTS)) ev.past = ev.date < _today;
@@ -1201,8 +1203,8 @@ const LIST_HINTS = {
   fresh: 'People never attempted before. First touch.',
   unreached: 'Attempted with no answer, due again after 4 days. Oldest first, with the suggested next channel. People drop off for good after 5 attempts.',
   unconverted: ORGANIZER === 'kathryn'
-    ? 'Came to an onboarding and committed to ONLY house meeting and/or amplifier.'
-    : 'Came to an onboarding, no training signup or 1-1 yet. They fall off once either happens.',
+    ? 'Committed to ONLY house meeting and/or amplifier (whether or not they attended an onboarding).'
+    : 'Came to an onboarding or made Amendment 5 commitments. No training signup or 1-1 yet; they fall off once either happens.',
   training_followup: 'Came to a training.',
 };
 (function fillListPicker() {
@@ -1675,6 +1677,7 @@ function populateEventPicker() {
     group('onboarding', 'Onboardings') +
     group('hm', 'House Meeting Trainings') +
     group('amp', 'Amplifier Trainings') +
+    group('kyn', 'Know Your Neighbor') +
     `<option disabled>── Past events ──</option>` +
     past.map(([k, ev]) => `<option value="${k}">${ev.label} · archived</option>`).join('');
   if (!EVENTS[activeEventKey] || picker.querySelector(`option[value="${activeEventKey}"]`) == null) activeEventKey = CURRENT_EVENT;
@@ -1722,7 +1725,7 @@ async function fetchEventTracking() {
   chost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
   try {
     const evType = EVENTS[activeEventKey]?.type;
-    const orgParam = (ORGANIZER === 'kathryn' && (evType === 'hm' || evType === 'amp')) ? '' : `&organizer=${ORGANIZER}`;
+    const orgParam = (ORGANIZER === 'kathryn' && (evType === 'hm' || evType === 'amp' || evType === 'kyn')) ? '' : `&organizer=${ORGANIZER}`;
     const res = await authFetch(`${WORKER}/confirmees?event=${activeEventKey}${orgParam}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const list = await res.json();
@@ -2031,7 +2034,7 @@ async function loadEventReports() {
   if (!host) return;
   try {
     const keys = Object.keys(EVENTS)
-      .filter(k => ORGANIZER === 'kathryn' ? (EVENTS[k].type === 'hm' || EVENTS[k].type === 'amp') : true)
+      .filter(k => ORGANIZER === 'kathryn' ? ['hm','amp','kyn'].includes(EVENTS[k].type) : true)
       .sort((a, b) => EVENTS[a].date.localeCompare(EVENTS[b].date));
     const results = await Promise.all(keys.map(k =>
       authFetch(`${WORKER}/event-stats?event=${k}`).then(r => r.ok ? r.json() : null).catch(() => null)
