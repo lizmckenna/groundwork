@@ -2001,7 +2001,7 @@ async function amplifierLog(request, env) {
     try {
       let prevC = '';
       if (voterId) {
-        const curV = await at(env, `/${BASE}/${CONTACTS_TBL}/${voterId}?fields%5B%5D=commitments_added`);
+        const curV = await at(env, `/${BASE}/${CONTACTS_TBL}/${voterId}`);
         prevC = String(curV.fields.commitments_added || '').trim();
       }
       const lines = cInterests.map(i => `${today} · ${i} (via amplifier)`).join('\n');
@@ -2800,7 +2800,7 @@ async function logOutcome(request, env) {
   let attemptCount = null;
   if (!isAdmin && methods.length > 0) {
     try {
-      const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}?fields%5B%5D=attempt_count`);
+      const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`);
       attemptCount = (cur.fields.attempt_count || 0) + methods.length;
     } catch (e) { /* field may not exist yet */ }
   }
@@ -2829,7 +2829,7 @@ async function logOutcome(request, env) {
       ? `Hosting a house meeting${body.commitment_date ? ' · ' + body.commitment_date : ''}`
       : 'Amplifier tracker started';
     try {
-      const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}?fields%5B%5D=commitments_added`);
+      const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`);
       const prev = String(cur.fields.commitments_added || '').trim();
       contactFields.commitments_added = prev ? `${prev}\n${date} · ${what}` : `${date} · ${what}`;
     } catch (e) { contactFields.commitments_added = `${date} · ${what}`; }
@@ -3136,7 +3136,7 @@ async function undoSave(request, env) {
   // Recompute attempt counter + 1-1 flag from the logs that survived the undo
   let remainingAttempts = 0, stillOneOnOne = false;
   try {
-    const c = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}?fields%5B%5D=contact_log`);
+    const c = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`);
     const ids2 = Array.isArray(c.fields.contact_log) ? c.fields.contact_log : [];
     for (let i = 0; i < ids2.length; i += 10) {
       const chunk = ids2.slice(i, i + 10);
