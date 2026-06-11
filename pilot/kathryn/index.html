@@ -396,6 +396,18 @@
 .qoutcome-select { background: var(--bg-elevated); border: 1px solid var(--border-hover); color: var(--text-primary); padding: 8px 10px; border-radius: 6px; font-size: 12.5px; font-family: inherit; min-width: 190px; }
 .qlast-touch { margin-top: 6px; font-size: 11px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.03em; }
 .qlast-touch b { color: var(--text-secondary); font-weight: 600; }
+/* Contact history popover (hover/click on the prior-events count) */
+.qhistory { cursor: pointer; border-bottom: 1px dashed var(--border-hover); }
+.qhistory:hover { color: var(--gw-purple); }
+.qperson { position: relative; }
+.qhistory-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; background: var(--bg-secondary); border: 1px solid var(--border-hover); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.18); padding: 12px 14px; min-width: 320px; max-width: 420px; max-height: 320px; overflow-y: auto; }
+.qhistory-pop h4 { margin: 0 0 8px; font-size: 11px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); }
+.qhistory-row { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12px; line-height: 1.45; }
+.qhistory-row:last-child { border-bottom: none; }
+.qhistory-row .hd { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text-tertiary); white-space: nowrap; padding-top: 1px; }
+.qhistory-row .hev { color: var(--text-primary); }
+.qhistory-row .hnote { color: var(--gw-orange, #b45309); }
+.note-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(217,119,6,0.12); color: var(--gw-orange, #b45309); font-weight: 600; cursor: default; }
 /* Day bars — attempts vs outcomes, compact */
 .day-bar-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
 .day-bar-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text-tertiary); width: 72px; flex-shrink: 0; text-align: right; }
@@ -537,7 +549,7 @@
         <option value="10" selected>10 at a time</option>
         <option value="25">25 at a time</option>
       </select>
-      <span class="mono"><span id="queue-total">—</span> in queue</span>
+      <span class="mono" title="Live count from Airtable: contacts assigned to you, MINUS anyone signed up for an upcoming onboarding, marked do-not-contact / wrong number / skipped, attempted in the last 7 days, fellow organizers, and excluded schools. Airtable grid views have their own filters, so this number will not match a saved view unless the view mirrors these rules." style="cursor:help;border-bottom:1px dashed var(--border-hover);"><span id="queue-total">—</span> in queue ⓘ</span>
     </div>
     <p class="mono" id="list-hint" style="font-size:11px;color:var(--text-tertiary);margin:-6px 0 12px;letter-spacing:0.04em;"></p>
     <div class="queue-wrap" id="queue"></div>
@@ -607,6 +619,32 @@
     <div style="margin:24px 0 12px;display:flex;gap:8px;">
       <input id="find-input" type="text" placeholder="Type a name, phone, or email…" style="flex:1;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:12px 14px;border-radius:8px;font-size:14px;font-family:inherit;">
       <button id="find-btn" style="padding:12px 22px;border-radius:8px;background:var(--gw-purple);color:white;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Search</button>
+      <button id="addc-open" title="Add a brand-new prospect (e.g. a fresh FB lead) — dedupes against the base automatically" style="padding:12px 18px;border-radius:8px;background:transparent;color:var(--gw-purple);border:1px solid var(--gw-purple);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">+ Add contact</button>
+    </div>
+
+    <div id="addc-form" style="display:none;background:var(--bg-elevated);border:1px solid var(--border-hover);border-radius:10px;padding:18px;margin-bottom:14px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:12px;">New prospect · assigned to you</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <input id="ac-first" placeholder="First name *" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+        <input id="ac-last" placeholder="Last name *" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+        <input id="ac-email" type="email" placeholder="Email (email or phone required)" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+        <input id="ac-phone" placeholder="Phone" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+        <input id="ac-school" placeholder="School" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+        <input id="ac-zip" placeholder="Zip (fills county automatically)" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+        <select id="ac-source" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+          <option value="facebook">Source: Facebook</option>
+          <option value="referral">Source: referral / word of mouth</option>
+          <option value="event">Source: met at an event</option>
+          <option value="other">Source: other</option>
+        </select>
+        <input id="ac-role" placeholder="Role (Parent, Teacher…)" style="background:var(--bg-base);border:1px solid var(--border-hover);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-size:13px;font-family:inherit;">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;align-items:center;">
+        <span id="ac-status" style="font-size:12px;color:var(--text-tertiary);"></span>
+        <button id="ac-cancel" style="padding:8px 14px;border-radius:6px;background:transparent;color:var(--text-secondary);border:1px solid var(--border-hover);font-size:12px;cursor:pointer;font-family:inherit;">Cancel</button>
+        <button id="ac-save" style="padding:8px 16px;border-radius:6px;background:var(--gw-green);color:white;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Add prospect</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:10px;">Dedupes by email then phone — if they already exist you get the existing record, not a duplicate.</div>
     </div>
     <div class="queue-wrap" id="find-results">
       <div style="padding:32px;text-align:center;color:var(--text-tertiary);">Search for someone above.</div>
@@ -695,7 +733,7 @@ const ORGANIZER = 'kathryn'; // server-side filters /prospects, /confirmees, /qu
 // Jul 15-28 — the 7/7 → 7/21 rollover must happen on its own).
 const EVENTS = {
   '5_26': { label: '5/26 Orientation',          short: '5/26', date: '2026-05-26', signup: false },
-  '6_9':  { label: '6/9 No on 5 Onboarding',   short: '6/9',  date: '2026-06-09', signup: true },
+  '6_9':  { label: '6/9 No on 5 Onboarding',   short: '6/9',  date: '2026-06-09', signup: true, soft_attended: null }, // soft = raw Zoom headcount incl. anonymous joins — fill in from Ellen's report
   '6_23': { label: '6/23 No on 5 Onboarding',  short: '6/23', date: '2026-06-23', signup: true },
   '7_7':  { label: '7/7 No on 5 Onboarding',   short: '7/7',  date: '2026-07-07', signup: true },
   '7_21': { label: '7/21 No on 5 Onboarding',  short: '7/21', date: '2026-07-21', signup: true },
@@ -762,10 +800,19 @@ const NEXT_STEP_OPTIONS = {
 };
 for (const [k, ev] of Object.entries(EVENTS)) {
   if (!ev.signup) continue;
-  NEXT_STEP_OPTIONS[`signed-up-${k.replace('_','-')}`] = [
+  const key = `signed-up-${k.replace('_','-')}`;
+  NEXT_STEP_OPTIONS[key] = [
     `Send ${ev.short} Zoom email (button on Event tracking tab)`,
     `Add to reminder text list for day before ${ev.short}`,
     `Send personal text day-of ${ev.short}`,
+    'Other (write below)',
+  ];
+  // Combo: signed up AND booked a 1-1 on the same call
+  NEXT_STEP_OPTIONS[`${key}+oneonone`] = [
+    `Send ${ev.short} invite + 1-1 calendar invite`,
+    `Day-before reminders for both (${ev.short} + the 1-1)`,
+    `Send ${ev.short} Zoom email (button on Event tracking tab)`,
+    'Send calendar invite for the 1-1',
     'Other (write below)',
   ];
 }
@@ -787,21 +834,68 @@ function metaLine(c) {
   return parts.join(' · ');
 }
 function signalLine(c) {
-  if (c.log_count >= 5) return `★ ${c.log_count} prior events · warm`;
+  // The count is event_attendance history (could be last fall!) — so it's a
+  // hover/click popover that shows WHICH events and WHEN, not a bare number.
+  const hist = (txt) => `<span class="qhistory" data-history="${c.id}" title="Click to see which events and when">${txt}</span>`;
+  if (c.log_count >= 5) return hist(`★ ${c.log_count} prior events · warm`);
+  if (c.log_count > 0) return hist(`${c.log_count} prior event${c.log_count === 1 ? '' : 's'}`);
   if (c.organized_by_count > 0) return 'in network · organized';
-  if (c.log_count > 0) return `${c.log_count} prior events`;
   return c.leader_ladder ? c.leader_ladder.toLowerCase() : 'new lead';
 }
 // "Who last contacted this person and what happened" — PDF requirement for
 // onramp + reminder calls. Built from the contact's denormalized last-attempt
-// fields (full history lives in Airtable, one click away).
+// fields (full history lives in the popover + Airtable).
 function lastTouchLine(c) {
   if (!c.last_attempt_date) return '';
   const bits = [`<b>Last try:</b> ${escapeHtml(c.last_attempt_method || '?')} · ${escapeHtml(c.last_attempt_date)}`];
+  if (c.last_attempt_by) bits.push(`by ${escapeHtml(c.last_attempt_by)}`);
   if (c.last_attempt_result) bits.push(escapeHtml(c.last_attempt_result));
   if (c.next_step) bits.push(`next: ${escapeHtml(c.next_step)}`);
-  return `<div class="qlast-touch">${bits.join(' · ')}</div>`;
+  const noteChip = c.last_attempt_note
+    ? ` <span class="note-chip" title="${escapeHtml(c.last_attempt_note)}">📝 note</span>`
+    : '';
+  return `<div class="qlast-touch">${bits.join(' · ')}${noteChip}</div>`;
 }
+
+// History popover: lazy-loads /contact-history on first open, cached per contact.
+const historyCache = new Map();
+async function toggleHistoryPop(span) {
+  const person = span.closest('.qperson');
+  if (!person) return;
+  const existing = person.querySelector('.qhistory-pop');
+  if (existing) { existing.remove(); return; }
+  document.querySelectorAll('.qhistory-pop').forEach(p => p.remove());
+  const cid = span.dataset.history;
+  const pop = document.createElement('div');
+  pop.className = 'qhistory-pop';
+  pop.innerHTML = '<h4>History</h4><div style="color:var(--text-tertiary);font-size:12px;">Loading…</div>';
+  person.appendChild(pop);
+  try {
+    let data = historyCache.get(cid);
+    if (!data) {
+      const r = await authFetch(`${WORKER}/contact-history?id=${cid}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      data = await r.json();
+      historyCache.set(cid, data);
+    }
+    const rows = (data.entries || []).map(e => {
+      const what = e.kind === 'event'
+        ? `<span class="hev">${escapeHtml(e.event || 'Event')}</span> · ${escapeHtml(e.result || '')}`
+        : `${escapeHtml(e.method || '')}${e.result ? ' · ' + escapeHtml(e.result) : ''}${e.event ? ' · ' + escapeHtml(e.event) : ''}${e.organizer ? ' · by ' + escapeHtml(e.organizer) : ''}`;
+      const note = e.notes ? `<div class="hnote">📝 ${escapeHtml(e.notes)}</div>` : '';
+      return `<div class="qhistory-row"><span class="hd">${escapeHtml(e.date || '—')}</span><span>${what}${note}</span></div>`;
+    }).join('');
+    pop.innerHTML = `<h4>History · ${escapeHtml(data.name || '')}</h4>` +
+      (rows || '<div style="color:var(--text-tertiary);font-size:12px;">No logged history.</div>');
+  } catch (e) {
+    pop.innerHTML = `<h4>History</h4><div style="color:var(--gw-red);font-size:12px;">Couldn't load: ${e.message}</div>`;
+  }
+}
+document.addEventListener('click', (e) => {
+  const span = e.target.closest('.qhistory');
+  if (span) { e.preventDefault(); toggleHistoryPop(span); return; }
+  if (!e.target.closest('.qhistory-pop')) document.querySelectorAll('.qhistory-pop').forEach(p => p.remove());
+});
 
 // --- Cached counters: paint last-known values from localStorage on boot ---
 const COUNTER_CACHE_KEY = 'gw_kathryn_counter_cache_v2';
@@ -935,6 +1029,7 @@ function buildOutreachRow(c, i) {
     input.addEventListener('change', () => updateRow(row));
   });
   row.querySelector('.qoutcome-select').addEventListener('change', () => updateRow(row));
+  row.querySelector('.qalso')?.addEventListener('change', () => updateRow(row));
   const select = row.querySelector('.qnext-select');
   const freebox = row.querySelector('.qfree');
   select?.addEventListener('change', () => updateRow(row));
@@ -1074,7 +1169,7 @@ async function submitAdmin(row, adminOutcome) {
     const res = await authFetch(`${WORKER}/log`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact_id: row.dataset.contactId, methods: [], outcome: adminOutcome, notes }),
+      body: JSON.stringify({ contact_id: row.dataset.contactId, methods: [], outcome: adminOutcome, notes, organizer: ORGANIZER }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -1131,7 +1226,7 @@ async function submitRow(row) {
       const res = await authFetch(`${WORKER}/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contact_id: row.dataset.contactId, methods, outcome: oc, next_step, notes: oc === outcome ? notes : '' }),
+        body: JSON.stringify({ contact_id: row.dataset.contactId, methods, outcome: oc, next_step, notes: oc === outcome ? notes : '', organizer: ORGANIZER }),
       });
       data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -1790,16 +1885,35 @@ async function loadEventReports() {
         return `<tr><td>${k === 'none' ? 'not confirmed' : 'confirmed by ' + k}</td><td>${b.attended}</td><td>${b.no_show}</td><td>${rate == null ? '—' : rate + '%'}</td></tr>`;
       }).join('');
       const conv = s.conversion || {};
+      const hardCame = (s.attended || 0) + (s.walk_in || 0);
+      const soft = EVENTS[s.event]?.soft_attended ?? null;
+      // Flake honesty: a 0 with no no-shows marked means "not entered", not
+      // "nobody flaked". Show — with a nudge instead of a fake 0%.
+      const noShowDataMissing = (s.no_show || 0) === 0 && (s.signups || 0) > hardCame;
+      const flakeDisplay = noShowDataMissing ? '—' : (s.flake_rate == null ? '—' : s.flake_rate + '%');
+      const flakeNote = noShowDataMissing ? 'no-shows not marked yet — mark them on the Event tracking tab' : 'flake rate';
+      const banner = [
+        `${s.signups || 0} reg`,
+        `${hardCame} came (hard)${soft != null ? ` · ~${soft} on Zoom (soft)` : ''}`,
+        s.turnout_rate != null ? `${s.turnout_rate}% turnout` : null,
+        `flake ${flakeDisplay}`,
+        conv.rate != null ? `${conv.rate}% → action` : null,
+      ].filter(Boolean).join(' · ');
       return `
-      <div class="report-card">
-        <h3>${escapeHtml(s.label || s.event)} <span style="font-weight:400;color:var(--text-tertiary);font-size:12px;">· ${s.date || ''}</span></h3>
+      <details class="report-card">
+        <summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;">
+          <h3 style="margin:0;">${escapeHtml(s.label || s.event)} <span style="font-weight:400;color:var(--text-tertiary);font-size:12px;">· ${s.date || ''}</span></h3>
+          <span class="mono" style="font-size:11px;color:var(--text-secondary);">${banner} <span style="color:var(--gw-purple);">▾ details</span></span>
+        </summary>
+        <div style="margin-top:14px;">
         <div class="report-grid">
           <div class="rg"><div class="v">${s.signups ?? '—'}</div><div class="l">signed up</div></div>
           <div class="rg"><div class="v">${s.confirm_status?.Confirmed ?? 0}</div><div class="l">confirmed</div></div>
-          <div class="rg"><div class="v">${(s.attended || 0) + (s.walk_in || 0)}</div><div class="l">attended</div></div>
-          <div class="rg"><div class="v">${s.no_show ?? 0}</div><div class="l">no-shows</div></div>
+          <div class="rg"><div class="v">${hardCame}</div><div class="l">attended · hard count</div></div>
+          <div class="rg"><div class="v">${soft != null ? '~' + soft : '—'}</div><div class="l">on Zoom · soft count</div></div>
+          <div class="rg"><div class="v">${noShowDataMissing ? '—' : (s.no_show ?? 0)}</div><div class="l">no-shows</div></div>
           <div class="rg"><div class="v">${s.turnout_rate == null ? '—' : s.turnout_rate + '%'}</div><div class="l">turnout</div></div>
-          <div class="rg"><div class="v">${s.flake_rate == null ? '—' : s.flake_rate + '%'}</div><div class="l">flake rate</div></div>
+          <div class="rg"><div class="v">${flakeDisplay}</div><div class="l">${flakeNote}</div></div>
           <div class="rg"><div class="v">${conv.rate == null ? '—' : conv.rate + '%'}</div><div class="l">→ any action</div></div>
           <div class="rg"><div class="v">${conv.with_commitment ?? '—'}</div><div class="l">≥1 commitment</div></div>
           <div class="rg"><div class="v">${conv.one_on_one_rate == null ? '—' : conv.one_on_one_rate + '%'}</div><div class="l">→ 1-1 booked</div></div>
@@ -1819,7 +1933,9 @@ async function loadEventReports() {
             ${(s.geo.cities || []).map(g => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border);"><span>${escapeHtml(g.name)}</span><b>${g.count}</b></div>`).join('') || '<div style="font-size:12px;color:var(--text-tertiary);">no city data</div>'}
           </div>
         </div>` : ''}
-      </div>`;
+        ${soft == null ? `<p style="margin:12px 0 0;font-size:11.5px;color:var(--gw-orange,#b45309);">Soft (raw Zoom) headcount not recorded — anonymous "iPhone" joins are invisible to the hard count. Zoom registration closes this gap.</p>` : ''}
+        </div>
+      </details>`;
     }).join('');
 
     host.innerHTML = `
@@ -1859,6 +1975,47 @@ async function runSearch() {
 }
 document.getElementById('find-btn').addEventListener('click', runSearch);
 document.getElementById('find-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
+
+// Add-contact (fresh prospect intake, e.g. FB leads)
+document.getElementById('addc-open')?.addEventListener('click', () => {
+  const f = document.getElementById('addc-form');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+});
+document.getElementById('ac-cancel')?.addEventListener('click', () => {
+  document.getElementById('addc-form').style.display = 'none';
+});
+document.getElementById('ac-save')?.addEventListener('click', async () => {
+  const st = document.getElementById('ac-status');
+  const v = (id) => document.getElementById(id).value.trim();
+  const payload = {
+    first: v('ac-first'), last: v('ac-last'), email: v('ac-email'), phone: v('ac-phone'),
+    school: v('ac-school'), zip: v('ac-zip'), role: v('ac-role') || 'Parent',
+    source: document.getElementById('ac-source').value,
+    organizer: ORGANIZER,
+  };
+  if (!payload.first || !payload.last) { st.textContent = '✕ First and last name required'; st.style.color = 'var(--gw-red)'; return; }
+  if (!payload.email && !payload.phone) { st.textContent = '✕ Email or phone required'; st.style.color = 'var(--gw-red)'; return; }
+  st.textContent = 'Saving…'; st.style.color = 'var(--text-tertiary)';
+  try {
+    const r = await authFetch(`${WORKER}/add-contact`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    st.textContent = d.matched_existing ? `✓ Already in the base: ${d.existing_name} — showing them below` : '✓ Added to your queue';
+    st.style.color = 'var(--gw-green)';
+    // Show the new/matched contact as a search result so they can log right away
+    document.getElementById('find-input').value = payload.email || payload.phone;
+    runSearch();
+    setTimeout(() => {
+      document.getElementById('addc-form').style.display = 'none';
+      ['ac-first','ac-last','ac-email','ac-phone','ac-school','ac-zip','ac-role'].forEach(id => document.getElementById(id).value = '');
+      st.textContent = '';
+    }, 1600);
+  } catch (e) {
+    st.textContent = `✕ ${e.message}`; st.style.color = 'var(--gw-red)';
+  }
+});
 
 // === Interaction logic ===
 const ADMIN_OUTCOMES = ['skipped', 'wrong-number', 'do-not-contact'];
@@ -1963,7 +2120,10 @@ function updateRow(row) {
     if (!extras.length) { alsoHost.innerHTML = ''; row.dataset.alsoFor = ''; }
   }
 
-  const optsKey = outcome.startsWith('signed-up') ? outcome : normalizedOutcome(outcome);
+  const alsoOneOnOne = !!row.querySelector('.qalso input[data-also="oneonone"]:checked');
+  const optsKey = outcome.startsWith('signed-up')
+    ? (alsoOneOnOne ? `${outcome}+oneonone` : outcome)
+    : normalizedOutcome(outcome);
   // Next-step dropdown — required whenever a real connection happened
   const nsblock = row.querySelector('.qnextstep');
   const select = row.querySelector('.qnext-select');

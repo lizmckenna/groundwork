@@ -13,6 +13,7 @@ const BASE = 'appQdixHbuttPldx6';
 const CONTACTS_TBL = 'tblJeHqz13AOvq71A';
 const CONTACT_LOG_TBL = 'tblXQXzxf8z1oht7z';
 const EVENTS_TBL = 'tblHJG5AJagnOr33U';
+const EVENT_ATTENDANCE_TBL = 'tbl4tvGVOqIPTylrr';
 const METHOD_MAP = { called: 'Call', texted: 'Text', emailed: 'Email' };
 const METHOD_REVERSE = { Call: 'called', Text: 'texted', Email: 'emailed' };
 const CONFIRM_EVENT = 'Confirm 5/26';
@@ -370,7 +371,8 @@ export default {
       }
       if (url.pathname === '/admin/base-schema' && request.method === 'GET') {
         const k = request.headers.get('X-Admin-Key');
-        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const schemaOk = (env.ADMIN_KEY && k === env.ADMIN_KEY) || (env.SETUP_KEY && k === env.SETUP_KEY);
+        if (!schemaOk) return json({ error: 'forbidden' }, 403);
         const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables`, {
           headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}` },
         });
@@ -508,6 +510,28 @@ export default {
         ]}});
         for (const f of defs) {
           const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables/${CONTACTS_TBL}/fields`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(f),
+          });
+          if (r.ok) out.fields_created.push(f.name);
+          else out.errors.push({ field: f.name, status: r.status, body: await r.text() });
+        }
+        return json(out);
+      }
+      if (url.pathname === '/admin/setup-pilot-fields' && request.method === 'POST') {
+        // One-shot: attribution + note denormalization fields.
+        const k = request.headers.get('X-Admin-Key');
+        const authorized = (env.ADMIN_KEY && k === env.ADMIN_KEY) || (env.SETUP_KEY && k === env.SETUP_KEY);
+        if (!authorized) return json({ error: 'forbidden' }, 403);
+        const out = { fields_created: [], errors: [] };
+        const jobs = [
+          { tbl: CONTACTS_TBL, f: { name: 'last_attempt_by', type: 'singleLineText' } },
+          { tbl: CONTACTS_TBL, f: { name: 'last_attempt_note', type: 'multilineText' } },
+          { tbl: CONTACT_LOG_TBL, f: { name: 'organizer', type: 'singleLineText' } },
+        ];
+        for (const { tbl, f } of jobs) {
+          const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables/${tbl}/fields`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
             body: JSON.stringify(f),
@@ -699,6 +723,8 @@ export default {
       if (!email) return json({ error: 'unauthorized' }, 401);
       if (url.pathname === '/prospects') return await getProspects(env, url);
       if (url.pathname === '/call-list') return await getCallList(env, url);
+      if (url.pathname === '/contact-history') return await getContactHistory(env, url);
+      if (url.pathname === '/add-contact' && request.method === 'POST') return await addContact(request, env);
       if (url.pathname === '/log' && request.method === 'POST') return await logOutcome(request, env);
       if (url.pathname === '/undo' && request.method === 'POST') return await undoSave(request, env);
       if (url.pathname === '/confirmees') return await getConfirmees(env, url);
@@ -1745,7 +1771,7 @@ async function getProspects(env, url) {
   const organizer = url.searchParams.get('organizer');
   const filter = prospectsFilter(organizer);
   const fields = ['Name','first','last','phone','email','school','district','log_count','organized_by','leader_ladder',
-                  'last_attempt_date','last_attempt_method','last_attempt_result','next_step'];
+                  'last_attempt_date','last_attempt_method','last_attempt_result','next_step','last_attempt_by','last_attempt_note'];
   let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=${n}`;
   q += `&sort%5B0%5D%5Bfield%5D=log_count&sort%5B0%5D%5Bdirection%5D=desc`;
   for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
@@ -1767,6 +1793,8 @@ async function getProspects(env, url) {
     last_attempt_method: r.fields.last_attempt_method || null,
     last_attempt_result: r.fields.last_attempt_result || null,
     next_step: r.fields.next_step || null,
+    last_attempt_by: r.fields.last_attempt_by || null,
+    last_attempt_note: r.fields.last_attempt_note || null,
   })));
 }
 
@@ -1784,7 +1812,7 @@ async function getProspects(env, url) {
 // them with one code path.
 // =========================================================================
 const PROSPECT_FIELDS = ['Name','first','last','phone','email','school','district','log_count','organized_by','leader_ladder',
-  'last_attempt_date','last_attempt_method','last_attempt_result','next_step'];
+  'last_attempt_date','last_attempt_method','last_attempt_result','next_step','last_attempt_by','last_attempt_note'];
 
 function rowFromRecord(r) {
   return {
@@ -1801,6 +1829,8 @@ function rowFromRecord(r) {
     last_attempt_method: r.fields.last_attempt_method || null,
     last_attempt_result: r.fields.last_attempt_result || null,
     next_step: r.fields.next_step || null,
+    last_attempt_by: r.fields.last_attempt_by || null,
+    last_attempt_note: r.fields.last_attempt_note || null,
   };
 }
 
@@ -1920,6 +1950,113 @@ async function getCallList(env, urlObj) {
   return json({ error: `unknown list '${list}' — use fresh, unreached, or unconverted` }, 400);
 }
 
+// =========================================================================
+// /contact-history?id=recXXX — full touch + event history for one contact.
+// Powers the hover popover on the call sheet ("what events did they actually
+// attend, and when? what did the last caller note?").
+// =========================================================================
+async function getContactHistory(env, urlObj) {
+  const cid = urlObj.searchParams.get('id');
+  if (!cid) return json({ error: 'id required' }, 400);
+  const contact = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
+  const logIds = Array.isArray(contact.fields.contact_log) ? contact.fields.contact_log : [];
+  const evIds = Array.isArray(contact.fields.event_attendance) ? contact.fields.event_attendance : [];
+  const entries = [];
+
+  // Outreach touches (calls/texts/emails/confirms) with notes + who
+  for (let i = 0; i < logIds.length && i < 60; i += 10) {
+    const chunk = logIds.slice(i, i + 10);
+    const f = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+    const q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=10&fields%5B%5D=date&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=event&fields%5B%5D=notes&fields%5B%5D=organizer`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      entries.push({
+        kind: 'touch',
+        date: r.fields.date || null,
+        method: r.fields.method || null,
+        result: r.fields.result || null,
+        event: r.fields.event || null,
+        notes: r.fields.notes || null,
+        organizer: r.fields.organizer || null,
+      });
+    }
+  }
+
+  // Historical event attendance (its own table — this is what the
+  // "N prior events" count on the call sheet refers to)
+  for (let i = 0; i < evIds.length && i < 60; i += 10) {
+    const chunk = evIds.slice(i, i + 10);
+    const f = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+    const q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=10&fields%5B%5D=date&fields%5B%5D=event&fields%5B%5D=attended&fields%5B%5D=notes`;
+    const d = await at(env, `/${BASE}/${EVENT_ATTENDANCE_TBL}${q}`);
+    for (const r of d.records) {
+      entries.push({
+        kind: 'event',
+        date: r.fields.date || null,
+        method: 'Event',
+        result: r.fields.attended === false ? 'No-show' : 'Attended',
+        event: r.fields.event || null,
+        notes: r.fields.notes || null,
+        organizer: null,
+      });
+    }
+  }
+
+  entries.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  return json({ contact_id: cid, name: contact.fields.Name || '', entries: entries.slice(0, 40) });
+}
+
+// =========================================================================
+// /add-contact — fresh prospect intake from the dashboard (e.g. Stephanie's
+// FB leads). Same dedupe as walk-ins but NO attendance/signup side effects.
+// =========================================================================
+async function addContact(request, env) {
+  const body = await request.json();
+  const { first, last, email, phone, school, district, city, zip, role, source, organizer } = body;
+  if (!first || !last) return json({ error: 'first and last name required' }, 400);
+  if (!email && !phone) return json({ error: 'email or phone required (dedupe + outreach both need one)' }, 400);
+  const orgId = organizerId(organizer);
+
+  // Dedupe: email first, then phone — never create a second record
+  let existingId = null, existingName = null;
+  if (email) {
+    const e = String(email).toLowerCase().trim();
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${e}'`)}&maxRecords=1`);
+    if (r.records.length > 0) { existingId = r.records[0].id; existingName = r.records[0].fields.Name; }
+  }
+  if (!existingId && phone) {
+    const digits = String(phone).replace(/\D/g, '').slice(-10);
+    if (digits.length === 10) {
+      const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+      if (r.records.length > 0) { existingId = r.records[0].id; existingName = r.records[0].fields.Name; }
+    }
+  }
+  if (existingId) {
+    return json({ ok: true, matched_existing: true, contact_id: existingId, existing_name: existingName });
+  }
+
+  const fields = {
+    first: String(first).trim(),
+    last: String(last).trim(),
+    leader_ladder: 'Prospect',
+    source: String(source || 'dashboard add').trim(),
+  };
+  if (orgId) fields.assigned_organizer = [orgId];
+  if (email) fields.email = String(email).toLowerCase().trim();
+  if (phone) fields.phone = String(phone).trim();
+  if (school) fields.school = String(school).trim();
+  if (district) fields.district = String(district).trim();
+  if (city) fields.city = String(city).trim();
+  if (zip) { fields.zip = String(zip).trim(); const cty = zipToCounty(String(zip).trim().slice(0,5)); if (cty) fields.county = cty; }
+  if (role) fields.role = Array.isArray(role) ? role : [role];
+  const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+    method: 'POST',
+    body: JSON.stringify({ records: [{ fields }], typecast: true }),
+  });
+  await invalidateReadCaches(env);
+  return json({ ok: true, created: true, contact_id: c.records[0].id });
+}
+
 async function getQueueCount(env, urlObj) {
   const organizer = urlObj ? urlObj.searchParams.get('organizer') : null;
   const cacheKey = organizer ? `queue:count:${organizer}` : 'queue:count';
@@ -1971,10 +2108,11 @@ function resolveOutcome(outcome, methodCount) {
 
 async function logOutcome(request, env) {
   const body = await request.json();
-  const { contact_id, methods = [], outcome, next_step, notes } = body;
+  const { contact_id, methods = [], outcome, next_step, notes, organizer = null } = body;
   if (!contact_id) return json({ error: 'contact_id required' }, 400);
   const date = todayCT();
   const { result, event } = resolveOutcome(outcome, methods.length);
+  const organizerLabel = (ORGANIZER_PROFILE[String(organizer || '').toLowerCase()] || {}).name || organizer || null;
 
   const ADMIN_OUTCOMES = ['skipped','wrong-number','do-not-contact'];
   const isAdmin = ADMIN_OUTCOMES.includes(outcome);
@@ -1994,6 +2132,7 @@ async function logOutcome(request, env) {
         result,
         contact: [contact_id],
         ...(combinedNotes ? { notes: combinedNotes } : {}),
+        ...(organizerLabel ? { organizer: organizerLabel } : {}),
       }
     }];
   } else {
@@ -2003,6 +2142,7 @@ async function logOutcome(request, env) {
       if (result) f.result = result;
       if (event) f.event = event;
       if (combinedNotes) f.notes = combinedNotes;
+      if (organizerLabel) f.organizer = organizerLabel;
       return { fields: f };
     });
   }
@@ -2023,6 +2163,10 @@ async function logOutcome(request, env) {
     last_attempt_date: date,
     last_attempt_method: isAdmin ? 'Other' : (METHOD_MAP[methods[0]] || methods[0]),
     last_attempt_result: contactLastResult,
+    // Denormalized so the call sheet can show WHO tried last and what they
+    // noted, without a per-row log query.
+    last_attempt_by: organizerLabel || '',
+    last_attempt_note: combinedNotes || '',
   };
   // Event-specific denormalized status field — so each event has its own
   // confirm queue without colliding on last_attempt_result.
@@ -2288,6 +2432,7 @@ async function undoSave(request, env) {
     body: JSON.stringify({ fields: {
       last_attempt_date: null, last_attempt_method: null,
       last_attempt_result: null, next_step: '',
+      last_attempt_by: '', last_attempt_note: '',
     }, typecast: true })
   });
   await invalidateReadCaches(env);
