@@ -879,9 +879,12 @@ async function toggleHistoryPop(span) {
       historyCache.set(cid, data);
     }
     const rows = (data.entries || []).map(e => {
+      const who = e.organizer
+        ? (e.inferred ? ` · <span title="Attribution inferred from list assignment (logs before 6/11 didn't record the caller — lists don't overlap, so this is near-certain)">likely ${escapeHtml(e.organizer)}</span>` : ` · by ${escapeHtml(e.organizer)}`)
+        : '';
       const what = e.kind === 'event'
         ? `<span class="hev">${escapeHtml(e.event || 'Event')}</span> · ${escapeHtml(e.result || '')}`
-        : `${escapeHtml(e.method || '')}${e.result ? ' · ' + escapeHtml(e.result) : ''}${e.event ? ' · ' + escapeHtml(e.event) : ''}${e.organizer ? ' · by ' + escapeHtml(e.organizer) : ''}`;
+        : `${escapeHtml(e.method || '')}${e.result ? ' · ' + escapeHtml(e.result) : ''}${e.event ? ' · ' + escapeHtml(e.event) : ''}${who}`;
       const note = e.notes ? `<div class="hnote">📝 ${escapeHtml(e.notes)}</div>` : '';
       return `<div class="qhistory-row"><span class="hd">${escapeHtml(e.date || '—')}</span><span>${what}${note}</span></div>`;
     }).join('');
@@ -1549,9 +1552,7 @@ async function loadEventStrip() {
       stat(s.signups ?? '—', 'signed up'),
       stat(s.confirm_status?.Confirmed ?? 0, 'confirmed'),
       stat((s.attended || 0) + (s.walk_in || 0), 'attended'),
-      stat(s.no_show ?? 0, 'no-shows'),
       stat(s.turnout_rate == null ? '—' : `${s.turnout_rate}%`, 'turnout'),
-      stat(s.flake_rate == null ? '—' : `${s.flake_rate}%`, 'flake rate'),
     ].join('');
   } catch (e) {
     host.innerHTML = '';
@@ -1654,6 +1655,7 @@ async function fetchEventTracking() {
       const zb = row.querySelector('.qzoom-btn');
       if (zb) zb.addEventListener('click', () => sendZoomEmail(row, c.email, activeEventKey));
     });
+    prefetchHistories(list);
   } catch (e) {
     chost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load: ${e.message}</div>`;
   }
@@ -1904,14 +1906,11 @@ async function loadEventReports() {
       const soft = EVENTS[s.event]?.soft_attended ?? null;
       // Flake honesty: a 0 with no no-shows marked means "not entered", not
       // "nobody flaked". Show — with a nudge instead of a fake 0%.
-      const noShowDataMissing = (s.no_show || 0) === 0 && (s.signups || 0) > hardCame;
-      const flakeDisplay = noShowDataMissing ? '—' : (s.flake_rate == null ? '—' : s.flake_rate + '%');
-      const flakeNote = noShowDataMissing ? 'no-shows not marked yet — mark them on the Event tracking tab' : 'flake rate';
+
       const banner = [
         `${s.signups || 0} reg`,
-        `${hardCame} came (hard)${soft != null ? ` · ~${soft} on Zoom (soft)` : ''}`,
+        `${hardCame} came (hard)${soft != null ? ` · ~${soft} Zoom` : ''}`,
         s.turnout_rate != null ? `${s.turnout_rate}% turnout` : null,
-        `flake ${flakeDisplay}`,
         conv.rate != null ? `${conv.rate}% → action` : null,
       ].filter(Boolean).join(' · ');
       return `
@@ -1926,15 +1925,15 @@ async function loadEventReports() {
           <div class="rg"><div class="v">${s.confirm_status?.Confirmed ?? 0}</div><div class="l">confirmed</div></div>
           <div class="rg"><div class="v">${hardCame}</div><div class="l">attended · hard count</div></div>
           <div class="rg"><div class="v">${soft != null ? '~' + soft : '—'}</div><div class="l">on Zoom · soft count</div></div>
-          <div class="rg"><div class="v">${noShowDataMissing ? '—' : (s.no_show ?? 0)}</div><div class="l">no-shows</div></div>
-          <div class="rg"><div class="v">${s.turnout_rate == null ? '—' : s.turnout_rate + '%'}</div><div class="l">turnout</div></div>
-          <div class="rg"><div class="v">${flakeDisplay}</div><div class="l">${flakeNote}</div></div>
+          <div class="rg"><div class="v">${s.turnout_rate == null ? '—' : s.turnout_rate + '%'}</div><div class="l">turnout · of signups</div></div>
+          <div class="rg"><div class="v">${s.no_show_rate == null ? '—' : s.no_show_rate + '%'}</div><div class="l">didn't come · of signups</div></div>
           <div class="rg"><div class="v">${conv.rate == null ? '—' : conv.rate + '%'}</div><div class="l">→ any action</div></div>
           <div class="rg"><div class="v">${conv.with_commitment ?? '—'}</div><div class="l">≥1 commitment</div></div>
           <div class="rg"><div class="v">${conv.one_on_one_rate == null ? '—' : conv.one_on_one_rate + '%'}</div><div class="l">→ 1-1 booked</div></div>
         </div>
+        <div class="ev-map" data-points='${escapeHtml(JSON.stringify((s.geo && s.geo.points) || []))}' style="height:280px;border-radius:10px;border:1px solid var(--border);margin:14px 0;display:${(s.geo && s.geo.points && s.geo.points.length) ? 'block' : 'none'};"></div>
         <table class="method-matrix">
-          <thead><tr><th>Did confirmation work?</th><th>came</th><th>no-show</th><th>show rate</th></tr></thead>
+          <thead><tr><th>Did confirmation work?</th><th>came</th><th>didn't come*</th><th>show rate</th></tr></thead>
           <tbody>${matrixRows}</tbody>
         </table>
         ${(s.geo && (s.geo.counties?.length || s.geo.cities?.length)) ? `
@@ -1948,7 +1947,7 @@ async function loadEventReports() {
             ${(s.geo.cities || []).map(g => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border);"><span>${escapeHtml(g.name)}</span><b>${g.count}</b></div>`).join('') || '<div style="font-size:12px;color:var(--text-tertiary);">no city data</div>'}
           </div>
         </div>` : ''}
-        ${soft == null ? `<p style="margin:12px 0 0;font-size:11.5px;color:var(--gw-orange,#b45309);">Soft (raw Zoom) headcount not recorded — anonymous "iPhone" joins are invisible to the hard count. Zoom registration closes this gap.</p>` : ''}
+        <p style="margin:12px 0 0;font-size:11.5px;color:var(--gw-red);font-weight:600;">Data caveat: the hard count only includes people we could match by name. Anonymous Zoom joins ("iPhone", first names) are invisible — ${soft != null ? `the raw Zoom count was ~${soft}` : 'no raw Zoom count recorded for this event'} . Fix: require Zoom registration so every join carries a name + email. *"Didn't come" includes signups never marked attended.</p>
         </div>
       </details>`;
     }).join('');
@@ -1959,6 +1958,45 @@ async function loadEventReports() {
         ${overTime}
       </div>
       ${cards}`;
+
+    // Lazy Leaflet: load the library once, init each event's map when its
+    // details card is opened (hover a dot = who called in from where).
+    function ensureLeaflet(cb) {
+      if (window.L) return cb();
+      const css = document.createElement('link');
+      css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(css);
+      const js = document.createElement('script');
+      js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      js.onload = cb;
+      document.head.appendChild(js);
+    }
+    host.querySelectorAll('details.report-card').forEach(det => {
+      det.addEventListener('toggle', () => {
+        if (!det.open) return;
+        const el = det.querySelector('.ev-map');
+        if (!el || el.dataset.done) return;
+        const points = JSON.parse(el.dataset.points || '[]');
+        if (!points.length) return;
+        el.dataset.done = '1';
+        ensureLeaflet(() => {
+          const map = L.map(el, { scrollWheelZoom: false });
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap', maxZoom: 12,
+          }).addTo(map);
+          const group = [];
+          points.forEach(pt => {
+            const m = L.circleMarker([pt.lat, pt.lon], {
+              radius: 6 + Math.min(10, pt.count * 2),
+              color: '#7c6cf0', fillColor: '#7c6cf0', fillOpacity: 0.55, weight: 1.5,
+            }).addTo(map);
+            m.bindTooltip(`<b>${pt.place}</b> (${pt.zip}) — ${pt.count} ${pt.count === 1 ? 'person' : 'people'}`);
+            group.push(m);
+          });
+          map.fitBounds(L.featureGroup(group).getBounds().pad(0.25));
+        });
+      });
+    });
   } catch (e) {
     host.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Couldn't load event stats: ${e.message}</div>`;
   }
@@ -1984,6 +2022,7 @@ async function runSearch() {
     // Same condensed row UI as the Today queue — one code path.
     findHost.innerHTML = '';
     list.forEach((c, i) => findHost.appendChild(buildOutreachRow(c, i)));
+    prefetchHistories(list);
   } catch (e) {
     findHost.innerHTML = `<div style="padding:24px;color:var(--gw-red);">Search failed: ${e.message}</div>`;
   }
