@@ -1951,6 +1951,18 @@ async function amplifierLog(request, env) {
   if (cStreet) voterFields.street_address = cStreet;
   if (cZip) voterFields.zip = cZip;
   if (cCity) voterFields.city = cCity;
+  // Interests are commitments — surface them on staff dashboards' ✦ pill
+  if (cInterests.length) {
+    try {
+      let prevC = '';
+      if (voterId) {
+        const curV = await at(env, `/${BASE}/${CONTACTS_TBL}/${voterId}?fields%5B%5D=commitments_added`);
+        prevC = String(curV.fields.commitments_added || '').trim();
+      }
+      const lines = cInterests.map(i => `${today} · ${i} (via amplifier)`).join('\n');
+      voterFields.commitments_added = prevC ? `${prevC}\n${lines}` : lines;
+    } catch (e) { /* non-fatal */ }
+  }
   if (voterId) {
     try {
       await at(env, `/${BASE}/${CONTACTS_TBL}/${voterId}`, {
