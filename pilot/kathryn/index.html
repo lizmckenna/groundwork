@@ -396,6 +396,13 @@
 .qoutcome-select { background: var(--bg-elevated); border: 1px solid var(--border-hover); color: var(--text-primary); padding: 8px 10px; border-radius: 6px; font-size: 12.5px; font-family: inherit; min-width: 190px; }
 .qlast-touch { margin-top: 6px; font-size: 11px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.03em; }
 .qlast-touch b { color: var(--text-secondary); font-weight: 600; }
+/* Three-pill row: events / attempts / commitments */
+.pill-row { display: flex; gap: 6px; margin: 4px 0 2px; flex-wrap: wrap; }
+.pill { display: inline-flex; align-items: center; gap: 3px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.04em; padding: 3px 9px; border-radius: 999px; cursor: pointer; border: 1px solid transparent; }
+.pill-events   { background: var(--gw-purple-soft, rgba(124,108,240,0.14)); color: var(--gw-purple); }
+.pill-attempts { background: rgba(100,116,139,0.14); color: var(--text-secondary); }
+.pill-commits  { background: rgba(217,119,6,0.13); color: var(--gw-orange, #b45309); }
+.pill:hover { border-color: currentColor; }
 /* Contact history popover (hover/click on the prior-events count) */
 .qhistory { cursor: pointer; border-bottom: 1px dashed var(--border-hover); }
 .qhistory:hover { color: var(--gw-purple); }
@@ -539,11 +546,7 @@
 
     <div class="section-head" style="flex-wrap:wrap;gap:10px;">
       <h2 style="margin-right:auto;">Call list</h2>
-      <select id="list-picker" class="ev-picker" title="Switch which list you're calling through">
-        <option value="fresh">Fresh prospects · warmest first</option>
-        <option value="unreached">Attempted, not reached · cadence due</option>
-        <option value="unconverted">Came to an onboarding · book the 1-1</option>
-      </select>
+      <select id="list-picker" class="ev-picker" title="Switch which list you're calling through"></select>
       <select id="page-size" class="ev-picker" title="How many people per batch">
         <option value="5">5 at a time</option>
         <option value="10" selected>10 at a time</option>
@@ -732,19 +735,30 @@ const ORGANIZER = 'kathryn'; // server-side filters /prospects, /confirmees, /qu
 // has to hand-flip the dashboard when an event passes (Liz is offline
 // Jul 15-28 — the 7/7 → 7/21 rollover must happen on its own).
 const EVENTS = {
-  '5_26': { label: '5/26 Orientation',          short: '5/26', date: '2026-05-26', signup: false },
-  '6_9':  { label: '6/9 No on 5 Onboarding',   short: '6/9',  date: '2026-06-09', signup: true, soft_attended: 40 }, // soft = raw Zoom headcount (Ellen's 6/9 report, bots excluded)
-  '6_23': { label: '6/23 No on 5 Onboarding',  short: '6/23', date: '2026-06-23', signup: true },
-  '7_7':  { label: '7/7 No on 5 Onboarding',   short: '7/7',  date: '2026-07-07', signup: true },
-  '7_21': { label: '7/21 No on 5 Onboarding',  short: '7/21', date: '2026-07-21', signup: true },
+  '5_26': { type: 'legacy',     label: '5/26 Orientation',         short: '5/26', date: '2026-05-26', signup: false },
+  '6_9':  { type: 'onboarding', label: '6/9 No on 5 Onboarding',   short: '6/9',  date: '2026-06-09', signup: true, soft_attended: 40 },
+  '6_23': { type: 'onboarding', label: '6/23 No on 5 Onboarding',  short: '6/23', date: '2026-06-23', signup: true },
+  '7_7':  { type: 'onboarding', label: '7/7 No on 5 Onboarding',   short: '7/7',  date: '2026-07-07', signup: true },
+  '7_21': { type: 'onboarding', label: '7/21 No on 5 Onboarding',  short: '7/21', date: '2026-07-21', signup: true },
+  // Trainings — dates from parents4mopublicschools.org/trainings (canonical)
+  'hm_6_3':   { type: 'hm',  label: 'HM Training 6/3',   short: 'HM 6/3',   date: '2026-06-03', signup: true },
+  'hm_6_16':  { type: 'hm',  label: 'HM Training 6/16',  short: 'HM 6/16',  date: '2026-06-16', signup: true },
+  'hm_7_1':   { type: 'hm',  label: 'HM Training 7/1',   short: 'HM 7/1',   date: '2026-07-01', signup: true },
+  'hm_7_16':  { type: 'hm',  label: 'HM Training 7/16',  short: 'HM 7/16',  date: '2026-07-16', signup: true },
+  'hm_7_29':  { type: 'hm',  label: 'HM Training 7/29',  short: 'HM 7/29',  date: '2026-07-29', signup: true },
+  'amp_6_11': { type: 'amp', label: 'Amplifier 6/11',    short: 'Amp 6/11', date: '2026-06-11', signup: true },
+  'amp_6_27': { type: 'amp', label: 'Amplifier 6/27',    short: 'Amp 6/27', date: '2026-06-27', signup: true },
+  'amp_7_6':  { type: 'amp', label: 'Amplifier 7/6',     short: 'Amp 7/6',  date: '2026-07-06', signup: true },
+  'amp_7_21': { type: 'amp', label: 'Amplifier 7/21',    short: 'Amp 7/21', date: '2026-07-21', signup: true },
 };
 const _today = todayCT();
 for (const ev of Object.values(EVENTS)) ev.past = ev.date < _today;
-const _upcoming = Object.keys(EVENTS)
-  .filter(k => EVENTS[k].signup && !EVENTS[k].past)
+const upcomingOfType = (type) => Object.keys(EVENTS)
+  .filter(k => EVENTS[k].type === type && EVENTS[k].signup && !EVENTS[k].past)
   .sort((a, b) => EVENTS[a].date.localeCompare(EVENTS[b].date));
+const _upcoming = upcomingOfType('onboarding');
 const _pastOnboardings = Object.keys(EVENTS)
-  .filter(k => EVENTS[k].signup && EVENTS[k].past)
+  .filter(k => EVENTS[k].type === 'onboarding' && EVENTS[k].past)
   .sort((a, b) => EVENTS[b].date.localeCompare(EVENTS[a].date));
 const CURRENT_EVENT = _upcoming[0] || '7_21';   // what we're turning out to
 const NEXT_EVENT = _upcoming[1] || null;        // "next two available" (PDF)
@@ -833,14 +847,31 @@ function metaLine(c) {
   if (c.district) parts.push(escapeHtml(c.district)); else parts.push(fixChip(c, 'district'));
   return parts.join(' · ');
 }
-function signalLine(c) {
-  // The count is event_attendance history (could be last fall!) — so it's a
-  // hover/click popover that shows WHICH events and WHEN, not a bare number.
-  const hist = (txt) => `<span class="qhistory" data-history="${c.id}" title="Click to see which events and when">${txt}</span>`;
-  if (c.log_count >= 5) return hist(`★ ${c.log_count} prior events · warm`);
-  if (c.log_count > 0) return hist(`${c.log_count} prior event${c.log_count === 1 ? '' : 's'}`);
-  if (c.organized_by_count > 0) return 'in network · organized';
-  return c.leader_ladder ? c.leader_ladder.toLowerCase() : 'new lead';
+function pillsLine(c) {
+  // Three at-a-glance pills (Ellen call 6/11): Events · Attempts · Commitments.
+  // Distinct colors; first two open the Airtable-backed history popover
+  // (filtered), commitments renders instantly from row data.
+  const evN = c.log_count || 0;
+  const atN = c.attempt_count || 0;
+  const commitItems = commitmentsOf(c);
+  const pills = [];
+  pills.push(`<span class="pill pill-events qhistory" data-history="${c.id}" data-kind="event" title="Every event they've attended, with dates">📅 ${evN} event${evN === 1 ? '' : 's'}</span>`);
+  pills.push(`<span class="pill pill-attempts qhistory" data-history="${c.id}" data-kind="touch" title="Every call/text/email: when, what happened, who tried">📞 ${atN} attempt${atN === 1 ? '' : 's'}</span>`);
+  pills.push(`<span class="pill pill-commits qcommits" data-contact="${c.id}" title="What they committed to and signed up for">✦ ${commitItems.length} commitment${commitItems.length === 1 ? '' : 's'}</span>`);
+  return `<div class="pill-row">${pills.join('')}</div>`;
+}
+function commitmentsOf(c) {
+  const items = [];
+  String(c.commitments || '').split('·').map(x => x.trim()).filter(Boolean)
+    .forEach(x => items.push({ kind: 'A5 commitment', text: x }));
+  String(c.hm_commitments || '').split('·').map(x => x.trim()).filter(Boolean)
+    .forEach(x => items.push({ kind: 'House meeting', text: x }));
+  for (const [k, v] of Object.entries(c.signups || {})) {
+    if (v === 'Signed up' && EVENTS[k]) items.push({ kind: 'Signed up', text: EVENTS[k].label });
+    else if (v && EVENTS[k]) items.push({ kind: v, text: EVENTS[k].label });
+  }
+  if (c.one_on_one_booked) items.push({ kind: '1-1', text: '1-1 booked' });
+  return items;
 }
 // "Who last contacted this person and what happened" — PDF requirement for
 // onramp + reminder calls. Built from the contact's denormalized last-attempt
@@ -866,6 +897,7 @@ async function toggleHistoryPop(span) {
   if (existing) { existing.remove(); return; }
   document.querySelectorAll('.qhistory-pop').forEach(p => p.remove());
   const cid = span.dataset.history;
+  const kindFilter = span.dataset.kind || null;
   const pop = document.createElement('div');
   pop.className = 'qhistory-pop';
   pop.innerHTML = '<h4>History</h4><div style="color:var(--text-tertiary);font-size:12px;">Pulling full history from Airtable… first open can take a few seconds.</div>';
@@ -878,7 +910,8 @@ async function toggleHistoryPop(span) {
       data = await r.json();
       historyCache.set(cid, data);
     }
-    const rows = (data.entries || []).map(e => {
+    const filtered = kindFilter ? (data.entries || []).filter(e => e.kind === kindFilter) : (data.entries || []);
+    const rows = filtered.map(e => {
       const who = e.organizer
         ? (e.inferred ? ` · <span title="Attribution inferred from list assignment (logs before 6/11 didn't record the caller — lists don't overlap, so this is near-certain)">likely ${escapeHtml(e.organizer)}</span>` : ` · by ${escapeHtml(e.organizer)}`)
         : '';
@@ -888,13 +921,34 @@ async function toggleHistoryPop(span) {
       const note = e.notes ? `<div class="hnote">📝 ${escapeHtml(e.notes)}</div>` : '';
       return `<div class="qhistory-row"><span class="hd">${escapeHtml(e.date || '—')}</span><span>${what}${note}</span></div>`;
     }).join('');
-    pop.innerHTML = `<h4>History · ${escapeHtml(data.name || '')}</h4>` +
-      (rows || '<div style="color:var(--text-tertiary);font-size:12px;">No logged history.</div>');
+    const title = kindFilter === 'event' ? 'Events attended' : kindFilter === 'touch' ? 'Attempts' : 'History';
+    pop.innerHTML = `<h4>${title} · ${escapeHtml(data.name || '')}</h4>` +
+      (rows || '<div style="color:var(--text-tertiary);font-size:12px;">Nothing logged yet.</div>');
   } catch (e) {
     pop.innerHTML = `<h4>History</h4><div style="color:var(--gw-red);font-size:12px;">Couldn't load: ${e.message}</div>`;
   }
 }
+function toggleCommitsPop(span) {
+  const person = span.closest('.qperson');
+  if (!person) return;
+  const existing = person.querySelector('.qhistory-pop');
+  if (existing) { existing.remove(); return; }
+  document.querySelectorAll('.qhistory-pop').forEach(p => p.remove());
+  const cid = span.dataset.contact;
+  const c = (queue || []).find(x => x.id === cid) || rowDataCache.get(cid);
+  const pop = document.createElement('div');
+  pop.className = 'qhistory-pop';
+  const items = c ? commitmentsOf(c) : [];
+  pop.innerHTML = `<h4>Commitments</h4>` + (items.length
+    ? items.map(it => `<div class="qhistory-row"><span class="hd">${escapeHtml(it.kind)}</span><span class="hev">${escapeHtml(it.text)}</span></div>`).join('')
+    : '<div style="color:var(--text-tertiary);font-size:12px;">No commitments yet — that\'s the ask.</div>')
+    + (c && c.next_step ? `<div class="qhistory-row"><span class="hd">next step</span><span>${escapeHtml(c.next_step)}</span></div>` : '');
+  person.appendChild(pop);
+}
+const rowDataCache = new Map();
 document.addEventListener('click', (e) => {
+  const cspan = e.target.closest('.qcommits');
+  if (cspan) { e.preventDefault(); toggleCommitsPop(cspan); return; }
   const span = e.target.closest('.qhistory');
   if (span) { e.preventDefault(); toggleHistoryPop(span); return; }
   if (!e.target.closest('.qhistory-pop')) document.querySelectorAll('.qhistory-pop').forEach(p => p.remove());
@@ -947,17 +1001,29 @@ function contactLinks(c) {
 // chips + ONE "what happened" select (admin actions live at the bottom of
 // the same select).
 function outcomeOptions(c) {
-  const isUnconverted = activeList === 'unconverted';
   const opts = [];
   opts.push({ v: '', label: 'No answer (default)' });
   opts.push({ v: 'connected', label: 'Conversation' });
-  // 1-1 first on the unconverted list — booking the 1-1 IS the goal there.
-  const oneOnOne = { v: 'oneonone', label: isUnconverted ? '★ 1-1 booked (the goal)' : '1-1 booked' };
-  const signups = Object.entries(EVENTS)
-    .filter(([, ev]) => ev.signup && !ev.past)
-    .map(([k, ev]) => ({ v: `signed-up-${k.replace('_','-')}`, label: `Signed up: ${ev.short}` }));
-  if (isUnconverted) opts.push(oneOnOne, ...signups);
-  else opts.push(...signups, oneOnOne);
+  const nextOf = (type, n) => upcomingOfType(type).slice(0, n)
+    .map(k => ({ v: `signed-up-${k.replace(/_/g,'-')}`, label: `Signed up: ${EVENTS[k].label}` }));
+
+  if (activeList === 'unconverted') {
+    // They already came to an onboarding — NO onboarding options here
+    // (Ellen: "we're not trying to get them signed up again"). The asks:
+    // 1-1 + trainings.
+    opts.push({ v: 'oneonone', label: '1-1 booked' });
+    opts.push(...nextOf('hm', 3));
+    opts.push(...nextOf('amp', 3));
+  } else if (activeList === 'training_followup') {
+    // Kathryn post-training: move them to action.
+    opts.push({ v: 'hm-scheduled', label: 'Scheduled their house meeting' });
+    opts.push({ v: 'amp-tracker', label: 'Filled out amplifier tracker' });
+    opts.push({ v: 'oneonone', label: '1-1 booked' });
+  } else {
+    // Fresh + attempted-not-reached: the ONLY funnel is onboarding or a 1-1.
+    opts.push(...nextOf('onboarding', 2));
+    opts.push({ v: 'oneonone', label: '1-1 booked' });
+  }
   opts.push({ v: '__div', label: '──────────' });
   opts.push({ v: 'skipped', label: '⊘ Skip (not a prospect)' });
   opts.push({ v: 'wrong-number', label: '✕ Wrong number' });
@@ -975,13 +1041,14 @@ function listContextLine(c) {
       : `<span class="qsignal">tried ${c.cadence.days_since}d ago · wait for the 48h window</span>`;
     return due;
   }
-  if (activeList === 'unconverted' && c.attended_event) {
-    return `<span class="qsignal" style="background:var(--gw-green-soft);color:var(--gw-green);">came to ${escapeHtml(c.attended_event)} · goal: book the 1-1</span>`;
+  if ((activeList === 'unconverted' || activeList === 'training_followup') && c.attended_event) {
+    return `<span class="qsignal" style="background:var(--gw-green-soft);color:var(--gw-green);">came to ${escapeHtml(c.attended_event)}${c.attended_event_date ? ' · ' + escapeHtml(c.attended_event_date) : ''}</span>`;
   }
-  return `<span class="qsignal">${signalLine(c)}</span>`;
+  return '';
 }
 
 function buildOutreachRow(c, i) {
+  rowDataCache.set(c.id, c);
   const row = document.createElement('div');
   row.className = 'queue-row';
   if (savedIds.has(c.id)) row.classList.add('row-complete');
@@ -993,6 +1060,7 @@ function buildOutreachRow(c, i) {
       <div class="qperson">
         <div class="qname"><a href="${airtableUrl(c.id)}" target="_blank" rel="noopener" title="Open in Airtable to edit (phone, email, school, etc.)" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a></div>
         <div class="qmeta">${metaLine(c)}</div>
+        ${pillsLine(c)}
         ${listContextLine(c)}
         ${lastTouchLine(c)}
       </div>
@@ -1084,14 +1152,34 @@ function renderQueue() {
 // activeList: which slice of the base we're calling through (fresh /
 // unreached / unconverted). pageSize: how many per batch — LaNee wanted
 // more than 5; default 10, max 25 so each row still gets real attention.
-let activeList = localStorage.getItem('gw-call-list') || 'unconverted';
 let pageSize = parseInt(localStorage.getItem('gw-page-size') || '10');
 
+let activeList = localStorage.getItem('gw-call-list') || 'unconverted';
+// Lists differ per organizer: Kathryn runs training recruitment + follow-up;
+// LaNeé and Stephanie run the onramp, follow-up cadence, and onboarding lists.
+const LISTS = ORGANIZER === 'kathryn'
+  ? [
+      { v: 'unconverted', label: 'Came to onboarding · recruit for training' },
+      { v: 'training_followup', label: 'Training follow-up' },
+    ]
+  : [
+      { v: 'fresh', label: 'Fresh prospects · first-ever contact' },
+      { v: 'unreached', label: 'Attempted, not reached · due after 4 days' },
+      { v: 'unconverted', label: 'Came to an onboarding' },
+    ];
 const LIST_HINTS = {
-  fresh: 'People we have never reached (or who cooled off 7+ days). Warmest first.',
-  unreached: 'Attempted in the last 10 days with no answer — the 24-48h cadence ladder. Oldest attempt first, with the suggested next channel.',
-  unconverted: 'Came to an onboarding but no 1-1, commitment, or next signup yet. These are the filter/follow-up calls — the ask is the 1-1.',
+  fresh: 'People never attempted before. First touch.',
+  unreached: 'Attempted with no answer, due again after 4 days. Oldest first, with the suggested next channel. People drop off for good after 5 attempts.',
+  unconverted: ORGANIZER === 'kathryn'
+    ? 'Came to an onboarding and committed to ONLY house meeting and/or amplifier. The ask: sign them up for a training date.'
+    : 'Came to an onboarding, no training signup or 1-1 yet. They fall off once either happens.',
+  training_followup: 'Came to a training. The ask: schedule their house meeting or get their amplifier tracker going.',
 };
+(function fillListPicker() {
+  const lp = document.getElementById('list-picker');
+  if (lp) lp.innerHTML = LISTS.map(l => `<option value="${l.v}">${l.label}</option>`).join('');
+  if (!LISTS.some(l => l.v === activeList)) activeList = LISTS[0].v;
+})();
 
 function applyListUI() {
   const lp = document.getElementById('list-picker');
@@ -1437,6 +1525,7 @@ async function loadCumulativeGrid() {
 // the 6/9 onboarding → action conversion (Ellen's metric: 1-1s weighted).
 async function loadFunnelCards() {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  if (ORGANIZER === 'kathryn') return loadKathrynTotals();
   // Dynamic labels — these roll over by date, no manual flip needed
   set('hero-h1', `Turn the list out to ${EVENTS[CURRENT_EVENT].short}.`);
   set('ev-funnel-label', `${EVENTS[CURRENT_EVENT].short} Onboarding · org-wide funnel`);
@@ -1461,6 +1550,31 @@ async function loadFunnelCards() {
         set('conv-detail', `${conv.with_action} of ${conv.attendees} attendees took a next step · ${conv.with_commitment} made ≥1 commitment · ${conv.with_one_on_one} booked a 1-1`);
       }
     }
+  } catch (e) {}
+}
+
+// Kathryn's cards: cumulative training totals (Ellen: "just cumulative for
+// now" — total signed up + total trained across HM + Amplifier).
+async function loadKathrynTotals() {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('hero-h1', 'Turn the trainings out.');
+  set('ev-funnel-label', 'Trainings · cumulative signups');
+  set('conv-label', 'Trainings · cumulative trained');
+  const keys = Object.keys(EVENTS).filter(k => EVENTS[k].type === 'hm' || EVENTS[k].type === 'amp');
+  try {
+    const results = await Promise.all(keys.map(k =>
+      authFetch(`${WORKER}/event-stats?event=${k}`).then(r => r.ok ? r.json() : null).catch(() => null)));
+    let signed = 0, trained = 0;
+    for (const r of results.filter(Boolean)) {
+      signed += r.signups || 0;
+      trained += (r.attended || 0) + (r.walk_in || 0);
+    }
+    set('ev-signups', signed);
+    set('ev-confirmed', '');
+    const fEl = document.getElementById('ev-funnel-label'); if (fEl) fEl.textContent = 'Total signed up · all HM + Amplifier trainings';
+    const bar = document.getElementById('ev-bar'); if (bar) bar.style.width = '0%';
+    set('conv-rate', trained);
+    set('conv-detail', 'people trained across all house meeting + amplifier trainings');
   } catch (e) {}
 }
 
@@ -1514,12 +1628,21 @@ let activeEventKey = CURRENT_EVENT;
 function populateEventPicker() {
   const picker = document.getElementById('event-picker');
   if (!picker) return;
-  const current = Object.entries(EVENTS).filter(([, ev]) => !ev.past);
-  const past = Object.entries(EVENTS).filter(([, ev]) => ev.past);
+  const group = (type, title) => {
+    const items = Object.entries(EVENTS).filter(([, ev]) => ev.type === type && !ev.past);
+    if (!items.length) return '';
+    return `<option disabled>── ${title} ──</option>` +
+      items.map(([k, ev]) => `<option value="${k}">${ev.label}${k === CURRENT_EVENT ? ' · current' : ''}</option>`).join('');
+  };
+  const past = Object.entries(EVENTS).filter(([, ev]) => ev.past)
+    .sort((a, b) => b[1].date.localeCompare(a[1].date));
   picker.innerHTML =
-    current.map(([k, ev]) => `<option value="${k}">${ev.label}${k === CURRENT_EVENT ? ' · current' : ' · upcoming'}</option>`).join('') +
+    group('onboarding', 'Onboardings') +
+    group('hm', 'House Meeting Trainings') +
+    group('amp', 'Amplifier Trainings') +
     `<option disabled>── Past events ──</option>` +
     past.map(([k, ev]) => `<option value="${k}">${ev.label} · archived</option>`).join('');
+  if (!EVENTS[activeEventKey] || picker.querySelector(`option[value="${activeEventKey}"]`) == null) activeEventKey = CURRENT_EVENT;
   picker.value = activeEventKey;
   picker.addEventListener('change', () => {
     activeEventKey = picker.value;
@@ -1870,7 +1993,9 @@ async function loadEventReports() {
   const host = document.getElementById('event-reports');
   if (!host) return;
   try {
-    const keys = Object.keys(EVENTS).sort((a, b) => EVENTS[a].date.localeCompare(EVENTS[b].date));
+    const keys = Object.keys(EVENTS)
+      .filter(k => ORGANIZER === 'kathryn' ? (EVENTS[k].type === 'hm' || EVENTS[k].type === 'amp') : true)
+      .sort((a, b) => EVENTS[a].date.localeCompare(EVENTS[b].date));
     const results = await Promise.all(keys.map(k =>
       authFetch(`${WORKER}/event-stats?event=${k}`).then(r => r.ok ? r.json() : null).catch(() => null)
     ));
@@ -2156,14 +2281,25 @@ function updateRow(row) {
     const extras = [];
     if (outcome.startsWith('signed-up')) {
       const pickedKey = outcome.replace('signed-up-', '').replace(/-/g, '_');
-      for (const k of [CURRENT_EVENT, NEXT_EVENT]) {
-        if (k && k !== pickedKey && EVENTS[k] && !EVENTS[k].past) {
-          extras.push({ v: `signed-up-${k.replace('_','-')}`, label: `+ also signed up: ${EVENTS[k].short}` });
+      const pickedType = EVENTS[pickedKey]?.type;
+      if (pickedType === 'onboarding') {
+        for (const k of upcomingOfType('onboarding').slice(0, 2)) {
+          if (k !== pickedKey) extras.push({ v: `signed-up-${k.replace(/_/g,'-')}`, label: `+ also signed up: ${EVENTS[k].short}` });
         }
+      } else if (pickedType === 'hm') {
+        const k = upcomingOfType('amp')[0];
+        if (k) extras.push({ v: `signed-up-${k.replace(/_/g,'-')}`, label: `+ also signed up: ${EVENTS[k].short}` });
+      } else if (pickedType === 'amp') {
+        const k = upcomingOfType('hm')[0];
+        if (k) extras.push({ v: `signed-up-${k.replace(/_/g,'-')}`, label: `+ also signed up: ${EVENTS[k].short}` });
       }
       extras.push({ v: 'oneonone', label: '+ also booked a 1-1' });
-    } else if (outcome === 'oneonone' && EVENTS[CURRENT_EVENT]) {
-      extras.push({ v: `signed-up-${CURRENT_EVENT.replace('_','-')}`, label: `+ also signed up: ${EVENTS[CURRENT_EVENT].short}` });
+    } else if (outcome === 'oneonone' && activeList !== 'unconverted' && EVENTS[CURRENT_EVENT]) {
+      extras.push({ v: `signed-up-${CURRENT_EVENT.replace(/_/g,'-')}`, label: `+ also signed up: ${EVENTS[CURRENT_EVENT].short}` });
+    } else if (outcome === 'oneonone' && activeList === 'unconverted') {
+      const hm = upcomingOfType('hm')[0], amp = upcomingOfType('amp')[0];
+      if (hm) extras.push({ v: `signed-up-${hm.replace(/_/g,'-')}`, label: `+ also signed up: ${EVENTS[hm].short}` });
+      if (amp) extras.push({ v: `signed-up-${amp.replace(/_/g,'-')}`, label: `+ also signed up: ${EVENTS[amp].short}` });
     }
     if (extras.length && row.dataset.alsoFor !== outcome) {
       alsoHost.innerHTML = extras.map(x =>

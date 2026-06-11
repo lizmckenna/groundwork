@@ -42,20 +42,33 @@ const CONFIRM_EVENT = 'Confirm 5/26';
 // Per-event labels for confirm/attendance tracking, keyed by the dashboard's event key.
 // Lets the same confirm/attendance/zoom endpoints serve both the 5/26 and 6/9 tabs.
 const EVENT_META = {
-  '5_26': { date: '2026-05-26', label: '5/26 Orientation',          confirmEvent: 'Confirm 5/26', attendEvent: 'Orientation 5/26',      confirmField: 'confirm_5_26_status', attendField: 'attendance_5_26_status', signupField: null,                  confirmTag: '5/26 confirm', attendTag: '5/26 orientation' },
-  '6_9':  { date: '2026-06-09', label: '6/9 No on 5 Onboarding',    confirmEvent: 'Confirm 6/9',  attendEvent: '6/9 Emergency Meeting',  confirmField: 'confirm_6_9_status',  attendField: 'attendance_6_9_status',  signupField: 'signup_6_9_status',   confirmTag: '6/9 confirm',  attendTag: '6/9 emergency meeting' },
-  '6_23': { date: '2026-06-23', label: '6/23 No on 5 Onboarding',   confirmEvent: 'Confirm 6/23', attendEvent: '6/23 No on 5 Onboarding', confirmField: 'confirm_6_23_status', attendField: 'attendance_6_23_status', signupField: 'signup_6_23_status', confirmTag: '6/23 confirm', attendTag: '6/23 onboarding' },
-  '7_7':  { date: '2026-07-07', label: '7/7 No on 5 Onboarding',    confirmEvent: 'Confirm 7/7',  attendEvent: '7/7 No on 5 Onboarding',  confirmField: 'confirm_7_7_status',  attendField: 'attendance_7_7_status',  signupField: 'signup_7_7_status',  confirmTag: '7/7 confirm',  attendTag: '7/7 onboarding' },
-  '7_21': { date: '2026-07-21', label: '7/21 No on 5 Onboarding',   confirmEvent: 'Confirm 7/21', attendEvent: '7/21 No on 5 Onboarding', confirmField: 'confirm_7_21_status', attendField: 'attendance_7_21_status', signupField: 'signup_7_21_status', confirmTag: '7/21 confirm', attendTag: '7/21 onboarding' },
+  // type: 'onboarding' | 'hm' | 'amp' | 'legacy' — drives which lists offer
+  // which signups and whose stats pages show which events.
+  '5_26': { type: 'legacy',     date: '2026-05-26', label: '5/26 Orientation',          confirmEvent: 'Confirm 5/26', attendEvent: 'Orientation 5/26',      confirmField: 'confirm_5_26_status', attendField: 'attendance_5_26_status', signupField: null,                  confirmTag: '5/26 confirm', attendTag: '5/26 orientation' },
+  '6_9':  { type: 'onboarding', date: '2026-06-09', label: '6/9 No on 5 Onboarding',    confirmEvent: 'Confirm 6/9',  attendEvent: '6/9 Emergency Meeting',  confirmField: 'confirm_6_9_status',  attendField: 'attendance_6_9_status',  signupField: 'signup_6_9_status',   confirmTag: '6/9 confirm',  attendTag: '6/9 emergency meeting' },
+  '6_23': { type: 'onboarding', date: '2026-06-23', label: '6/23 No on 5 Onboarding',   confirmEvent: 'Confirm 6/23', attendEvent: '6/23 No on 5 Onboarding', confirmField: 'confirm_6_23_status', attendField: 'attendance_6_23_status', signupField: 'signup_6_23_status', confirmTag: '6/23 confirm', attendTag: '6/23 onboarding' },
+  '7_7':  { type: 'onboarding', date: '2026-07-07', label: '7/7 No on 5 Onboarding',    confirmEvent: 'Confirm 7/7',  attendEvent: '7/7 No on 5 Onboarding',  confirmField: 'confirm_7_7_status',  attendField: 'attendance_7_7_status',  signupField: 'signup_7_7_status',  confirmTag: '7/7 confirm',  attendTag: '7/7 onboarding' },
+  '7_21': { type: 'onboarding', date: '2026-07-21', label: '7/21 No on 5 Onboarding',   confirmEvent: 'Confirm 7/21', attendEvent: '7/21 No on 5 Onboarding', confirmField: 'confirm_7_21_status', attendField: 'attendance_7_21_status', signupField: 'signup_7_21_status', confirmTag: '7/21 confirm', attendTag: '7/21 onboarding' },
+  // House Meeting trainings — dates from parents4mopublicschools.org/trainings (canonical)
+  'hm_6_3':  { type: 'hm', date: '2026-06-03', time: '5:30pm CT', label: 'HM Training 6/3',  confirmEvent: 'Confirm HM 6/3',  attendEvent: 'House Meeting Training 6/3',  confirmField: 'confirm_hm_6_3_status',  attendField: 'attendance_hm_6_3_status',  signupField: 'signup_hm_6_3_status',  confirmTag: 'hm 6/3 confirm',  attendTag: 'hm training 6/3' },
+  'hm_6_16': { type: 'hm', date: '2026-06-16', time: '6:00pm CT', label: 'HM Training 6/16', confirmEvent: 'Confirm HM 6/16', attendEvent: 'House Meeting Training 6/16', confirmField: 'confirm_hm_6_16_status', attendField: 'attendance_hm_6_16_status', signupField: 'signup_hm_6_16_status', confirmTag: 'hm 6/16 confirm', attendTag: 'hm training 6/16' },
+  'hm_7_1':  { type: 'hm', date: '2026-07-01', time: '5:30pm CT', label: 'HM Training 7/1',  confirmEvent: 'Confirm HM 7/1',  attendEvent: 'House Meeting Training 7/1',  confirmField: 'confirm_hm_7_1_status',  attendField: 'attendance_hm_7_1_status',  signupField: 'signup_hm_7_1_status',  confirmTag: 'hm 7/1 confirm',  attendTag: 'hm training 7/1' },
+  'hm_7_16': { type: 'hm', date: '2026-07-16', time: '6:30pm CT', label: 'HM Training 7/16', confirmEvent: 'Confirm HM 7/16', attendEvent: 'House Meeting Training 7/16', confirmField: 'confirm_hm_7_16_status', attendField: 'attendance_hm_7_16_status', signupField: 'signup_hm_7_16_status', confirmTag: 'hm 7/16 confirm', attendTag: 'hm training 7/16' },
+  'hm_7_29': { type: 'hm', date: '2026-07-29', time: '5:30pm CT', label: 'HM Training 7/29', confirmEvent: 'Confirm HM 7/29', attendEvent: 'House Meeting Training 7/29', confirmField: 'confirm_hm_7_29_status', attendField: 'attendance_hm_7_29_status', signupField: 'signup_hm_7_29_status', confirmTag: 'hm 7/29 confirm', attendTag: 'hm training 7/29' },
+  // Amplifier trainings — dates from the website (Ellen's sheet had typos)
+  'amp_6_11': { type: 'amp', date: '2026-06-11', time: '6:30pm CT', label: 'Amplifier 6/11', confirmEvent: 'Confirm Amp 6/11', attendEvent: 'Amplifier Training 6/11', confirmField: 'confirm_amp_6_11_status', attendField: 'attendance_amp_6_11_status', signupField: 'signup_amp_6_11_status', confirmTag: 'amp 6/11 confirm', attendTag: 'amplifier 6/11' },
+  'amp_6_27': { type: 'amp', date: '2026-06-27', time: '1:00pm CT', label: 'Amplifier 6/27', confirmEvent: 'Confirm Amp 6/27', attendEvent: 'Amplifier Training 6/27', confirmField: 'confirm_amp_6_27_status', attendField: 'attendance_amp_6_27_status', signupField: 'signup_amp_6_27_status', confirmTag: 'amp 6/27 confirm', attendTag: 'amplifier 6/27' },
+  'amp_7_6':  { type: 'amp', date: '2026-07-06', time: '6:30pm CT', label: 'Amplifier 7/6',  confirmEvent: 'Confirm Amp 7/6',  attendEvent: 'Amplifier Training 7/6',  confirmField: 'confirm_amp_7_6_status',  attendField: 'attendance_amp_7_6_status',  signupField: 'signup_amp_7_6_status',  confirmTag: 'amp 7/6 confirm',  attendTag: 'amplifier 7/6' },
+  'amp_7_21': { type: 'amp', date: '2026-07-21', time: '6:30pm CT', label: 'Amplifier 7/21', confirmEvent: 'Confirm Amp 7/21', attendEvent: 'Amplifier Training 7/21', confirmField: 'confirm_amp_7_21_status', attendField: 'attendance_amp_7_21_status', signupField: 'signup_amp_7_21_status', confirmTag: 'amp 7/21 confirm', attendTag: 'amplifier 7/21' },
 };
 function eventMeta(key){ return EVENT_META[key] || EVENT_META['5_26']; }
-// Outcome key (dashboard) → event meta key, for the Today-tab signup buttons.
-const SIGNUP_OUTCOME_EVENTS = {
-  'signed-up-7-21': '7_21',
-  'signed-up-6-9':  '6_9',
-  'signed-up-6-23': '6_23',
-  'signed-up-7-7':  '7_7',
-};
+// Outcome key (dashboard) → event meta key, generated for every event with a
+// signup field ('signed-up-hm-6-16' → 'hm_6_16').
+const SIGNUP_OUTCOME_EVENTS = Object.fromEntries(
+  Object.keys(EVENT_META)
+    .filter(k => EVENT_META[k].signupField)
+    .map(k => ['signed-up-' + k.replace(/_/g, '-'), k])
+);
 const LANEE_ID = 'rec0OmDN68hlffkTn';
 const STEPHANIE_ID = 'recnnEdYIPcclnPLY';
 const LANEE_COUNTIES = ['jackson', 'cass', 'johnson', 'platte', 'clay', 'lafayette', 'buchanan', 'ray'];
@@ -562,6 +575,38 @@ export default {
           else out.errors.push({ field: f.name, status: r.status, body: await r.text() });
         }
         return json(out);
+      }
+      if (url.pathname === '/admin/backfill-attempt-counts' && request.method === 'POST') {
+        // Recompute attempt_count (Call/Text/Email logs) + one_on_one_booked
+        // for every contact from the full log table.
+        const k = request.headers.get('X-Admin-Key');
+        const authorized = (env.ADMIN_KEY && k === env.ADMIN_KEY) || (env.SETUP_KEY && k === env.SETUP_KEY);
+        if (!authorized) return json({ error: 'forbidden' }, 403);
+        const counts = {}; const oneOnOnes = new Set();
+        let offset = null;
+        do {
+          let q = `?pageSize=100&fields%5B%5D=contact&fields%5B%5D=method&fields%5B%5D=event`;
+          if (offset) q += `&offset=${offset}`;
+          const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+          for (const r of d.records) {
+            const cid = (r.fields.contact || [])[0];
+            if (!cid) continue;
+            if (['Call', 'Text', 'Email'].includes(r.fields.method)) counts[cid] = (counts[cid] || 0) + 1;
+            if (r.fields.event === '1-1 meeting') oneOnOnes.add(cid);
+          }
+          offset = d.offset;
+        } while (offset);
+        const ids = new Set([...Object.keys(counts), ...oneOnOnes]);
+        const updates = [...ids].map(id => ({ id, fields: { attempt_count: counts[id] || 0, one_on_one_booked: oneOnOnes.has(id) } }));
+        let updated = 0; const errors = [];
+        for (let i = 0; i < updates.length; i += 10) {
+          try {
+            await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: updates.slice(i, i + 10), typecast: true }) });
+            updated += Math.min(10, updates.length - i);
+          } catch (e) { errors.push({ at: i, error: e.message }); }
+        }
+        await invalidateReadCaches(env);
+        return json({ updated, contacts_with_attempts: Object.keys(counts).length, one_on_ones: oneOnOnes.size, errors });
       }
       if (url.pathname === '/admin/backfill-log-organizer' && request.method === 'POST') {
         // Stamp `organizer` on historical outreach logs from the contact's
@@ -1886,7 +1931,9 @@ function organizerName(name) {
 }
 
 function prospectsFilter(organizerName_) {
-  // Name-based filter — record-ID-based was broken because ARRAYJOIN returns names not IDs.
+  // FRESH list = "the first time you've seen that person" (Ellen, 6/11 call):
+  // never attempted, not signed up for an upcoming onboarding, standard
+  // exclusions. People with attempts live on the attempted-not-reached list.
   const orgFullName = organizerName(organizerName_);
   const orgClause = orgFullName ? `,FIND('${orgFullName}',{assigned_organizer}&'')>0` : '';
   const schoolExcl = EXCLUDED_SCHOOL_PATTERNS
@@ -1895,17 +1942,17 @@ function prospectsFilter(organizerName_) {
   const roleExcl = EXCLUDED_ROLES
     .map(r => `FIND('${r}',{role}&'')=0`)
     .join(',');
-  // CRITICAL: build as a SINGLE LINE so .replace doesn't mangle spaces inside string literals.
+  const signupExcl = Object.values(EVENT_META)
+    .filter(m => m.type === 'onboarding' && m.signupField)
+    .map(m => `NOT({${m.signupField}}='Signed up'),`)
+    .join('');
   return [
     `AND(`,
     `NOT({leader_ladder}='Core Leader'),`,
     `NOT({leader_ladder}='Not a prospect'),`,
-    `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>7),`,
+    `{last_attempt_date}=BLANK(),`,
     `NOT({last_attempt_result}='Signed up'),`,
-    `NOT({signup_6_9_status}='Signed up'),`,
-    `NOT({signup_6_23_status}='Signed up'),`,
-    `NOT({signup_7_7_status}='Signed up'),`,
-    `NOT({signup_7_21_status}='Signed up'),`,
+    signupExcl,
     `NOT({last_attempt_result}='Skipped'),`,
     `NOT({last_attempt_result}='Wrong number'),`,
     `NOT({last_attempt_result}='Do not contact'),`,
@@ -1921,32 +1968,12 @@ async function getProspects(env, url) {
   const n = parseInt(url.searchParams.get('n') || '5');
   const organizer = url.searchParams.get('organizer');
   const filter = prospectsFilter(organizer);
-  const fields = ['Name','first','last','phone','email','school','district','log_count','organized_by','leader_ladder',
-                  'last_attempt_date','last_attempt_method','last_attempt_result','next_step','last_attempt_by','last_attempt_note'];
+  const fields = PROSPECT_FIELDS;
   let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=${n}`;
   q += `&sort%5B0%5D%5Bfield%5D=log_count&sort%5B0%5D%5Bdirection%5D=desc`;
   for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
   const data = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
-  return json(data.records.map(r => ({
-    id: r.id,
-    name: r.fields.Name || `${r.fields.first || ''} ${r.fields.last || ''}`.trim(),
-    phone: r.fields.phone || '',
-    email: r.fields.email || '',
-    school: r.fields.school || '',
-    district: r.fields.district || '',
-    log_count: r.fields.log_count || 0,
-    organized_by_count: (r.fields.organized_by || []).length,
-    leader_ladder: r.fields.leader_ladder || '',
-    // Last-touch context: who we are calling has usually been tried before.
-    // Surfacing what happened last time is the PDF's "see who last contacted
-    // that person" requirement for onramp calls.
-    last_attempt_date: r.fields.last_attempt_date || null,
-    last_attempt_method: r.fields.last_attempt_method || null,
-    last_attempt_result: r.fields.last_attempt_result || null,
-    next_step: r.fields.next_step || null,
-    last_attempt_by: r.fields.last_attempt_by || null,
-    last_attempt_note: r.fields.last_attempt_note || null,
-  })));
+  return json(data.records.map(rowFromRecord));
 }
 
 // =========================================================================
@@ -1963,7 +1990,9 @@ async function getProspects(env, url) {
 // them with one code path.
 // =========================================================================
 const PROSPECT_FIELDS = ['Name','first','last','phone','email','school','district','log_count','organized_by','leader_ladder',
-  'last_attempt_date','last_attempt_method','last_attempt_result','next_step','last_attempt_by','last_attempt_note'];
+  'last_attempt_date','last_attempt_method','last_attempt_result','next_step','last_attempt_by','last_attempt_note',
+  'attempt_count','one_on_one_booked','amendment5_commitments','house_meeting_commitments',
+  ...Object.values(EVENT_META).filter(m => m.signupField).map(m => m.signupField)];
 
 function rowFromRecord(r) {
   return {
@@ -1982,6 +2011,14 @@ function rowFromRecord(r) {
     next_step: r.fields.next_step || null,
     last_attempt_by: r.fields.last_attempt_by || null,
     last_attempt_note: r.fields.last_attempt_note || null,
+    attempt_count: r.fields.attempt_count || 0,
+    one_on_one_booked: !!r.fields.one_on_one_booked,
+    commitments: r.fields.amendment5_commitments || '',
+    hm_commitments: r.fields.house_meeting_commitments || '',
+    // Upcoming signups (for the Commitments pill): { '6_23': 'Signed up', ... }
+    signups: Object.fromEntries(Object.entries(EVENT_META)
+      .filter(([, m]) => m.signupField && r.fields[m.signupField])
+      .map(([k, m]) => [k, r.fields[m.signupField]])),
   };
 }
 
@@ -2001,15 +2038,19 @@ async function getCallList(env, urlObj) {
   const roleExcl = EXCLUDED_ROLES.map(r => `FIND('${r}',{role}&'')=0`).join(',');
 
   if (list === 'unreached') {
+    // Attempted, no answer, due again after 4 days (was 7 — Ellen call 6/11).
+    // Drop off permanently at 5 attempts (a call + a text = 2 attempts).
+    const signupExcl = Object.values(EVENT_META)
+      .filter(m => m.type === 'onboarding' && m.signupField)
+      .map(m => `NOT({${m.signupField}}='Signed up'),`)
+      .join('');
     const filter = [
       `AND(`,
       `{last_attempt_result}='No answer',`,
       `{last_attempt_date}!=BLANK(),`,
-      `DATETIME_DIFF(TODAY(),{last_attempt_date},'days')<=10,`,
-      `NOT({signup_6_9_status}='Signed up'),`,
-      `NOT({signup_6_23_status}='Signed up'),`,
-      `NOT({signup_7_7_status}='Signed up'),`,
-      `NOT({signup_7_21_status}='Signed up'),`,
+      `DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4,`,
+      `OR({attempt_count}=BLANK(),{attempt_count}<5),`,
+      signupExcl,
       `${schoolExcl},`,
       `${roleExcl}`,
       `${orgClause}`,
@@ -2022,16 +2063,15 @@ async function getCallList(env, urlObj) {
     const today = todayCT();
     return json(data.records.map(r => {
       const row = rowFromRecord(r);
-      // Cadence hint: alternate channel from whatever was tried last,
-      // due once 48h have passed (Stephanie's ladder).
       const daysSince = row.last_attempt_date
         ? Math.floor((new Date(today) - new Date(row.last_attempt_date)) / 86400000)
         : null;
       const lastM = String(row.last_attempt_method || '').toLowerCase();
       row.cadence = {
         days_since: daysSince,
-        due: daysSince != null && daysSince >= 2,
+        due: daysSince != null && daysSince >= 4,
         try_next: lastM === 'email' ? 'call or text' : 'email',
+        attempts: r.fields.attempt_count || 0,
       };
       return row;
     }));
@@ -2040,14 +2080,21 @@ async function getCallList(env, urlObj) {
   if (list === 'unconverted') {
     // Attended ANY tracked event, no next step taken yet.
     const attendClauses = Object.values(EVENT_META)
+      .filter(m => m.type === 'onboarding' || m.type === 'legacy')
       .map(m => `OR({${m.attendField}}='Attended',{${m.attendField}}='Walk-in')`)
       .join(',');
+    // Drop off this list once they sign up for ANY training or book a 1-1
+    // (Ellen call 6/11), or were tried in the last 4 days.
+    const trainingExcl = Object.values(EVENT_META)
+      .filter(m => (m.type === 'hm' || m.type === 'amp') && m.signupField)
+      .map(m => `NOT({${m.signupField}}='Signed up'),`)
+      .join('');
     const filter = [
       `AND(`,
       `OR(${attendClauses}),`,
-      `NOT({signup_6_23_status}='Signed up'),`,
-      `NOT({signup_7_7_status}='Signed up'),`,
-      `NOT({signup_7_21_status}='Signed up'),`,
+      trainingExcl,
+      `NOT({one_on_one_booked}),`,
+      `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4),`,
       `NOT({last_attempt_result}='Do not contact'),`,
       `${schoolExcl},`,
       `${roleExcl}`,
@@ -2098,7 +2145,49 @@ async function getCallList(env, urlObj) {
     return json(rows);
   }
 
-  return json({ error: `unknown list '${list}' — use fresh, unreached, or unconverted` }, 400);
+  if (list === 'training_followup') {
+    // Kathryn's second list: came to an HM/Amplifier training, no next action
+    // yet. Outcomes there: scheduled a house meeting / filled out the
+    // amplifier tracker (logged via hm-scheduled / amp-tracker).
+    const attendClauses = Object.values(EVENT_META)
+      .filter(m => m.type === 'hm' || m.type === 'amp')
+      .map(m => `OR({${m.attendField}}='Attended',{${m.attendField}}='Walk-in')`)
+      .join(',');
+    const filter = [
+      `AND(`,
+      `OR(${attendClauses}),`,
+      `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4),`,
+      `NOT({last_attempt_result}='Do not contact'),`,
+      `${schoolExcl},`,
+      `${roleExcl}`,
+      `${orgClause}`,
+      `)`,
+    ].join('');
+    const fields = [...PROSPECT_FIELDS, ...Object.values(EVENT_META).filter(m => m.type === 'hm' || m.type === 'amp').map(m => m.attendField)];
+    const candidates = [];
+    let offset = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100`;
+      for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+      if (offset) q += `&offset=${encodeURIComponent(offset)}`;
+      const page = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      candidates.push(...page.records);
+      offset = page.offset;
+    } while (offset);
+    const rows = candidates.slice(0, n).map(r => {
+      const row = rowFromRecord(r);
+      const attended = Object.entries(EVENT_META)
+        .filter(([, m]) => (m.type === 'hm' || m.type === 'amp') && ['Attended', 'Walk-in'].includes(r.fields[m.attendField]))
+        .map(([k, m]) => ({ key: k, label: m.label, date: m.date }))
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      row.attended_event = attended[0]?.label || null;
+      row.attended_event_date = attended[0]?.date || null;
+      return row;
+    });
+    return json(rows);
+  }
+
+  return json({ error: `unknown list '${list}' — use fresh, unreached, unconverted, or training_followup` }, 400);
 }
 
 // =========================================================================
@@ -2262,6 +2351,8 @@ function resolveOutcome(outcome, methodCount) {
   }
   switch (outcome) {
     case 'oneonone':         return { result: 'Signed up',  event: '1-1 meeting' };
+    case 'hm-scheduled':     return { result: 'Signed up',  event: 'House meeting scheduled' };
+    case 'amp-tracker':      return { result: 'Signed up',  event: 'Amplifier tracker' };
     case 'signed-up':        // backwards compat — treat as 5/26
     case 'signed-up-5-26':   return { result: 'Signed up',  event: 'Orientation 5/26' };
     case 'connected':        return { result: 'Conversation', event: null };
@@ -2325,6 +2416,15 @@ async function logOutcome(request, env) {
   // re-call rotation.
   const signupEventKey = SIGNUP_OUTCOME_EVENTS[outcome] || null;
   const contactLastResult = signupEventKey ? 'Conversation' : result;
+  // Attempt counter: every method used = one attempt (call + text = 2).
+  // 5 attempts drops them off the attempted-not-reached list for good.
+  let attemptCount = null;
+  if (!isAdmin && methods.length > 0) {
+    try {
+      const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}?fields%5B%5D=attempt_count`);
+      attemptCount = (cur.fields.attempt_count || 0) + methods.length;
+    } catch (e) { /* field may not exist yet */ }
+  }
   const contactFields = {
     last_attempt_date: date,
     last_attempt_method: isAdmin ? 'Other' : (METHOD_MAP[methods[0]] || methods[0]),
@@ -2339,6 +2439,8 @@ async function logOutcome(request, env) {
   if (signupEventKey && eventMeta(signupEventKey).signupField) {
     contactFields[eventMeta(signupEventKey).signupField] = 'Signed up';
   }
+  if (attemptCount != null) contactFields.attempt_count = attemptCount;
+  if (outcome === 'oneonone') contactFields.one_on_one_booked = true;
   if (next_step) contactFields.next_step = next_step;
   await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
     method: 'PATCH',
@@ -2416,6 +2518,31 @@ const EMAIL_EVENTS = {
   },
 };
 
+// Generated confirmation-email copy for events (trainings) without a
+// hand-written EMAIL_EVENTS entry. Assumes the org's shared Zoom room —
+// confirm with Ellen if trainings ever get their own links.
+function autoEmailEvent(key) {
+  const meta = EVENT_META[key];
+  if (!meta) return null;
+  const d = new Date(meta.date + 'T12:00:00');
+  const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+  const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][d.getMonth()];
+  const mdy = `${d.getMonth()+1}/${d.getDate()}`;
+  const time = meta.time || '7:30pm CT';
+  const fullTitle = meta.type === 'hm' ? 'House Meeting Training'
+    : meta.type === 'amp' ? 'Amplifier Training'
+    : meta.label;
+  return {
+    subject: `You're in — ${fullTitle} · ${dayName} ${mdy} ${time}`,
+    preview: `${fullTitle} · ${dayName} ${monthName} ${d.getDate()} · ${time} · Zoom`,
+    eyebrow: `${fullTitle} · Parents for Missouri Public Schools`,
+    intro_event: `<strong>${fullTitle}</strong>`,
+    big_date_html: `${dayName}, ${monthName} ${d.getDate()}<br/>${time}`,
+    sign_off_date: `${monthName} ${d.getDate()}`,
+    zoom_link: ZOOM_LINK_5_26,
+  };
+}
+
 async function sendConfirmationEmail(env, toEmail, firstName, contactId, organizer, eventKey) {
   const date = todayCT();
   const safeName = firstName ? firstName : '';
@@ -2424,7 +2551,7 @@ async function sendConfirmationEmail(env, toEmail, firstName, contactId, organiz
   const replyTo = profile.reply_to;
   const signoffName = profile.name;
   const signoffGroup = profile.group;
-  const ev = EMAIL_EVENTS[String(eventKey || '5_26')] || EMAIL_EVENTS['5_26'];
+  const ev = EMAIL_EVENTS[String(eventKey || '5_26')] || autoEmailEvent(String(eventKey || '5_26')) || EMAIL_EVENTS['5_26'];
   const subject = ev.subject;
   const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -2593,12 +2720,28 @@ async function undoSave(request, env) {
     const r = await fetch(url, { method: 'DELETE', headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}` } });
     if (r.ok) deleted += batch.length;
   }
+  // Recompute attempt counter + 1-1 flag from the logs that survived the undo
+  let remainingAttempts = 0, stillOneOnOne = false;
+  try {
+    const c = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}?fields%5B%5D=contact_log`);
+    const ids2 = Array.isArray(c.fields.contact_log) ? c.fields.contact_log : [];
+    for (let i = 0; i < ids2.length; i += 10) {
+      const chunk = ids2.slice(i, i + 10);
+      const f2 = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+      const d2 = await at(env, `/${BASE}/${CONTACT_LOG_TBL}?filterByFormula=${encodeURIComponent(f2)}&pageSize=10&fields%5B%5D=method&fields%5B%5D=event`);
+      for (const r2 of d2.records) {
+        if (['Call', 'Text', 'Email'].includes(r2.fields.method)) remainingAttempts++;
+        if (r2.fields.event === '1-1 meeting') stillOneOnOne = true;
+      }
+    }
+  } catch (e) { remainingAttempts = null; }
   await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
     method: 'PATCH',
     body: JSON.stringify({ fields: {
       last_attempt_date: null, last_attempt_method: null,
       last_attempt_result: null, next_step: '',
       last_attempt_by: '', last_attempt_note: '',
+      ...(remainingAttempts != null ? { attempt_count: remainingAttempts, one_on_one_booked: stillOneOnOne } : {}),
     }, typecast: true })
   });
   await invalidateReadCaches(env);
