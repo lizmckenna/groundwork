@@ -23,10 +23,12 @@ const EVENT_META = {
   '6_9':  { date: '2026-06-09', label: '6/9 No on 5 Onboarding',    confirmEvent: 'Confirm 6/9',  attendEvent: '6/9 Emergency Meeting',  confirmField: 'confirm_6_9_status',  attendField: 'attendance_6_9_status',  signupField: 'signup_6_9_status',   confirmTag: '6/9 confirm',  attendTag: '6/9 emergency meeting' },
   '6_23': { date: '2026-06-23', label: '6/23 No on 5 Onboarding',   confirmEvent: 'Confirm 6/23', attendEvent: '6/23 No on 5 Onboarding', confirmField: 'confirm_6_23_status', attendField: 'attendance_6_23_status', signupField: 'signup_6_23_status', confirmTag: '6/23 confirm', attendTag: '6/23 onboarding' },
   '7_7':  { date: '2026-07-07', label: '7/7 No on 5 Onboarding',    confirmEvent: 'Confirm 7/7',  attendEvent: '7/7 No on 5 Onboarding',  confirmField: 'confirm_7_7_status',  attendField: 'attendance_7_7_status',  signupField: 'signup_7_7_status',  confirmTag: '7/7 confirm',  attendTag: '7/7 onboarding' },
+  '7_21': { date: '2026-07-21', label: '7/21 No on 5 Onboarding',   confirmEvent: 'Confirm 7/21', attendEvent: '7/21 No on 5 Onboarding', confirmField: 'confirm_7_21_status', attendField: 'attendance_7_21_status', signupField: 'signup_7_21_status', confirmTag: '7/21 confirm', attendTag: '7/21 onboarding' },
 };
 function eventMeta(key){ return EVENT_META[key] || EVENT_META['5_26']; }
 // Outcome key (dashboard) → event meta key, for the Today-tab signup buttons.
 const SIGNUP_OUTCOME_EVENTS = {
+  'signed-up-7-21': '7_21',
   'signed-up-6-9':  '6_9',
   'signed-up-6-23': '6_23',
   'signed-up-7-7':  '7_7',
@@ -75,7 +77,10 @@ function organizerId(name) {
 // Backward-compat alias for any code still using ORGANIZER_IDS[name]
 const ORGANIZER_IDS = new Proxy({}, { get: (_, k) => organizerId(k) });
 
-const AUTO_CONFIRM_EMAIL = false;
+// Auto-send the branded Zoom confirmation the moment a signup is saved from
+// the call sheet (team asked for this — removes a manual step mid-call).
+// Undo deletes the log but cannot unsend the email.
+const AUTO_CONFIRM_EMAIL = true;
 const ZOOM_LINK_5_26 = 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1';
 const EVENT_NAME = 'Emergency Meeting on Public School Funding in Missouri';
 const EVENT_DATE_LABEL = 'Tuesday, May 26 · 7:30 PM CST';
@@ -706,6 +711,7 @@ export default {
       if (url.pathname === '/search') return await searchContacts(env, url);
       if (url.pathname === '/queue-count') return await getQueueCount(env, url);
       if (url.pathname === '/send-zoom-email' && request.method === 'POST') return await sendZoomEmailNow(request, env);
+      if (url.pathname === '/feedback' && request.method === 'POST') return await submitFeedback(request, env, email);
       if (url.pathname === '/event-create' && request.method === 'POST') return await createEvent(request, env);
       if (url.pathname === '/events' && request.method === 'GET') return await listEvents(env, url);
       // Note: /event-detail and /event-rsvp are below in the public route block
@@ -1722,6 +1728,7 @@ function prospectsFilter(organizerName_) {
     `NOT({signup_6_9_status}='Signed up'),`,
     `NOT({signup_6_23_status}='Signed up'),`,
     `NOT({signup_7_7_status}='Signed up'),`,
+    `NOT({signup_7_21_status}='Signed up'),`,
     `NOT({last_attempt_result}='Skipped'),`,
     `NOT({last_attempt_result}='Wrong number'),`,
     `NOT({last_attempt_result}='Do not contact'),`,
@@ -1821,6 +1828,7 @@ async function getCallList(env, urlObj) {
       `NOT({signup_6_9_status}='Signed up'),`,
       `NOT({signup_6_23_status}='Signed up'),`,
       `NOT({signup_7_7_status}='Signed up'),`,
+      `NOT({signup_7_21_status}='Signed up'),`,
       `${schoolExcl},`,
       `${roleExcl}`,
       `${orgClause}`,
@@ -1858,6 +1866,7 @@ async function getCallList(env, urlObj) {
       `OR(${attendClauses}),`,
       `NOT({signup_6_23_status}='Signed up'),`,
       `NOT({signup_7_7_status}='Signed up'),`,
+      `NOT({signup_7_21_status}='Signed up'),`,
       `NOT({last_attempt_result}='Do not contact'),`,
       `${schoolExcl},`,
       `${roleExcl}`,
@@ -2084,6 +2093,15 @@ const EMAIL_EVENTS = {
     intro_event: '<strong>No on 5 Onboarding — protecting Missouri public school funding</strong>',
     big_date_html: 'Tue, July 7<br/>7:30 PM CT',
     sign_off_date: 'July 7th',
+    zoom_link: 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1',
+  },
+  '7_21': {
+    subject: `You're in — No on 5 Onboarding · Tue 7/21 7:30 PM CT`,
+    preview: 'No on 5 Onboarding · Tue July 21 · 7:30 PM CT · Zoom',
+    eyebrow: 'No on 5 Onboarding · Public School Funding',
+    intro_event: '<strong>No on 5 Onboarding — protecting Missouri public school funding</strong>',
+    big_date_html: 'Tue, July 21<br/>7:30 PM CT',
+    sign_off_date: 'July 21st',
     zoom_link: 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1',
   },
 };
@@ -2697,10 +2715,11 @@ async function getEventStats(env, urlObj) {
   const attendeeIds = Object.entries(attendance)
     .filter(([, a]) => a.result === 'Attended' || a.result === 'Walk-in')
     .map(([cid]) => cid);
-  let withAction = 0, withOneOnOne = 0;
+  let withAction = 0, withOneOnOne = 0, withCommitment = 0;
   if (attendeeIds.length > 0 && meta.date) {
     const acted = new Set();
     const oneOnOned = new Set();
+    const committed = new Set();
     const pf = `IS_AFTER({date},DATETIME_PARSE('${meta.date}'))`;
     let offset = null;
     do {
@@ -2712,8 +2731,10 @@ async function getEventStats(env, urlObj) {
         if (!cid) continue;
         const m = r.fields.method || '';
         const ev = r.fields.event || '';
-        // 1-1s tracked separately — the conversion Ellen cares most about
+        // 1-1s and commitments tracked separately — the conversions the team
+        // asks about ("how many from that call made at least one commitment?")
         if (ev === '1-1 meeting') oneOnOned.add(cid);
+        if (m === 'Commitment') committed.add(cid);
         if (acted.has(cid)) continue;
         const isAction = m === 'Commitment' || m === 'House meeting'
           || ev === '1-1 meeting'
@@ -2725,6 +2746,36 @@ async function getEventStats(env, urlObj) {
     } while (offset);
     withAction = attendeeIds.filter(cid => acted.has(cid)).length;
     withOneOnOne = attendeeIds.filter(cid => oneOnOned.has(cid)).length;
+    withCommitment = attendeeIds.filter(cid => committed.has(cid)).length;
+  }
+
+  // 7. Attendee geography — county/city counts straight off the contact
+  //    records (zip falls back through the zip→county table). Feeds the
+  //    per-event geography section; the full geocoded map comes next pass.
+  const geo = { counties: [], cities: [] };
+  if (attendeeIds.length > 0) {
+    const countyCounts = {}, cityCounts = {};
+    let fieldCommitted = 0;
+    for (let i = 0; i < attendeeIds.length; i += 50) {
+      const chunk = attendeeIds.slice(i, i + 50);
+      const f = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+      const q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=county&fields%5B%5D=city&fields%5B%5D=zip&fields%5B%5D=amendment5_commitments&fields%5B%5D=house_meeting_commitments`;
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      for (const r of d.records) {
+        const county = r.fields.county || (r.fields.zip ? zipToCounty(String(r.fields.zip).slice(0, 5)) : null);
+        const city = r.fields.city || null;
+        if (county) countyCounts[county] = (countyCounts[county] || 0) + 1;
+        if (city) cityCounts[city] = (cityCounts[city] || 0) + 1;
+        // Commitments captured DURING the event (A5/house-meeting fields)
+        // count too — not just post-event Commitment logs.
+        if (String(r.fields.amendment5_commitments || '').trim() || String(r.fields.house_meeting_commitments || '').trim()) {
+          fieldCommitted++;
+        }
+      }
+    }
+    geo.counties = Object.entries(countyCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10);
+    geo.cities = Object.entries(cityCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10);
+    withCommitment = Math.max(withCommitment, fieldCommitted);
   }
 
   const payload = {
@@ -2743,12 +2794,63 @@ async function getEventStats(env, urlObj) {
       attendees: attendeeIds.length,
       with_action: withAction,
       with_one_on_one: withOneOnOne,
+      with_commitment: withCommitment,
       rate: attendeeIds.length > 0 ? Math.round((withAction / attendeeIds.length) * 100) : null,
       one_on_one_rate: attendeeIds.length > 0 ? Math.round((withOneOnOne / attendeeIds.length) * 100) : null,
+      commitment_rate: attendeeIds.length > 0 ? Math.round((withCommitment / attendeeIds.length) * 100) : null,
     },
+    geo,
   };
   await cachePut(env, cacheKey, payload, 120);
   return json(payload);
+}
+
+// =========================================================================
+// /feedback — structured issue intake from the dashboards.
+// Two flavors: manual (the 🐞 form — category + message) and auto (JS errors
+// + failed saves report themselves, once per signature per session).
+// Every report emails Liz with full context (organizer, page, list, event,
+// contact, recent errors) and is stored in KV for 30 days. The structure is
+// the anti-"custom button free-for-all": categories route the conversation.
+// =========================================================================
+async function submitFeedback(request, env, reporterEmail) {
+  const body = await request.json();
+  const { category = 'other', message = '', organizer = '', page = '', contact_id = null, auto = false, diag = null } = body;
+  if (!auto && !String(message).trim()) return json({ error: 'message required' }, 400);
+
+  // Rate-limit auto reports so an error loop can't flood the inbox
+  if (auto) {
+    const rlKey = `feedback:rate:${todayCT()}`;
+    const n = parseInt((await env.KV_BINDING.get(rlKey)) || '0');
+    if (n >= 20) return json({ ok: true, suppressed: true });
+    await env.KV_BINDING.put(rlKey, String(n + 1), { expirationTtl: 86400 });
+  }
+
+  const ts = new Date().toISOString();
+  const entry = { ts, reporter: reporterEmail, category, message, organizer, page, contact_id, auto, diag };
+  await env.KV_BINDING.put(`feedback:${ts}:${genToken(6)}`, JSON.stringify(entry), { expirationTtl: 60 * 60 * 24 * 30 });
+
+  const subject = auto
+    ? `[GW pilot · auto] ${String(diag?.errors?.[0] || 'JS error').slice(0, 80)}`
+    : `[GW pilot] ${category} — ${organizer || reporterEmail}`;
+  const html = `<div style="font-family:monospace;font-size:13px;line-height:1.6">
+    <p><b>${auto ? 'AUTOMATIC ERROR REPORT' : 'Issue report'}</b> · ${ts}</p>
+    <p><b>From:</b> ${escapeHtml(reporterEmail)} (${escapeHtml(organizer)})<br/>
+    <b>Category:</b> ${escapeHtml(category)}<br/>
+    <b>Page:</b> ${escapeHtml(page)}<br/>
+    ${contact_id ? `<b>Contact:</b> <a href="https://airtable.com/${BASE}/${CONTACTS_TBL}/${escapeHtml(contact_id)}">${escapeHtml(contact_id)}</a><br/>` : ''}
+    </p>
+    ${message ? `<p><b>What happened:</b><br/>${escapeHtml(message)}</p>` : ''}
+    ${diag ? `<p><b>Diagnostics:</b><br/><pre style="white-space:pre-wrap;background:#f4f4f4;padding:8px;border-radius:4px">${escapeHtml(JSON.stringify(diag, null, 2)).slice(0, 3000)}</pre></p>` : ''}
+  </div>`;
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: FROM_AUTH, to: ['emckenna@hks.harvard.edu'], subject, html }),
+    });
+  } catch (e) { /* KV copy survives even if email fails */ }
+  return json({ ok: true });
 }
 
 async function getRecentActivity(env, url) {
