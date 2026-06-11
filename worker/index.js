@@ -1991,7 +1991,7 @@ async function getProspects(env, url) {
 // =========================================================================
 const PROSPECT_FIELDS = ['Name','first','last','phone','email','school','district','log_count','organized_by','leader_ladder',
   'last_attempt_date','last_attempt_method','last_attempt_result','next_step','last_attempt_by','last_attempt_note',
-  'attempt_count','one_on_one_booked','amendment5_commitments','house_meeting_commitments',
+  'attempt_count','one_on_one_booked','amendment5_commitments','house_meeting_commitments','commitments_added','house_meeting_date',
   ...Object.values(EVENT_META).filter(m => m.signupField).map(m => m.signupField)];
 
 function rowFromRecord(r) {
@@ -2015,6 +2015,8 @@ function rowFromRecord(r) {
     one_on_one_booked: !!r.fields.one_on_one_booked,
     commitments: r.fields.amendment5_commitments || '',
     hm_commitments: r.fields.house_meeting_commitments || '',
+    commitments_added: r.fields.commitments_added || '',
+    house_meeting_date: r.fields.house_meeting_date || null,
     // Upcoming signups (for the Commitments pill): { '6_23': 'Signed up', ... }
     signups: Object.fromEntries(Object.entries(EVENT_META)
       .filter(([, m]) => m.signupField && r.fields[m.signupField])
@@ -2441,6 +2443,32 @@ async function logOutcome(request, env) {
   }
   if (attemptCount != null) contactFields.attempt_count = attemptCount;
   if (outcome === 'oneonone') contactFields.one_on_one_booked = true;
+  // Commitments made on calls (not just the A5 form): append a dated line to
+  // commitments_added so the Commitments pill shows the full arc. A separate
+  // method='Commitment' log row feeds conversion stats + history.
+  if (outcome === 'hm-scheduled' || outcome === 'amp-tracker') {
+    const what = outcome === 'hm-scheduled'
+      ? `Hosting a house meeting${body.commitment_date ? ' · ' + body.commitment_date : ''}`
+      : 'Amplifier tracker started';
+    try {
+      const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}?fields%5B%5D=commitments_added`);
+      const prev = String(cur.fields.commitments_added || '').trim();
+      contactFields.commitments_added = prev ? `${prev}\n${date} · ${what}` : `${date} · ${what}`;
+    } catch (e) { contactFields.commitments_added = `${date} · ${what}`; }
+    if (outcome === 'hm-scheduled' && body.commitment_date) contactFields.house_meeting_date = body.commitment_date;
+    try {
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+        method: 'POST',
+        body: JSON.stringify({ records: [{ fields: {
+          Summary: `${date} — Commitment: ${what}`,
+          date, method: 'Commitment', result: 'Signed up',
+          event: outcome === 'hm-scheduled' ? 'House meeting scheduled' : 'Amplifier tracker',
+          contact: [contact_id],
+          ...(organizer && ORGANIZER_IDS_LC[String(organizer).toLowerCase()] ? { organizer: [ORGANIZER_IDS_LC[String(organizer).toLowerCase()]] } : {}),
+        }}], typecast: true }),
+      });
+    } catch (e) { /* non-fatal */ }
+  }
   if (next_step) contactFields.next_step = next_step;
   await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`, {
     method: 'PATCH',

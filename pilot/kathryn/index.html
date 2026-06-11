@@ -799,6 +799,17 @@ function escapeHtml(s) {
 // Next-step options conditional on outcome. Event-signup entries are generated
 // from EVENTS so a new event only needs a registry entry.
 const NEXT_STEP_OPTIONS = {
+  'hm-scheduled': [
+    'Send house meeting host guide',
+    'Confirm date + invite list with them next week',
+    'Connect them with their coach',
+    'Other (write below)',
+  ],
+  'amp-tracker': [
+    'Check tracker progress in a week',
+    'Send amplifier toolkit link',
+    'Other (write below)',
+  ],
   connected: [
     'Schedule follow-up call within 7 days',
     'Send info packet about MOI',
@@ -866,6 +877,11 @@ function commitmentsOf(c) {
     .forEach(x => items.push({ kind: 'A5 commitment', text: x }));
   String(c.hm_commitments || '').split('·').map(x => x.trim()).filter(Boolean)
     .forEach(x => items.push({ kind: 'House meeting', text: x }));
+  // Commitments logged by callers (e.g. "I'll host a house meeting July 10",
+  // said at a training follow-up) — dated lines in commitments_added.
+  String(c.commitments_added || '').split('\n').map(x => x.trim()).filter(Boolean)
+    .forEach(x => items.push({ kind: 'Committed', text: x }));
+  if (c.house_meeting_date) items.push({ kind: 'House meeting', text: `Hosting on ${c.house_meeting_date}` });
   for (const [k, v] of Object.entries(c.signups || {})) {
     if (v === 'Signed up' && EVENTS[k]) items.push({ kind: 'Signed up', text: EVENTS[k].label });
     else if (v && EVENTS[k]) items.push({ kind: v, text: EVENTS[k].label });
@@ -1076,6 +1092,11 @@ function buildOutreachRow(c, i) {
           <select class="qoutcome-select">${outcomeOptions(c)}</select>
         </div>
         <div class="qalso qchecks" style="display:none;"></div>
+        <div class="qcommit-extra" style="display:none;align-items:center;gap:8px;">
+          <label style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;">Their house meeting date</label>
+          <input type="date" class="qcommit-date" style="background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;">
+          <span style="font-size:11px;color:var(--text-tertiary);">(optional — fills their commitment record)</span>
+        </div>
         <input type="text" class="qnotes" placeholder="Notes (optional — out of town until July, has a neighbor to bring, etc.)" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-hover);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:12.5px;font-family:inherit;">
         <div class="qsave-row">
           <button class="qsave-btn">Save</button>
@@ -1329,10 +1350,11 @@ async function submitRow(row) {
     let emailSent = false;
     let data = null;
     for (const oc of [outcome, ...alsoOutcomes]) {
+      const commitDate = row.querySelector('.qcommit-date')?.value || null;
       const res = await authFetch(`${WORKER}/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contact_id: row.dataset.contactId, methods, outcome: oc, next_step, notes: oc === outcome ? notes : '', organizer: ORGANIZER }),
+        body: JSON.stringify({ contact_id: row.dataset.contactId, methods, outcome: oc, next_step, notes: oc === outcome ? notes : '', organizer: ORGANIZER, commitment_date: oc === 'hm-scheduled' ? commitDate : null }),
       });
       data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -2311,6 +2333,8 @@ function updateRow(row) {
   }
 
   const alsoOneOnOne = !!row.querySelector('.qalso input[data-also="oneonone"]:checked');
+  const commitExtra = row.querySelector('.qcommit-extra');
+  if (commitExtra) commitExtra.style.display = outcome === 'hm-scheduled' ? 'flex' : 'none';
   const optsKey = outcome.startsWith('signed-up')
     ? (alsoOneOnOne ? `${outcome}+oneonone` : outcome)
     : normalizedOutcome(outcome);
