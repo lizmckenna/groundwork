@@ -217,6 +217,10 @@ export default {
       if (url.pathname === '/auth/verify' && request.method === 'POST') return await authVerify(request, env);
       if (url.pathname === '/signup' && request.method === 'POST') return await signup(request, env);
       if (url.pathname === '/house-meeting-signup' && request.method === 'POST') return await houseMeetingSignup(request, env);
+      if (url.pathname === '/amplifier-log' && request.method === 'POST') return await amplifierLog(request, env);
+      if (url.pathname === '/amplifier-progress' && request.method === 'GET') return await amplifierProgress(request, env, url);
+      if (url.pathname === '/amplifier-voters' && request.method === 'GET') return await amplifierVoters(request, env, url);
+      if (url.pathname === '/amplifier-voter-update' && request.method === 'POST') return await amplifierVoterUpdate(request, env);
       if (url.pathname === '/amendment5-signup' && request.method === 'POST') return await amendment5Signup(request, env);
       if (url.pathname === '/training-signup' && request.method === 'POST') return await trainingSignup(request, env);
       if (url.pathname === '/launch-rsvp' && request.method === 'POST') return await launchRsvp(request, env);
@@ -1831,6 +1835,302 @@ function safeRedirect(url) {
   return null;
 }
 
+// =========================================================================
+// Amplifier stopgap endpoints — built in the parallel session 6/11, merged
+// here so BOTH workstreams live in one source file (the repo is the single
+// source of truth; never deploy from an uncommitted clone again).
+// =========================================================================
+async function amplifierLog(request, env) {
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const rlKey = `rl:amplog:${ip}`;
+  let count = 0;
+  try {
+    count = parseInt(await env.KV_BINDING.get(rlKey) || "0");
+  } catch {
+  }
+  if (count >= 60) return json({ error: "too many requests, try again later" }, 429, { "Retry-After": "300" });
+  try {
+    await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 });
+  } catch {
+  }
+  const body = await request.json();
+  if (body.website && String(body.website).trim()) return json({ error: "bot detected" }, 400);
+  const {
+    amplifier_email,
+    amplifier_name,
+    voter_first,
+    voter_last,
+    voter_phone,
+    voter_email,
+    voter_street,
+    voter_zip,
+    voter_city,
+    conversation_number,
+    outcome,
+    notes,
+    interests
+  } = body;
+  const cInterests = Array.isArray(interests) ? interests.filter(Boolean) : [];
+  if (!amplifier_email) return json({ error: "amplifier email required (tell us who you are)" }, 400);
+  if (!voter_first || !voter_last) return json({ error: "voter first + last name are required" }, 400);
+  if (!conversation_number) return json({ error: "pick which conversation (1, 2, or election day)" }, 400);
+  const clean = (s) => String(s || "").replace(/^[^\w\s'.-]+/, "").trim();
+  const ampEmail = String(amplifier_email).toLowerCase().trim();
+  const cFirst = clean(voter_first);
+  const cLast = clean(voter_last);
+  const cPhone = voter_phone ? String(voter_phone).trim() : "";
+  const cEmail = voter_email ? String(voter_email).toLowerCase().trim() : "";
+  const cStreet = voter_street ? String(voter_street).trim() : "";
+  const cZip = voter_zip ? String(voter_zip).trim() : "";
+  const cCity = voter_city ? String(voter_city).trim() : "";
+  let ampId = null;
+  let ampDisplayName = amplifier_name || "";
+  try {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${ampEmail}'`)}&maxRecords=1`);
+    if (r.records.length > 0) {
+      ampId = r.records[0].id;
+      if (!ampDisplayName) ampDisplayName = r.records[0].fields.Name || ampEmail;
+    }
+  } catch {
+  }
+  if (!ampId) {
+    const ampFields = {
+      first: amplifier_name ? clean(amplifier_name).split(" ").slice(0, -1).join(" ") || amplifier_name : ampEmail.split("@")[0],
+      last: amplifier_name ? clean(amplifier_name).split(" ").slice(-1)[0] : "(amplifier)",
+      email: ampEmail,
+      leader_ladder: "Leader",
+      source: "self-registered amplifier"
+    };
+    try {
+      const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+        method: "POST",
+        body: JSON.stringify({ records: [{ fields: ampFields }], typecast: true })
+      });
+      ampId = created.records[0].id;
+      ampDisplayName = `${ampFields.first} ${ampFields.last}`;
+    } catch (e) {
+    }
+  }
+  let voterId = null;
+  if (cPhone) {
+    const digits = cPhone.replace(/\D/g, "").slice(-10);
+    if (digits.length === 10) {
+      const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+      if (r2.records.length > 0) voterId = r2.records[0].id;
+    }
+  }
+  if (!voterId && cEmail) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+    if (r.records.length > 0) voterId = r.records[0].id;
+  }
+  const today = todayCT();
+  const voterFields = {
+    first: cFirst,
+    last: cLast,
+    last_attempt_date: today
+  };
+  if (cPhone) voterFields.phone = cPhone;
+  if (cEmail) voterFields.email = cEmail;
+  if (cStreet) voterFields.street_address = cStreet;
+  if (cZip) voterFields.zip = cZip;
+  if (cCity) voterFields.city = cCity;
+  if (voterId) {
+    try {
+      await at(env, `/${BASE}/${CONTACTS_TBL}/${voterId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ fields: voterFields, typecast: true })
+      });
+    } catch {
+    }
+  } else {
+    const fields = {
+      ...voterFields,
+      leader_ladder: "Prospect",
+      source: `amplifier outreach \xB7 ${ampDisplayName || ampEmail}`
+    };
+    if (cZip) {
+      const orgId = deriveOrganizerId({ zip: cZip });
+      if (orgId) fields.assigned_organizer = [orgId];
+    }
+    const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+      method: "POST",
+      body: JSON.stringify({ records: [{ fields }], typecast: true })
+    });
+    voterId = created.records[0].id;
+  }
+  const convLabel = String(conversation_number) === "1" ? "Amp Conv 1 \u2014 Stakes" : String(conversation_number) === "2" ? "Amp Conv 2 \u2014 Vote plan" : String(conversation_number) === "3" ? "Amp Conv 3 \u2014 Election day" : `Amp Conv ${conversation_number}`;
+  const logFields = {
+    Summary: `${today} \u2014 ${convLabel} (amp: ${ampDisplayName || ampEmail})`,
+    date: today,
+    method: "Amplifier conversation",
+    result: outcome || "Conversation",
+    event: convLabel,
+    contact: [voterId],
+    notes: [
+      `Amplifier: ${ampDisplayName || ampEmail}`,
+      cInterests.length ? `Interests: ${cInterests.join(", ")}` : null,
+      notes ? `Notes: ${notes}` : null
+    ].filter(Boolean).join(" \xB7 ")
+  };
+  try {
+    await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+      method: "POST",
+      body: JSON.stringify({ records: [{ fields: logFields }], typecast: true })
+    });
+  } catch {
+  }
+  let unique_voters = 0, total_conversations = 0;
+  try {
+    const search = await at(env, `/${BASE}/${CONTACT_LOG_TBL}?filterByFormula=${encodeURIComponent(`AND({method}='Amplifier conversation',FIND('Amplifier: ${ampDisplayName || ampEmail}',{notes})>0)`)}&pageSize=100`);
+    total_conversations = search.records.length;
+    const voterSet = /* @__PURE__ */ new Set();
+    for (const rec of search.records) {
+      const cs = rec.fields.contact || [];
+      cs.forEach((id) => voterSet.add(id));
+    }
+    unique_voters = voterSet.size;
+  } catch {
+  }
+  await invalidateReadCaches(env);
+  return json({
+    ok: true,
+    voter_id: voterId,
+    amplifier_id: ampId,
+    unique_voters,
+    total_conversations,
+    voter_name: `${cFirst} ${cLast}`,
+    conversation: convLabel
+  });
+}
+
+async function amplifierProgress(request, env, urlObj) {
+  const email = (urlObj.searchParams.get("email") || "").toLowerCase().trim();
+  if (!email) return json({ error: "email required" }, 400);
+  let ampName = email;
+  try {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email}'`)}&maxRecords=1`);
+    if (r.records.length > 0) ampName = r.records[0].fields.Name || email;
+  } catch {
+  }
+  let unique_voters = 0, total_conversations = 0;
+  try {
+    const search = await at(env, `/${BASE}/${CONTACT_LOG_TBL}?filterByFormula=${encodeURIComponent(`AND({method}='Amplifier conversation',FIND('Amplifier: ${ampName}',{notes})>0)`)}&pageSize=100`);
+    total_conversations = search.records.length;
+    const voterSet = /* @__PURE__ */ new Set();
+    for (const rec of search.records) {
+      (rec.fields.contact || []).forEach((id) => voterSet.add(id));
+    }
+    unique_voters = voterSet.size;
+  } catch {
+  }
+  return json({ ok: true, email, amplifier_name: ampName, unique_voters, total_conversations });
+}
+
+async function amplifierVoters(request, env, urlObj) {
+  const email = (urlObj.searchParams.get("email") || "").toLowerCase().trim();
+  if (!email) return json({ error: "email required" }, 400);
+  let ampName = email;
+  try {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email}'`)}&maxRecords=1`);
+    if (r.records.length > 0) ampName = r.records[0].fields.Name || email;
+  } catch {
+  }
+  const logs = [];
+  let offset = null;
+  const filter = `AND({method}='Amplifier conversation',FIND('Amplifier: ${ampName}',{notes})>0)`;
+  do {
+    const q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100&sort%5B0%5D%5Bfield%5D=date&sort%5B0%5D%5Bdirection%5D=desc${offset ? `&offset=${encodeURIComponent(offset)}` : ""}`;
+    const data = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    logs.push(...data.records);
+    offset = data.offset || null;
+  } while (offset);
+  const byContact = {};
+  for (const log of logs) {
+    const cs = log.fields.contact || [];
+    for (const cid of cs) {
+      if (!byContact[cid]) byContact[cid] = [];
+      byContact[cid].push({
+        date: log.fields.date || "",
+        event: log.fields.event || "",
+        result: log.fields.result || "",
+        notes: log.fields.notes || ""
+      });
+    }
+  }
+  const voterIds = Object.keys(byContact);
+  const voters = [];
+  for (let i = 0; i < voterIds.length; i += 10) {
+    const chunk = voterIds.slice(i, i + 10);
+    const formula = `OR(${chunk.map((id) => `RECORD_ID()='${id}'`).join(",")})`;
+    const u = `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
+    try {
+      const data = await at(env, u);
+      for (const rec of data.records) {
+        voters.push({
+          id: rec.id,
+          name: rec.fields.Name || `${rec.fields.first || ""} ${rec.fields.last || ""}`.trim(),
+          phone: rec.fields.phone || "",
+          email: rec.fields.email || "",
+          zip: rec.fields.zip || "",
+          city: rec.fields.city || "",
+          conversations: byContact[rec.id] || []
+        });
+      }
+    } catch {
+    }
+  }
+  voters.sort((a, b) => {
+    const ad = a.conversations[0] && a.conversations[0].date || "";
+    const bd = b.conversations[0] && b.conversations[0].date || "";
+    return bd.localeCompare(ad);
+  });
+  return json({ ok: true, amplifier_name: ampName, voters });
+}
+
+async function amplifierVoterUpdate(request, env) {
+  const body = await request.json();
+  const { amplifier_email, voter_id, voter_first, voter_last, voter_phone, voter_email, voter_zip, voter_city, voter_street } = body;
+  if (!amplifier_email || !voter_id) return json({ error: "amplifier_email and voter_id required" }, 400);
+  let ampName = amplifier_email.toLowerCase().trim();
+  try {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${ampName}'`)}&maxRecords=1`);
+    if (r.records.length > 0) ampName = r.records[0].fields.Name || ampName;
+  } catch {
+  }
+  const filter = `AND({method}='Amplifier conversation',FIND('Amplifier: ${ampName}',{notes})>0)`;
+  let owns = false;
+  try {
+    const data = await at(env, `/${BASE}/${CONTACT_LOG_TBL}?filterByFormula=${encodeURIComponent(filter)}&pageSize=100`);
+    for (const log of data.records) {
+      if ((log.fields.contact || []).includes(voter_id)) {
+        owns = true;
+        break;
+      }
+    }
+  } catch {
+  }
+  if (!owns) return json({ error: "voter not in your list" }, 403);
+  const patch = {};
+  if (voter_first) patch.first = String(voter_first).trim();
+  if (voter_last) patch.last = String(voter_last).trim();
+  if (voter_phone) patch.phone = String(voter_phone).trim();
+  if (voter_email) patch.email = String(voter_email).toLowerCase().trim();
+  if (voter_zip) patch.zip = String(voter_zip).trim();
+  if (voter_city) patch.city = String(voter_city).trim();
+  if (voter_street) patch.street_address = String(voter_street).trim();
+  if (Object.keys(patch).length === 0) return json({ error: "nothing to update" }, 400);
+  try {
+    await at(env, `/${BASE}/${CONTACTS_TBL}/${voter_id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ fields: patch, typecast: true })
+    });
+  } catch (e) {
+    return json({ error: "update failed: " + e.message }, 500);
+  }
+  return json({ ok: true });
+}
+
+
 async function authStart(request, env) {
   const body = await request.json();
   const email = (body.email || '').toLowerCase().trim();
@@ -2115,23 +2415,12 @@ async function getCallList(env, urlObj) {
       offset = page.offset;
     } while (offset);
 
-    // Exclude anyone who already booked a 1-1 or made a commitment.
-    const converted = new Set();
-    const cf = `OR({event}='1-1 meeting',{method}='Commitment',{method}='House meeting')`;
-    offset = null;
-    do {
-      let q = `?filterByFormula=${encodeURIComponent(cf)}&pageSize=100&fields%5B%5D=contact`;
-      if (offset) q += `&offset=${offset}`;
-      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
-      for (const r of d.records) {
-        const cid = (r.fields.contact || [])[0];
-        if (cid) converted.add(cid);
-      }
-      offset = d.offset;
-    } while (offset);
-
+    // (Legacy log-based 'converted' exclusion removed 6/11: A5 form signups
+    // write Commitment logs, so it wrongly hid everyone whose commitments
+    // went beyond HM/Amplifier — exactly the follow-up population. Drop-off
+    // is now purely field-based: training signups + one_on_one_booked,
+    // already in the formula above.)
     const rows = candidates
-      .filter(r => !converted.has(r.id))
       .slice(0, n)
       .map(r => {
         const row = rowFromRecord(r);
