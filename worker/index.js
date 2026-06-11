@@ -960,6 +960,7 @@ export default {
       if (url.pathname === '/walkin' && request.method === 'POST') return await walkinSignup(request, env);
       if (url.pathname === '/today-stats') return await getTodayStats(env, url);
       if (url.pathname === '/event-stats') return await getEventStats(env, url);
+      if (url.pathname === '/training-totals') return await getTrainingTotals(env);
       if (url.pathname === '/recent-activity') return await getRecentActivity(env, url);
       if (url.pathname === '/search') return await searchContacts(env, url);
       if (url.pathname === '/queue-count') return await getQueueCount(env, url);
@@ -2317,6 +2318,8 @@ function prospectsFilter(organizerName_) {
     `NOT({last_attempt_result}='Skipped'),`,
     `NOT({last_attempt_result}='Wrong number'),`,
     `NOT({last_attempt_result}='Do not contact'),`,
+    `NOT({last_attempt_result}='Removed from list'),`,
+    `NOT({last_attempt_result}='Removed from list'),`,
     `${schoolExcl},`,
     `${roleExcl}`,
     `${orgClause}`,
@@ -2723,6 +2726,7 @@ function resolveOutcome(outcome, methodCount) {
     case 'skipped':          return { result: 'Skipped',     event: null };
     case 'wrong-number':     return { result: 'Wrong number', event: null };
     case 'do-not-contact':   return { result: 'Do not contact', event: null };
+    case 'remove-from-list': return { result: 'Removed from list', event: null };
     default:                 return { result: methodCount > 0 ? 'No answer' : null, event: null };
   }
 }
@@ -2735,7 +2739,7 @@ async function logOutcome(request, env) {
   const { result, event } = resolveOutcome(outcome, methods.length);
   const organizerLabel = (ORGANIZER_PROFILE[String(organizer || '').toLowerCase()] || {}).name || organizer || null;
 
-  const ADMIN_OUTCOMES = ['skipped','wrong-number','do-not-contact'];
+  const ADMIN_OUTCOMES = ['skipped','wrong-number','do-not-contact','remove-from-list'];
   const isAdmin = ADMIN_OUTCOMES.includes(outcome);
   if (!isAdmin && methods.length === 0) {
     return json({ error: 'no methods checked' }, 400);
@@ -3449,6 +3453,59 @@ async function getTodayStats(env, urlObj) {
 // came, how were they confirmed?"), and onboarding→action conversion
 // (attendees who took ANY next action after the event date).
 // =========================================================================
+// Org-wide training totals for Kathryn's cards. Trained = unique people with
+// a new-style attendance mark OR a historical event_attendance row matching
+// amplifier / house-meeting training names.
+async function getTrainingTotals(env) {
+  const cached = await cacheGet(env, 'cache:training-totals');
+  if (cached) return json(cached);
+  const metas = Object.values(EVENT_META).filter(m => m.type === 'hm' || m.type === 'amp');
+  const signupClause = 'OR(' + metas.map(m => `{${m.signupField}}='Signed up'`).join(',') + ')';
+  const attendClause = 'OR(' + metas.map(m => `OR({${m.attendField}}='Attended',{${m.attendField}}='Walk-in')`).join(',') + ')';
+  const count = async (formula) => {
+    let n = 0, offset = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=record_id`;
+      if (offset) q += `&offset=${offset}`;
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      n += d.records.length;
+      for (const r of d.records) {} // ids not needed for signups
+      offset = d.offset;
+    } while (offset);
+    return n;
+  };
+  const signed = await count(signupClause);
+  // trained: unique contact ids from both sources
+  const trainedIds = new Set();
+  {
+    let offset = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(attendClause)}&pageSize=100&fields%5B%5D=record_id`;
+      if (offset) q += `&offset=${offset}`;
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      for (const r of d.records) trainedIds.add(r.id);
+      offset = d.offset;
+    } while (offset);
+  }
+  {
+    const f = `AND(OR(FIND('amplifier',LOWER({event}&''))>0,FIND('house m',LOWER({event}&''))>0,FIND('hm training',LOWER({event}&''))>0),{attended}!=FALSE())`;
+    let offset = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=contact`;
+      if (offset) q += `&offset=${offset}`;
+      const d = await at(env, `/${BASE}/${EVENT_ATTENDANCE_TBL}${q}`);
+      for (const r of d.records) {
+        const cid = (r.fields.contact || [])[0];
+        if (cid) trainedIds.add(cid);
+      }
+      offset = d.offset;
+    } while (offset);
+  }
+  const payload = { signed_up: signed, trained: trainedIds.size };
+  await cachePut(env, 'cache:training-totals', payload, 300);
+  return json(payload);
+}
+
 async function getEventStats(env, urlObj) {
   const eventParam = urlObj.searchParams.get('event') || '5_26';
   const meta = eventMeta(eventParam);

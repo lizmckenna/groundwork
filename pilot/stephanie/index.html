@@ -934,9 +934,12 @@ async function toggleHistoryPop(span) {
       const who = e.organizer
         ? (e.inferred ? ` · <span title="Attribution inferred from list assignment (logs before 6/11 didn't record the caller — lists don't overlap, so this is near-certain)">likely ${escapeHtml(e.organizer)}</span>` : ` · by ${escapeHtml(e.organizer)}`)
         : '';
+      const flagged = e.result === 'Do not contact' || e.result === 'Removed from list';
       const what = e.kind === 'event'
         ? `<span class="hev">${escapeHtml(e.event || 'Event')}</span> · ${escapeHtml(e.result || '')}`
-        : `${escapeHtml(e.method || '')}${e.result ? ' · ' + escapeHtml(e.result) : ''}${e.event ? ' · ' + escapeHtml(e.event) : ''}${who}`;
+        : flagged
+          ? `<span style="color:var(--gw-red);">▲ marked ${escapeHtml(e.result)}${who}</span>`
+          : `${escapeHtml(e.method || '')}${e.result ? ' · ' + escapeHtml(e.result) : ''}${e.event ? ' · ' + escapeHtml(e.event) : ''}${who}`;
       const note = e.notes ? `<div class="hnote">📝 ${escapeHtml(e.notes)}</div>` : '';
       return `<div class="qhistory-row"><span class="hd">${escapeHtml(e.date || '—')}</span><span>${what}${note}</span></div>`;
     }).join('');
@@ -1047,7 +1050,8 @@ function outcomeOptions(c) {
   opts.push({ v: '__div', label: '──────────' });
   opts.push({ v: 'skipped', label: '⊘ Skip (not a prospect)' });
   opts.push({ v: 'wrong-number', label: '✕ Wrong number' });
-  opts.push({ v: 'do-not-contact', label: '⊗ Remove from call list' });
+  opts.push({ v: 'remove-from-list', label: '↪ Remove from my list (not my territory)' });
+  opts.push({ v: 'do-not-contact', label: '⛔ Do not contact (they asked)' });
   return opts.map(o => o.v === '__div'
     ? `<option disabled>${o.label}</option>`
     : `<option value="${o.v}">${o.label}</option>`).join('');
@@ -1081,7 +1085,6 @@ function buildOutreachRow(c, i) {
         <div class="qname"><a href="${airtableUrl(c.id)}" target="_blank" rel="noopener" title="Open in Airtable to edit (phone, email, school, etc.)" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a></div>
         <div class="qmeta">${metaLine(c)}</div>
         ${pillsLine(c)}
-        ${c.dnc_flag_date ? `<div><span class="qsignal" style="background:var(--gw-red-soft);color:var(--gw-red);font-weight:600;">⚠ asked not to be contacted · ${escapeHtml(c.dnc_flag_date)} — check Attempts before calling</span></div>` : ''}
         ${listContextLine(c)}
         ${lastTouchLine(c)}
       </div>
@@ -1288,7 +1291,8 @@ async function submitAdmin(row, adminOutcome) {
   const confirmText = {
     'skipped': 'Skip this person (e.g. already a P4KCKids leader)? They will not come back in your queue.',
     'wrong-number': 'Mark this number as wrong / out of service? They will not come back in your queue.',
-    'do-not-contact': 'Mark this person as "do not contact"? They will be removed from the call list permanently.',
+    'do-not-contact': 'Mark as Do not contact (the person asked not to be contacted)? They will be excluded from all call lists.',
+    'remove-from-list': 'Remove from your list (wrong territory / belongs with someone else)? They leave your queue.',
   };
   if (!confirm(confirmText[adminOutcome] || 'Apply this action?')) return false;
   const notes = (row.querySelector('.qnotes')?.value || '').trim();
@@ -1585,23 +1589,26 @@ async function loadFunnelCards() {
 async function loadKathrynTotals() {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('hero-h1', 'Turn the trainings out.');
-  set('ev-funnel-label', 'Trainings · cumulative signups');
-  set('conv-label', 'Trainings · cumulative trained');
-  const keys = Object.keys(EVENTS).filter(k => EVENTS[k].type === 'hm' || EVENTS[k].type === 'amp');
+  // Kathryn does a handful of calls — the by-day outreach grid is noise for her
+  const gridSection = document.getElementById('grid-days');
+  if (gridSection) {
+    const head = gridSection.previousElementSibling;
+    gridSection.closest('.outreach-grid-wrap')?.remove?.();
+    if (head && head.classList?.contains('section-head')) head.remove();
+  }
   try {
-    const results = await Promise.all(keys.map(k =>
-      authFetch(`${WORKER}/event-stats?event=${k}`).then(r => r.ok ? r.json() : null).catch(() => null)));
-    let signed = 0, trained = 0;
-    for (const r of results.filter(Boolean)) {
-      signed += r.signups || 0;
-      trained += (r.attended || 0) + (r.walk_in || 0);
+    const r = await authFetch(`${WORKER}/training-totals`);
+    if (r.ok) {
+      const t = await r.json();
+      set('ev-signups', t.signed_up ?? '—');
+      set('ev-confirmed', '');
+      const fEl = document.getElementById('ev-funnel-label'); if (fEl) fEl.textContent = 'Signed up · all HM + Amplifier trainings';
+      const bar = document.getElementById('ev-bar'); if (bar) bar.style.width = '0%';
+      const sub = document.querySelector('.metric-card .mc-sub'); if (sub) sub.textContent = '';
+      set('conv-label', 'Trained · all HM + Amplifier trainings');
+      set('conv-rate', t.trained ?? '—');
+      set('conv-detail', 'unique people, including trainings before this dashboard existed');
     }
-    set('ev-signups', signed);
-    set('ev-confirmed', '');
-    const fEl = document.getElementById('ev-funnel-label'); if (fEl) fEl.textContent = 'Total signed up · all HM + Amplifier trainings';
-    const bar = document.getElementById('ev-bar'); if (bar) bar.style.width = '0%';
-    set('conv-rate', trained);
-    set('conv-detail', 'people trained across all house meeting + amplifier trainings');
   } catch (e) {}
 }
 
@@ -2226,7 +2233,7 @@ document.getElementById('ac-save')?.addEventListener('click', async () => {
 });
 
 // === Interaction logic ===
-const ADMIN_OUTCOMES = ['skipped', 'wrong-number', 'do-not-contact'];
+const ADMIN_OUTCOMES = ['skipped', 'wrong-number', 'do-not-contact', 'remove-from-list'];
 function rowOutcome(row) {
   // Outcome comes from the single "What happened" select.
   return row.querySelector('.qoutcome-select')?.value || '';
