@@ -746,6 +746,17 @@ export default {
         await invalidateReadCaches(env);
         return json({ updated, matched: updates.length, blank_total: rows.length, errors });
       }
+      if (url.pathname === '/admin/set-zoom-link' && request.method === 'POST') {
+        // Per-event Zoom/registration link, stored in KV — no redeploy.
+        const k = request.headers.get('X-Admin-Key');
+        const zOk = (env.ADMIN_KEY && k === env.ADMIN_KEY) || (env.SETUP_KEY && k === env.SETUP_KEY);
+        if (!zOk) return json({ error: 'forbidden' }, 403);
+        const body = await request.json();
+        if (!body.event || !EVENT_META[body.event]) return json({ error: 'unknown event' }, 400);
+        if (body.link) await env.KV_BINDING.put(`zoomlink:${body.event}`, String(body.link));
+        else await env.KV_BINDING.delete(`zoomlink:${body.event}`);
+        return json({ ok: true, event: body.event, link: body.link || null });
+      }
       if (url.pathname === '/admin/setup-pilot-fields' && request.method === 'POST') {
         // One-shot: attribution + note denormalization fields.
         const k = request.headers.get('X-Admin-Key');
@@ -2891,7 +2902,7 @@ const EMAIL_EVENTS = {
     intro_event: '<strong>No on 5 Onboarding — protecting Missouri public school funding</strong>',
     big_date_html: 'Tue, June 23<br/>7:30 PM CT',
     sign_off_date: 'June 23rd',
-    zoom_link: 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1',
+    zoom_link: null, // registration now required — set via /admin/set-zoom-link when Ellen provides the registration URL
   },
   '7_7': {
     subject: `You're in — No on 5 Onboarding · Tue 7/7 7:30 PM CT`,
@@ -2900,7 +2911,7 @@ const EMAIL_EVENTS = {
     intro_event: '<strong>No on 5 Onboarding — protecting Missouri public school funding</strong>',
     big_date_html: 'Tue, July 7<br/>7:30 PM CT',
     sign_off_date: 'July 7th',
-    zoom_link: 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1',
+    zoom_link: null, // same
   },
   '7_21': {
     subject: `You're in — No on 5 Onboarding · Tue 7/21 7:30 PM CT`,
@@ -2909,7 +2920,7 @@ const EMAIL_EVENTS = {
     intro_event: '<strong>No on 5 Onboarding — protecting Missouri public school funding</strong>',
     big_date_html: 'Tue, July 21<br/>7:30 PM CT',
     sign_off_date: 'July 21st',
-    zoom_link: 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqxY3uxQSKeMKYfqMv.1',
+    zoom_link: null, // same
   },
 };
 
@@ -2934,7 +2945,7 @@ function autoEmailEvent(key) {
     intro_event: `<strong>${fullTitle}</strong>`,
     big_date_html: `${dayName}, ${monthName} ${d.getDate()}<br/>${time}`,
     sign_off_date: `${monthName} ${d.getDate()}`,
-    zoom_link: ZOOM_LINK_5_26,
+    zoom_link: null, // trainings: link set via /admin/set-zoom-link per event
   };
 }
 
@@ -2946,7 +2957,12 @@ async function sendConfirmationEmail(env, toEmail, firstName, contactId, organiz
   const replyTo = profile.reply_to;
   const signoffName = profile.name;
   const signoffGroup = profile.group;
-  const ev = EMAIL_EVENTS[String(eventKey || '5_26')] || autoEmailEvent(String(eventKey || '5_26')) || EMAIL_EVENTS['5_26'];
+  const ev = { ...(EMAIL_EVENTS[String(eventKey || '5_26')] || autoEmailEvent(String(eventKey || '5_26')) || EMAIL_EVENTS['5_26']) };
+  // Per-event link override (set by /admin/set-zoom-link, no redeploy needed).
+  try {
+    const kvLink = await env.KV_BINDING.get(`zoomlink:${String(eventKey || '5_26')}`);
+    if (kvLink) ev.zoom_link = kvLink;
+  } catch (e) {}
   const subject = ev.subject;
   const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -3015,10 +3031,12 @@ ${ev.preview}
                 On Zoom
               </div>
               <div style="margin:18px 0 0">
-                <a href="${ev.zoom_link}" style="display:inline-block;background:#1A2418;color:#E9E5CE;text-decoration:none;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.06em;padding:13px 20px;border-radius:8px">Open the Zoom link →</a>
+                ${ev.zoom_link
+                  ? `<a href="${ev.zoom_link}" style="display:inline-block;background:#1A2418;color:#E9E5CE;text-decoration:none;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.06em;padding:13px 20px;border-radius:8px">Open the Zoom link →</a>`
+                  : `<div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#1A2418">You're confirmed — the Zoom link arrives by email the day before.</div>`}
               </div>
               <div style="margin:10px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#1A2418;opacity:.65;word-break:break-all">
-                ${ev.zoom_link}
+                ${ev.zoom_link || ''}
               </div>
             </td></tr>
           </table>
@@ -3488,7 +3506,7 @@ async function getTrainingTotals(env) {
     } while (offset);
   }
   {
-    const f = `AND(OR(FIND('amplifier',LOWER({event}&''))>0,FIND('house m',LOWER({event}&''))>0,FIND('hm training',LOWER({event}&''))>0),{attended}!=FALSE())`;
+    const f = `AND(OR(FIND('amplifier',LOWER({event}&''))>0,FIND('house m',LOWER({event}&''))>0,FIND('hm training',LOWER({event}&''))>0),OR({attended}='Yes',{attended}='Attended',{attended}='Walk-in',{attended}=TRUE()),{date}!=BLANK(),IS_AFTER({date},'2026-04-30'))`;
     let offset = null;
     do {
       let q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=contact`;

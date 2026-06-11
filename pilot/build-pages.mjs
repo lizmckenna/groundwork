@@ -34,7 +34,7 @@ for (const page of Object.values(PAGES)) {
   out = out.replaceAll(`const ORGANIZER = 'lanee'`, `const ORGANIZER = '${page.slug}'`);
   out = out.replaceAll('Groundwork — LaNee · MOI Pilot', `Groundwork — ${page.pill} · MOI Pilot`);
   out = out.replaceAll('<span class="user-pill">LaNee</span>', `<span class="user-pill">${page.pill}</span>`);
-  out = out.replaceAll('Onramp calls · LaNee Bridewell', page.eyebrow);
+  out = out.replaceAll("LaNeé Bridewell's dashboard", `${page.fullName}'s dashboard`);
   out = out.replaceAll('Groundwork · LaNee · Missouri pilot', `Groundwork · ${page.pill} · Missouri pilot`);
   out = out.replaceAll(`'gw_lanee_counter_cache_v2'`, `'gw_${page.slug}_counter_cache_v2'`);
   out = out.replaceAll(`localStorage.getItem('gw-call-list') || 'fresh'`, `localStorage.getItem('gw-call-list') || '${page.defaultList}'`);

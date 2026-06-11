@@ -499,10 +499,13 @@
 <main class="container">
 
   <div class="tab-pane active" data-pane="today">
-    <section class="hero">
-      <div class="eyebrow" id="hero-eyebrow">Follow-up calls · Kathryn</div>
-      <h1 id="hero-h1">Turn the list out to the next onboarding.</h1>
-      <p class="lede">Log every attempt as you go. Amber chips mark missing Airtable data — click to fix at the source.</p>
+    <section class="hero" style="display:flex;align-items:center;gap:22px;">
+      <img src="/groundwork/pfmps.png" alt="Parents for Missouri Public Schools" style="width:104px;height:104px;border-radius:50%;flex-shrink:0;box-shadow:0 4px 18px rgba(0,0,0,0.10);">
+      <div>
+        <div class="eyebrow">Parents for Missouri Public Schools</div>
+        <h1 id="hero-h1" style="margin:2px 0 6px;">Kathryn's dashboard</h1>
+        <p class="lede" style="margin:0;">Log every attempt as you go. Amber chips mark missing Airtable data — click to fix at the source.</p>
+      </div>
     </section>
 
     <div class="metric-strip">
@@ -1558,7 +1561,7 @@ async function loadFunnelCards() {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   if (ORGANIZER === 'kathryn') return loadKathrynTotals();
   // Dynamic labels — these roll over by date, no manual flip needed
-  set('hero-h1', `Turn the list out to ${EVENTS[CURRENT_EVENT].short}.`);
+
   set('ev-funnel-label', `${EVENTS[CURRENT_EVENT].short} Onboarding · org-wide funnel`);
   set('conv-label', `${EVENTS[PREV_EVENT].short} Onboarding → action`);
   try {
@@ -1588,7 +1591,7 @@ async function loadFunnelCards() {
 // now" — total signed up + total trained across HM + Amplifier).
 async function loadKathrynTotals() {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set('hero-h1', 'Turn the trainings out.');
+
   // Kathryn does a handful of calls — the by-day outreach grid is noise for her
   const gridSection = document.getElementById('grid-days');
   if (gridSection) {
