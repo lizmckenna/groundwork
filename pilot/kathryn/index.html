@@ -422,7 +422,7 @@
 .day-bar-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
 .day-bar-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text-tertiary); width: 72px; flex-shrink: 0; text-align: right; }
 .day-bar-row.today .day-bar-label { color: var(--gw-purple); font-weight: 700; }
-.day-bar-track { flex: 1; height: 16px; background: var(--bg-elevated); border-radius: 4px; overflow: hidden; display: flex; }
+.day-bar-track { border-radius: 999px; overflow: hidden; flex: 1; height: 16px; background: var(--bg-elevated); border-radius: 4px; overflow: hidden; display: flex; }
 .day-bar-seg { height: 100%; }
 .day-bar-counts { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text-tertiary); width: 200px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Event tab metric strip */
@@ -502,9 +502,7 @@
     <section class="hero" style="display:flex;align-items:center;gap:22px;">
       <img src="/groundwork/pfmps.png" alt="Parents for Missouri Public Schools" style="width:104px;height:104px;border-radius:50%;flex-shrink:0;box-shadow:0 4px 18px rgba(0,0,0,0.10);">
       <div>
-        <div class="eyebrow">Parents for Missouri Public Schools</div>
-        <h1 id="hero-h1" style="margin:2px 0 6px;">Kathryn's dashboard</h1>
-        <p class="lede" style="margin:0;">Log every attempt as you go. Amber chips mark missing Airtable data — click to fix at the source.</p>
+        <h1 id="hero-h1" style="margin:0;">Kathryn's dashboard</h1>
       </div>
     </section>
 
@@ -543,10 +541,10 @@
     <div class="outreach-grid-wrap">
       <div id="grid-days"></div>
       <div class="legend">
-        <span class="legend-item"><span class="legend-swatch grey"></span>Attempted · no answer</span>
-        <span class="legend-item"><span class="legend-swatch light-purple"></span>Conversation</span>
-        <span class="legend-item"><span class="legend-swatch purple"></span>Signed up</span>
-        <span class="legend-item"><span class="legend-swatch green"></span>1-1 booked</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:#d4d4d8"></span>Attempted · no answer</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:#facc15"></span>Conversation</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--gw-purple)"></span>Signed up</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--gw-green)"></span>1-1 booked</span>
       </div>
     </div>
 
@@ -1489,7 +1487,7 @@ async function bootAuth() {
 async function loadCumulativeGrid() {
   let byDate = {};
   try {
-    const r = await authFetch(`${WORKER}/recent-activity?days=14&organizer=${ORGANIZER}`);
+    const r = await authFetch(`${WORKER}/recent-activity?days=7&organizer=${ORGANIZER}`);
     if (r.ok) {
       const data = await r.json();
       byDate = data.by_date || {};
@@ -1508,18 +1506,18 @@ async function loadCumulativeGrid() {
   wrap.innerHTML = '';
   const today = todayCT();
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  // Always show the last 14 days (incl. empty ones) so the rhythm is visible
+  // Last 7 days only (incl. empty ones) — anything longer gets cluttered
   const days = [];
   const t = new Date(today + 'T00:00:00');
-  for (let i = 13; i >= 0; i--) {
+  for (let i = 6; i >= 0; i--) {
     const d = new Date(t); d.setDate(t.getDate() - i);
     days.push(d.toISOString().split('T')[0]);
   }
   // Scale bars against the busiest day (min 10 so a 2-call day doesn't fill the row)
   const maxDay = Math.max(10, ...days.map(d => (byDate[d] || []).length));
   const SEG_COLORS = {
-    attempted: 'var(--border-hover)',
-    connected: 'var(--gw-purple-soft, #c4b5fd)',
+    attempted: '#d4d4d8',          // gray — attempted, no answer
+    connected: '#facc15',          // yellow — conversation
     'signed-up': 'var(--gw-purple)',
     oneonone: 'var(--gw-green)',
   };
