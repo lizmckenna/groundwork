@@ -3187,6 +3187,7 @@ async function getConfirmees(env, urlObj) {
     : signupClause;
   const fields = ['Name','first','last','phone','email','school','district','last_attempt_date','source','signup_6_9_status'];
   if (meta.signupField && !fields.includes(meta.signupField)) fields.push(meta.signupField);
+  if (!fields.includes(meta.attendField)) fields.push(meta.attendField);
   // Paginate fully — no hard cap. Each page = 100 records.
   const allContacts = [];
   {
@@ -3261,7 +3262,7 @@ async function getConfirmees(env, urlObj) {
     last_attempt_date: r.fields.last_attempt_date || '',
     source: r.fields.source || '',
     confirm: stateByContact[r.id] || { email_sent: false, text_sent: false, call_made: false, status: null, last_date: null },
-    attendance: attendanceByContact[r.id]?.result || null,
+    attendance: r.fields[meta.attendField] || attendanceByContact[r.id]?.result || null,
     signup_6_9: r.fields.signup_6_9_status || null,
     signup_status: meta.signupField ? (r.fields[meta.signupField] || null) : (r.fields.last_attempt_result === 'Signed up' ? 'Signed up' : null),
   }));
@@ -3578,22 +3579,19 @@ async function getEventStats(env, urlObj) {
     } while (offset);
   }
 
-  // 3. Attendance logs → most-recent result per contact
+  // 3. Attendance from the contact FIELD — authoritative: Airtable grid bulk
+  //    edits and dashboard day-of marks both write it. (Counting log rows
+  //    missed every grid edit: 33 logged vs 37 marked for 6/9.)
   const attendance = {};
   {
-    const af = `AND({event}='${meta.attendEvent}',{method}='Event attendance',OR({result}='Attended',{result}='No-show',{result}='Walk-in'))`;
+    const af = `{${meta.attendField}}!=BLANK()`;
     let offset = null;
     do {
-      let aq = `?filterByFormula=${encodeURIComponent(af)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=result&fields%5B%5D=date`;
+      let aq = `?filterByFormula=${encodeURIComponent(af)}&pageSize=100&fields%5B%5D=${encodeURIComponent(meta.attendField)}`;
       if (offset) aq += `&offset=${offset}`;
-      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${aq}`);
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}${aq}`);
       for (const r of d.records) {
-        const cid = (r.fields.contact || [])[0];
-        if (!cid) continue;
-        const prev = attendance[cid];
-        if (!prev || (r.fields.date && r.fields.date > prev.date)) {
-          attendance[cid] = { result: r.fields.result, date: r.fields.date };
-        }
+        attendance[r.id] = { result: r.fields[meta.attendField] };
       }
       offset = d.offset;
     } while (offset);
