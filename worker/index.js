@@ -2383,7 +2383,8 @@ async function getProspects(env, url) {
 const PROSPECT_FIELDS = ['Name','first','last','phone','email','school','district','log_count','organized_by','leader_ladder',
   'last_attempt_date','last_attempt_method','last_attempt_result','next_step','last_attempt_by','last_attempt_note',
   'attempt_count','one_on_one_booked','amendment5_commitments','house_meeting_commitments','commitments_added','house_meeting_date','dnc_flag_date',
-  ...Object.values(EVENT_META).filter(m => m.signupField).map(m => m.signupField)];
+  ...Object.values(EVENT_META).filter(m => m.signupField).map(m => m.signupField),
+  ...Object.values(EVENT_META).map(m => m.attendField)];
 
 function rowFromRecord(r) {
   return {
@@ -2413,6 +2414,10 @@ function rowFromRecord(r) {
     signups: Object.fromEntries(Object.entries(EVENT_META)
       .filter(([, m]) => m.signupField && r.fields[m.signupField])
       .map(([k, m]) => [k, r.fields[m.signupField]])),
+    // New-era events attended (per-event fields) — log_count only covers the
+    // historical event_attendance table, so the Events pill adds these.
+    recent_events: Object.values(EVENT_META)
+      .filter(m => ['Attended', 'Walk-in'].includes(r.fields[m.attendField])).length,
   };
 }
 
@@ -2583,7 +2588,7 @@ async function getContactHistory(env, urlObj) {
   if (!cid) return json({ error: 'id required' }, 400);
   // KV cache — repeat opens are instant; writes are rare enough that 10 min
   // staleness is fine for a history view.
-  const cacheKey = `cache:history:v4:${cid}`;
+  const cacheKey = `cache:history:v5:${cid}`;
   const cached = await cacheGet(env, cacheKey);
   if (cached) return json(cached);
 
@@ -2647,6 +2652,24 @@ async function getContactHistory(env, urlObj) {
       notes: r.fields.notes || null,
       organizer: null,
     });
+  }
+
+  // New-era events (5/26 onward) live in per-event attendance fields, not the
+  // event_attendance table — without this, "came to an onboarding" rows showed
+  // no onboarding in their Events popover.
+  for (const meta of Object.values(EVENT_META)) {
+    const v = contact.fields[meta.attendField];
+    if (v) {
+      entries.push({
+        kind: 'event',
+        date: meta.date,
+        method: 'Event',
+        result: v,
+        event: meta.label,
+        notes: null,
+        organizer: null,
+      });
+    }
   }
 
   entries.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
