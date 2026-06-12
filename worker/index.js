@@ -1560,6 +1560,16 @@ async function trainingSignup(request, env) {
   if (events.some(e => /6\/9 Emergency Meeting/i.test(e))) {
     baseFields.signup_6_9_status = 'Signed up';
   }
+  // Map every selected training to its per-event signup field so it shows in
+  // Event tracking + stats (the log row alone is invisible to those).
+  for (const evName of events) {
+    const metaKey = Object.keys(EVENT_META).find(k =>
+      EVENT_META[k].attendEvent === evName ||
+      (k === 'kyn_7_25' && /neighbor.*7\/25/i.test(evName)));
+    if (metaKey && EVENT_META[metaKey].signupField) {
+      baseFields[EVENT_META[metaKey].signupField] = 'Signed up';
+    }
+  }
 
   let contactId;
   if (existingId) {
