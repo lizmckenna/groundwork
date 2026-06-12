@@ -965,6 +965,7 @@ export default {
       const sessionToken = request.headers.get('X-Groundwork-Session');
       const email = sessionToken ? await env.KV_BINDING.get(`session:${sessionToken}`) : null;
       if (!email) return json({ error: 'unauthorized' }, 401);
+      if (url.pathname === '/me') return json({ email });
       if (url.pathname === '/prospects') return await getProspects(env, url);
       if (url.pathname === '/call-list') return await getCallList(env, url);
       if (url.pathname === '/contact-history') return await getContactHistory(env, url);

@@ -1449,6 +1449,13 @@ async function bootAuth() {
         localStorage.setItem('gw-session', data.session_token);
         if (data.email) localStorage.setItem('gw-email', data.email);
         history.replaceState({}, '', location.pathname);
+        // Arrived via emailed link but this isn't their dashboard (e.g. an
+        // old link hardcoded to lanee's page) → send them home.
+        const home = EMAIL_HOME[(data.email || '').toLowerCase()];
+        if (home && home !== ORGANIZER) {
+          location.replace(`/groundwork/pilot/${home}/`);
+          return false;
+        }
         return true;
       } else {
         showLogin('Link expired or invalid. Enter your email to get a new one.');
@@ -1487,6 +1494,15 @@ function offerHomeDashboard() {
   const ok = await bootAuth();
   if (ok) {
     hideLogin();
+    if (!localStorage.getItem('gw-email')) {
+      try {
+        const r = await authFetch(`${WORKER}/me`);
+        if (r.ok) {
+          const d = await r.json();
+          if (d.email) localStorage.setItem('gw-email', d.email);
+        }
+      } catch (e) {}
+    }
     offerHomeDashboard();
     // Paint cached counters instantly so the page doesn't flash zeros
     renderCachedCounters();
