@@ -1419,7 +1419,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
     const r = await fetch(`${WORKER}/auth/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, redirect_url: location.origin + location.pathname }),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     msg.textContent = `✓ Check ${email} for a sign-in link (expires in 10 min).`;
@@ -1447,6 +1447,7 @@ async function bootAuth() {
       const data = await r.json();
       if (r.ok && data.session_token) {
         localStorage.setItem('gw-session', data.session_token);
+        if (data.email) localStorage.setItem('gw-email', data.email);
         history.replaceState({}, '', location.pathname);
         return true;
       } else {
@@ -1465,10 +1466,28 @@ async function bootAuth() {
   return false;
 }
 
+// If the signed-in person has their own dashboard and this isn't it, offer
+// the jump (banner only — Liz and Ellen legitimately view all dashboards).
+const EMAIL_HOME = {
+  'laneebridewell@gmail.com': 'lanee',
+  'srttgrs@yahoo.com': 'stephanie',
+  'kathryn@rootedstrategy.com': 'kathryn',
+};
+function offerHomeDashboard() {
+  const email = (localStorage.getItem('gw-email') || '').toLowerCase();
+  const home = EMAIL_HOME[email];
+  if (!home || home === ORGANIZER) return;
+  const bar = document.createElement('div');
+  bar.style.cssText = 'background:var(--gw-purple);color:white;padding:10px 16px;text-align:center;font-size:13px;';
+  bar.innerHTML = `You're signed in as ${email} — this is ${ORGANIZER === 'lanee' ? "LaNeé's" : ORGANIZER + "'s"} dashboard. <a href="/groundwork/pilot/${home}/" style="color:white;font-weight:700;text-decoration:underline;">Go to your dashboard →</a> <a href="#" onclick="this.parentElement.remove();return false;" style="color:white;opacity:0.7;margin-left:10px;">dismiss</a>`;
+  document.body.prepend(bar);
+}
+
 (async () => {
   const ok = await bootAuth();
   if (ok) {
     hideLogin();
+    offerHomeDashboard();
     // Paint cached counters instantly so the page doesn't flash zeros
     renderCachedCounters();
     applyListUI();
