@@ -1630,6 +1630,21 @@ async function trainingSignup(request, env) {
 //   connection[], childcare(bool), childcare_kids, pizza(bool), accessibility,
 //   anything_else, recruited_by, launch, source, website(honeypot) }
 // =========================================================================
+// Clean, groupable label for any regional launch RSVP, derived from whatever
+// the form posts. "Northland Emergency Meeting on Public School Funding 6/18"
+// -> "Northland Emergency Meeting 6/18". Region (before "Emergency Meeting")
+// + the trailing M/D. Keeps "Emergency Meeting" in the name (Ellen's rename).
+function normalizeLaunch(launch) {
+  const s = String(launch || '').trim();
+  const m = s.match(/^(.*?)\s+Emergency Meeting\b.*?(\d{1,2}\/\d{1,2})?\s*$/i);
+  if (m && m[1]) {
+    const region = m[1].trim();
+    const date = m[2] ? ' ' + m[2] : '';
+    return `${region} Emergency Meeting${date}`;
+  }
+  return s;
+}
+
 async function launchRsvp(request, env) {
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   const rlKey = `rl:launchrsvp:${ip}`;
@@ -1754,7 +1769,7 @@ async function launchRsvp(request, env) {
   // Structured RSVP fields so Airtable can COUNT them (radio answers arrive
   // structured; storing them only in `notes` made them uncountable).
   // rsvp_launch is normalized so all variants of a launch group as one.
-  const rsvpLaunch = /northland/i.test(launch) ? 'Northland 6/18' : launch;
+  const rsvpLaunch = normalizeLaunch(launch);
   // Dedupe: if this person already RSVP'd to this launch, UPDATE that row
   // instead of adding a second (keeps catering counts accurate).
   let existingRsvpId = null;
