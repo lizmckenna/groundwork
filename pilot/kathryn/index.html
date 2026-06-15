@@ -2357,7 +2357,13 @@ function updateRow(row) {
     if (outcome.startsWith('signed-up')) {
       const pickedKey = outcome.replace('signed-up-', '').replace(/-/g, '_');
       const pickedType = EVENTS[pickedKey]?.type;
-      if (pickedType === 'hm') {
+      if (pickedType === 'onboarding') {
+        // Signed up for the onboarding AND wants a training (Stephanie's ask):
+        // offer the next house meeting + amplifier as checkmarks.
+        const hm = upcomingOfType('hm')[0], amp = upcomingOfType('amp')[0];
+        if (hm) extras.push({ v: `signed-up-${hm.replace(/_/g,'-')}`, label: `+ also signed up: ${EVENTS[hm].short}` });
+        if (amp) extras.push({ v: `signed-up-${amp.replace(/_/g,'-')}`, label: `+ also signed up: ${EVENTS[amp].short}` });
+      } else if (pickedType === 'hm') {
         const k = upcomingOfType('amp')[0];
         if (k) extras.push({ v: `signed-up-${k.replace(/_/g,'-')}`, label: `+ also signed up: ${EVENTS[k].short}` });
       } else if (pickedType === 'amp') {
