@@ -411,6 +411,8 @@
 .qhistory:hover { color: var(--gw-purple); }
 .qperson { position: relative; }
 .qhistory-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; background: var(--bg-secondary); border: 1px solid var(--border-hover); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.18); padding: 12px 14px; min-width: 320px; max-width: 420px; max-height: 320px; overflow-y: auto; }
+.qhistory-pop.flip-up { top: auto; bottom: calc(100% + 6px); }
+.container { padding-bottom: 340px; }
 .qhistory-pop h4 { margin: 0 0 8px; font-size: 11px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); }
 .qhistory-row { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12px; line-height: 1.45; }
 .qhistory-row:last-child { border-bottom: none; }
@@ -912,6 +914,22 @@ function lastTouchLine(c) {
 
 // History popover: lazy-loads /contact-history on first open, cached per contact.
 const historyCache = new Map();
+// Flip a popover above its pill when it would fall off the bottom of the
+// viewport (the last queue row), and scroll it fully into view as a fallback.
+function positionPop(pop) {
+  if (!pop || !pop.isConnected) return;
+  pop.classList.remove('flip-up');
+  const r = pop.getBoundingClientRect();
+  if (r.bottom > window.innerHeight - 12) {
+    pop.classList.add('flip-up');
+    // If flipping up still clips the top, just scroll it into view.
+    requestAnimationFrame(() => {
+      const r2 = pop.getBoundingClientRect();
+      if (r2.top < 12) pop.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  }
+}
+
 async function toggleHistoryPop(span) {
   const person = span.closest('.qperson');
   if (!person) return;
@@ -924,6 +942,7 @@ async function toggleHistoryPop(span) {
   pop.className = 'qhistory-pop';
   pop.innerHTML = '<h4>History</h4><div style="color:var(--text-tertiary);font-size:12px;">Pulling full history from Airtable… first open can take a few seconds.</div>';
   person.appendChild(pop);
+  positionPop(pop);
   try {
     let data = historyCache.get(cid);
     if (!data) {
@@ -949,6 +968,7 @@ async function toggleHistoryPop(span) {
     const title = kindFilter === 'event' ? 'Events attended' : kindFilter === 'touch' ? 'Attempts' : 'History';
     pop.innerHTML = `<h4>${title} · ${escapeHtml(data.name || '')}</h4>` +
       (rows || '<div style="color:var(--text-tertiary);font-size:12px;">Nothing logged yet.</div>');
+    positionPop(pop);
   } catch (e) {
     pop.innerHTML = `<h4>History</h4><div style="color:var(--gw-red);font-size:12px;">Couldn't load: ${e.message}</div>`;
   }
@@ -969,6 +989,7 @@ function toggleCommitsPop(span) {
     : '<div style="color:var(--text-tertiary);font-size:12px;">No commitments yet.</div>')
     + (c && c.next_step ? `<div class="qhistory-row"><span class="hd">next step</span><span>${escapeHtml(c.next_step)}</span></div>` : '');
   person.appendChild(pop);
+  positionPop(pop);
 }
 const rowDataCache = new Map();
 document.addEventListener('click', (e) => {
