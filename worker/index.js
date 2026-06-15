@@ -2447,6 +2447,8 @@ async function getCallList(env, urlObj) {
     const filter = [
       `AND(`,
       `{last_attempt_result}='No answer',`,
+      `NOT({leader_ladder}='Not a prospect'),`,
+      `NOT({leader_ladder}='Core Leader'),`,
       `{last_attempt_date}!=BLANK(),`,
       `DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4,`,
       `OR({attempt_count}=BLANK(),{attempt_count}<5),`,
