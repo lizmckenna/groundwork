@@ -524,7 +524,8 @@ export default {
         const body = await request.json();
         const f = { name: body.name, type: body.type };
         if (body.options) f.options = body.options;
-        const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables/${CONTACTS_TBL}/fields`, {
+        const tableId = body.table_id || CONTACTS_TBL;
+        const r = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE}/tables/${tableId}/fields`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${env.AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
           body: JSON.stringify(f),
@@ -1750,10 +1751,21 @@ async function launchRsvp(request, env) {
   if (clean(body.anything_else)) parts.push(`Notes: ${clean(body.anything_else)}`);
   const notes = parts.join(' | ') || 'Launch RSVP';
 
+  // Structured RSVP fields so Airtable can COUNT them (radio answers arrive
+  // structured; storing them only in `notes` made them uncountable).
+  // rsvp_launch is normalized so all variants of a launch group as one.
+  const rsvpLaunch = /northland/i.test(launch) ? 'Northland 6/18' : launch;
+  // Dedupe: if this person already RSVP'd to this launch, UPDATE that row
+  // instead of adding a second (keeps catering counts accurate).
+  let existingRsvpId = null;
   try {
-    await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
-      method: 'POST',
-      body: JSON.stringify({ records: [{ fields: {
+    const dq = `?filterByFormula=${encodeURIComponent(`AND({rsvp_launch}='${rsvpLaunch}',{method}='Event RSVP')`)}&pageSize=100&fields%5B%5D=contact`;
+    const dres = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${dq}`);
+    const m = (dres.records || []).find(r => (r.fields.contact || []).includes(contactId));
+    if (m) existingRsvpId = m.id;
+  } catch (e) {}
+  try {
+    const rsvpFields = {
         Summary: `${today} — RSVP: ${launch} (${cFirst} ${cLast})`,
         date: today,
         method: 'Event RSVP',
@@ -1761,8 +1773,24 @@ async function launchRsvp(request, env) {
         event: launch,
         contact: [contactId],
         notes,
-      }}], typecast: true }),
-    });
+        rsvp_launch: rsvpLaunch,
+        rsvp_pizza: pz || 'No',
+        rsvp_childcare: cc || 'No',
+        ...(clean(body.childcare_kids) ? { rsvp_childcare_kids: clean(body.childcare_kids) } : {}),
+        ...(clean(body.accessibility) ? { rsvp_accessibility: clean(body.accessibility) } : {}),
+        ...(clean(body.anything_else) ? { rsvp_other_needs: clean(body.anything_else) } : {}),
+    };
+    if (existingRsvpId) {
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ records: [{ id: existingRsvpId, fields: rsvpFields }], typecast: true }),
+      });
+    } else {
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+        method: 'POST',
+        body: JSON.stringify({ records: [{ fields: rsvpFields }], typecast: true }),
+      });
+    }
   } catch (e) { /* non-fatal — contact + events_signed_up already capture the RSVP */ }
 
   await invalidateReadCaches(env);
