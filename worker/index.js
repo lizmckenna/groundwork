@@ -2374,39 +2374,44 @@ function organizerName(name) {
   return ORGANIZER_NAMES_LC[String(name).toLowerCase().trim()] || null;
 }
 
+// SINGLE SOURCE OF TRUTH for "is this person callable at all". Every list
+// (fresh, unreached, unconverted, training_followup) AND the Airtable
+// in_call_queue formula must reflect these. Add a disqualifier here once and
+// all four worker lists inherit it — this is what stops the "X list excludes
+// it but Y doesn't" drift bug. Returns an array of Airtable formula clauses.
+function callableExclusions(organizerName_) {
+  const orgFullName = organizerName(organizerName_);
+  const c = [
+    `NOT({leader_ladder}='Core Leader')`,
+    `NOT({leader_ladder}='Not a prospect')`,
+    `NOT({last_attempt_result}='Do not contact')`,
+    `NOT({last_attempt_result}='Removed from list')`,
+    ...EXCLUDED_SCHOOL_PATTERNS.map(p => `FIND('${p}',LOWER({school}&''))=0`),
+    ...EXCLUDED_ROLES.map(r => `FIND('${r}',{role}&'')=0`),
+  ];
+  if (orgFullName) c.push(`FIND('${orgFullName}',{assigned_organizer}&'')>0`);
+  return c;
+}
+
+// Onboarding-signup exclusions — people already signed up for an upcoming
+// onboarding leave the cold-call lists. Shared by fresh + unreached.
+function onboardingSignupExclusions() {
+  return Object.values(EVENT_META)
+    .filter(m => m.type === 'onboarding' && m.signupField)
+    .map(m => `NOT({${m.signupField}}='Signed up')`);
+}
+
 function prospectsFilter(organizerName_) {
   // FRESH list = "the first time you've seen that person" (Ellen, 6/11 call):
-  // never attempted, not signed up for an upcoming onboarding, standard
-  // exclusions. People with attempts live on the attempted-not-reached list.
-  const orgFullName = organizerName(organizerName_);
-  const orgClause = orgFullName ? `,FIND('${orgFullName}',{assigned_organizer}&'')>0` : '';
-  const schoolExcl = EXCLUDED_SCHOOL_PATTERNS
-    .map(p => `FIND('${p}',LOWER({school}&''))=0`)
-    .join(',');
-  const roleExcl = EXCLUDED_ROLES
-    .map(r => `FIND('${r}',{role}&'')=0`)
-    .join(',');
-  const signupExcl = Object.values(EVENT_META)
-    .filter(m => m.type === 'onboarding' && m.signupField)
-    .map(m => `NOT({${m.signupField}}='Signed up'),`)
-    .join('');
-  return [
-    `AND(`,
-    `NOT({leader_ladder}='Core Leader'),`,
-    `NOT({leader_ladder}='Not a prospect'),`,
-    `{last_attempt_date}=BLANK(),`,
-    `NOT({last_attempt_result}='Signed up'),`,
-    signupExcl,
-    `NOT({last_attempt_result}='Skipped'),`,
-    `NOT({last_attempt_result}='Wrong number'),`,
-    `NOT({last_attempt_result}='Do not contact'),`,
-    `NOT({last_attempt_result}='Removed from list'),`,
-    `NOT({last_attempt_result}='Removed from list'),`,
-    `${schoolExcl},`,
-    `${roleExcl}`,
-    `${orgClause}`,
-    `)`,
-  ].join('');
+  // never attempted, not signed up for an upcoming onboarding.
+  return `AND(${[
+    `{last_attempt_date}=BLANK()`,
+    `NOT({last_attempt_result}='Signed up')`,
+    ...onboardingSignupExclusions(),
+    `NOT({last_attempt_result}='Skipped')`,
+    `NOT({last_attempt_result}='Wrong number')`,
+    ...callableExclusions(organizerName_),
+  ].join(',')})`;
 }
 const PROSPECTS_FILTER = prospectsFilter();  // legacy default — no organizer filter
 
@@ -2486,32 +2491,17 @@ async function getCallList(env, urlObj) {
     return await getProspects(env, urlObj);
   }
 
-  const orgFullName = organizerName(organizer);
-  const orgClause = orgFullName ? `,FIND('${orgFullName}',{assigned_organizer}&'')>0` : '';
-  const schoolExcl = EXCLUDED_SCHOOL_PATTERNS.map(p => `FIND('${p}',LOWER({school}&''))=0`).join(',');
-  const roleExcl = EXCLUDED_ROLES.map(r => `FIND('${r}',{role}&'')=0`).join(',');
-
   if (list === 'unreached') {
     // Attempted, no answer, due again after 4 days (was 7 — Ellen call 6/11).
     // Drop off permanently at 5 attempts (a call + a text = 2 attempts).
-    const signupExcl = Object.values(EVENT_META)
-      .filter(m => m.type === 'onboarding' && m.signupField)
-      .map(m => `NOT({${m.signupField}}='Signed up'),`)
-      .join('');
-    const filter = [
-      `AND(`,
-      `{last_attempt_result}='No answer',`,
-      `NOT({leader_ladder}='Not a prospect'),`,
-      `NOT({leader_ladder}='Core Leader'),`,
-      `{last_attempt_date}!=BLANK(),`,
-      `DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4,`,
-      `OR({attempt_count}=BLANK(),{attempt_count}<5),`,
-      signupExcl,
-      `${schoolExcl},`,
-      `${roleExcl}`,
-      `${orgClause}`,
-      `)`,
-    ].join('');
+    const filter = `AND(${[
+      `{last_attempt_result}='No answer'`,
+      `{last_attempt_date}!=BLANK()`,
+      `DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4`,
+      `OR({attempt_count}=BLANK(),{attempt_count}<5)`,
+      ...onboardingSignupExclusions(),
+      ...callableExclusions(organizer),
+    ].join(',')})`;
     let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=${n}`;
     q += `&sort%5B0%5D%5Bfield%5D=last_attempt_date&sort%5B0%5D%5Bdirection%5D=asc`;
     for (const f of PROSPECT_FIELDS) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
@@ -2543,23 +2533,14 @@ async function getCallList(env, urlObj) {
     // (Ellen call 6/11), or were tried in the last 4 days.
     const trainingExcl = Object.values(EVENT_META)
       .filter(m => ['hm','amp','kyn'].includes(m.type) && m.signupField)
-      .map(m => `NOT({${m.signupField}}='Signed up'),`)
-      .join('');
-    const filter = [
-      `AND(`,
-      `OR(${attendClauses},TRIM({amendment5_commitments}&'')!=''),`,
-      `NOT({leader_ladder}='Not a prospect'),`,
-      `NOT({leader_ladder}='Core Leader'),`,
-      trainingExcl,
-      `NOT({one_on_one_booked}),`,
-      `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4),`,
-      `NOT({last_attempt_result}='Do not contact'),`,
-      `NOT({last_attempt_result}='Removed from list'),`,
-      `${schoolExcl},`,
-      `${roleExcl}`,
-      `${orgClause}`,
-      `)`,
-    ].join('');
+      .map(m => `NOT({${m.signupField}}='Signed up')`);
+    const filter = `AND(${[
+      `OR(${attendClauses},TRIM({amendment5_commitments}&'')!='')`,
+      ...trainingExcl,
+      `NOT({one_on_one_booked})`,
+      `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4)`,
+      ...callableExclusions(organizer),
+    ].join(',')})`;
     const fields = [...PROSPECT_FIELDS, ...Object.values(EVENT_META).map(m => m.attendField)];
     const candidates = [];
     let offset = null;
@@ -2601,19 +2582,11 @@ async function getCallList(env, urlObj) {
       .filter(m => m.type === 'hm' || m.type === 'amp')
       .map(m => `OR({${m.attendField}}='Attended',{${m.attendField}}='Walk-in')`)
       .join(',');
-    const filter = [
-      `AND(`,
-      `OR(${attendClauses}),`,
-      `NOT({leader_ladder}='Not a prospect'),`,
-      `NOT({leader_ladder}='Core Leader'),`,
-      `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4),`,
-      `NOT({last_attempt_result}='Do not contact'),`,
-      `NOT({last_attempt_result}='Removed from list'),`,
-      `${schoolExcl},`,
-      `${roleExcl}`,
-      `${orgClause}`,
-      `)`,
-    ].join('');
+    const filter = `AND(${[
+      `OR(${attendClauses})`,
+      `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4)`,
+      ...callableExclusions(organizer),
+    ].join(',')})`;
     const fields = [...PROSPECT_FIELDS, ...Object.values(EVENT_META).filter(m => m.type === 'hm' || m.type === 'amp').map(m => m.attendField)];
     const candidates = [];
     let offset = null;
