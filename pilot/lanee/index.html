@@ -1067,10 +1067,12 @@ function outcomeOptions(c) {
     .map(k => ({ v: `signed-up-${k.replace(/_/g,'-')}`, label: `Signed up: ${EVENTS[k].label}` }));
 
   if (activeList === 'unconverted') {
-    // They already came to an onboarding — NO onboarding options here
-    // (Ellen: "we're not trying to get them signed up again"). Options:
-    // 1-1 + trainings.
+    // Came to an onboarding, no next action yet. Primary ask is a 1-1 or a
+    // training, but Stephanie (6/16) needs the onboarding dates here too:
+    // some of these folks are best re-routed to a future onboarding (a make-up,
+    // bringing a friend, re-engaging a lapsed one), so keep all three funnels.
     opts.push({ v: 'oneonone', label: '1-1 booked' });
+    opts.push(...nextOf('onboarding', 99));
     opts.push(...nextOf('hm', 3));
     opts.push(...nextOf('amp', 3));
   } else if (activeList === 'training_followup') {
