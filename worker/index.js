@@ -1002,6 +1002,16 @@ function cors() {
     'Access-Control-Allow-Headers': 'Content-Type, X-Groundwork-Session',
   };
 }
+// Honeypot named "website" was rejecting real RSVPs because browser autofill
+// fills off-screen "website" fields (Chrome ignores autocomplete="off" on
+// heuristic matches). Only treat it as a bot if it contains an actual link —
+// the spam-bot signature. Autofill of a name/email/phone passes through; rate
+// limiting (on every form) remains the real flood defense.
+function honeypotBot(body) {
+  const hp = String(body.website || '').trim();
+  return !!hp && /https?:\/\/|www\.|<a\b|\[url|href\s*=/i.test(hp);
+}
+
 function json(obj, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(obj), {
     status, headers: { 'Content-Type': 'application/json', ...cors(), ...extraHeaders }
@@ -1041,7 +1051,7 @@ async function signup(request, env) {
   try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
 
   const body = await request.json();
-  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
   const { first, last, email, phone, school, district, county, city, zip, signup_5_26, signup_6_9, recruited_by, source } = body;
   if (!first || !last || (!email && !phone)) {
     return json({ error: 'first name, last name, and email or phone are required' }, 400);
@@ -1227,7 +1237,7 @@ async function houseMeetingSignup(request, env) {
   await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 });
 
   const body = await request.json();
-  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
   const { date, host_name, first, last, phone, email, street_address, city, state, zip, district, school, commitments = [], other_text, source } = body;
   if (!first || !last || !phone || !email || !date || !host_name) {
     return json({ error: 'first, last, phone, email, date, and host name are required' }, 400);
@@ -1357,7 +1367,7 @@ async function amendment5Signup(request, env) {
   await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 });
 
   const body = await request.json();
-  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
   const { first, last, phone, email, street_address, city, state, zip, district, school, commitments = [], other_text, recruited_by, source } = body;
   if (!first || !last || !phone || !email || !zip) {
     return json({ error: 'first, last, phone, email, and zip are required' }, 400);
@@ -1498,7 +1508,7 @@ async function trainingSignup(request, env) {
   try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
 
   const body = await request.json();
-  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
   const { first, last, phone, email, zip, events = [], recruited_by, source } = body;
   if (!first || !last || !phone || !email || !zip) {
     return json({ error: 'first, last, phone, email, and zip are required' }, 400);
@@ -1654,7 +1664,7 @@ async function launchRsvp(request, env) {
   try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
 
   const body = await request.json();
-  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
 
   const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
   const cFirst = clean(body.first);
@@ -1826,7 +1836,7 @@ async function remindSignup(request, env) {
   try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
 
   const body = await request.json();
-  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
   const { first, last, phone, email, zip, school, district, wants_updates, wants_help, recruited_by, source } = body;
   if (!first || !last || !phone) {
     return json({ error: 'first name, last name, and phone are required' }, 400);
@@ -1953,7 +1963,7 @@ async function amplifierLog(request, env) {
   } catch {
   }
   const body = await request.json();
-  if (body.website && String(body.website).trim()) return json({ error: "bot detected" }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
   const {
     amplifier_email,
     amplifier_name,
@@ -4029,7 +4039,7 @@ async function eventRsvp(request, env) {
   await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 });
 
   const body = await request.json();
-  if (body.website && String(body.website).trim()) return json({ error: 'bot detected' }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
   const { event_id, first, last, phone, email, school, district, city, zip, notes } = body;
   if (!event_id || !event_id.startsWith('rec')) return json({ error: 'event_id required' }, 400);
   if (!first || !last || !email) return json({ error: 'first, last, and email are required' }, 400);
