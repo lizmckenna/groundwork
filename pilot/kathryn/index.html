@@ -92,7 +92,15 @@
   .tab-nav a:hover { color: var(--text-primary); background: var(--bg-hover); }
   .tab-nav a.active { color: var(--text-primary); background: var(--gw-purple-soft); }
 
-  .hero { padding: 48px 0 8px; }
+  .hero { padding: 20px 0 8px; }
+.hero-logo { width: 68px; height: 68px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 4px 18px rgba(0,0,0,0.10); }
+.hero h1 { font-size: 22px; }
+/* Short or small screens: shrink the header so it never eats the viewport */
+@media (max-height: 800px), (max-width: 720px) {
+  .hero { padding: 12px 0 6px; gap: 14px !important; }
+  .hero-logo { width: 46px; height: 46px; }
+  .hero h1 { font-size: 18px; }
+}
   .eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--gw-purple); margin-bottom: 16px; font-family: 'JetBrains Mono', monospace; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; }
   .eyebrow::before { content:''; width: 24px; height: 1px; background: var(--gw-purple); }
   h1 { font-size: clamp(32px, 4vw, 48px); font-weight: 600; letter-spacing: -0.025em; line-height: 1.05; margin-bottom: 12px; }
@@ -502,7 +510,7 @@
 
   <div class="tab-pane active" data-pane="today">
     <section class="hero" style="display:flex;align-items:center;gap:22px;">
-      <img src="/groundwork/pfmps.png" alt="Parents for Missouri Public Schools" style="width:104px;height:104px;border-radius:50%;flex-shrink:0;box-shadow:0 4px 18px rgba(0,0,0,0.10);">
+      <img src="/groundwork/pfmps.png" alt="Parents for Missouri Public Schools" class="hero-logo">
       <div>
         <h1 id="hero-h1" style="margin:0;">Kathryn's dashboard</h1>
       </div>
