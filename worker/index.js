@@ -459,7 +459,8 @@ export default {
       }
       if (url.pathname === '/admin/create-view' && request.method === 'POST') {
         const k = request.headers.get('X-Admin-Key');
-        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403);
+        const cvOk = (env.ADMIN_KEY && k === env.ADMIN_KEY) || (env.SETUP_KEY && k === env.SETUP_KEY);
+        if (!cvOk) return json({ error: 'forbidden' }, 403);
         const body = await request.json();
         const tableId = body.table || CONTACTS_TBL;
         const payload = {
