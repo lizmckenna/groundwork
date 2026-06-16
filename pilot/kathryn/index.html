@@ -418,8 +418,10 @@
 .qhistory { cursor: pointer; border-bottom: 1px dashed var(--border-hover); }
 .qhistory:hover { color: var(--gw-purple); }
 .qperson { position: relative; }
-.qhistory-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; background: var(--bg-secondary); border: 1px solid var(--border-hover); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.18); padding: 12px 14px; min-width: 320px; max-width: 420px; max-height: 320px; overflow-y: auto; }
-.qhistory-pop.flip-up { top: auto; bottom: calc(100% + 6px); }
+/* Fixed (not absolute) so it escapes .queue-wrap's overflow:hidden clipping —
+   that clip was why the bottom row only showed the header. Position + maxHeight
+   are computed from the clicked pill's viewport rect in positionPop(). */
+.qhistory-pop { position: fixed; z-index: 1000; background: var(--bg-secondary); border: 1px solid var(--border-hover); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.18); padding: 12px 14px; min-width: 320px; max-width: 420px; overflow-y: auto; }
 main.container { padding-bottom: 340px; }
 .qhistory-pop h4 { margin: 0 0 8px; font-size: 11px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); }
 .qhistory-row { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12px; line-height: 1.45; }
@@ -932,14 +934,23 @@ function positionPop(pop) {
   const anchor = (pop.parentElement && pop.parentElement.querySelector('.pill-row')) || pop.parentElement;
   if (!anchor) return;
   const a = anchor.getBoundingClientRect();
-  const spaceBelow = window.innerHeight - a.bottom - 14;
-  const spaceAbove = a.top - 14;
-  pop.classList.remove('flip-up');
+  const vw = window.innerWidth, vh = window.innerHeight, m = 10, popW = 420;
+  // Horizontal: align to the pills, but never run off either edge.
+  let left = a.left;
+  if (left + popW > vw - m) left = Math.max(m, vw - m - popW);
+  pop.style.left = left + 'px';
+  // Vertical: prefer below; flip above when below is tight. Cap height to the
+  // chosen side so the whole thing fits the viewport and scrolls internally.
+  const spaceBelow = vh - a.bottom - m;
+  const spaceAbove = a.top - m;
   if (spaceBelow >= 200 || spaceBelow >= spaceAbove) {
-    pop.style.maxHeight = Math.max(150, spaceBelow) + 'px';   // open down
+    pop.style.top = (a.bottom + 6) + 'px';
+    pop.style.bottom = 'auto';
+    pop.style.maxHeight = Math.max(140, spaceBelow) + 'px';
   } else {
-    pop.classList.add('flip-up');                             // open up
-    pop.style.maxHeight = Math.max(150, spaceAbove) + 'px';
+    pop.style.top = 'auto';
+    pop.style.bottom = (vh - a.top + 6) + 'px';
+    pop.style.maxHeight = Math.max(140, spaceAbove) + 'px';
   }
 }
 
