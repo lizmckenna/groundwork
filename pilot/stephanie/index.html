@@ -92,14 +92,14 @@
   .tab-nav a:hover { color: var(--text-primary); background: var(--bg-hover); }
   .tab-nav a.active { color: var(--text-primary); background: var(--gw-purple-soft); }
 
-  .hero { padding: 20px 0 8px; }
-.hero-logo { width: 68px; height: 68px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 4px 18px rgba(0,0,0,0.10); }
-.hero h1 { font-size: 22px; }
-/* Short or small screens: shrink the header so it never eats the viewport */
-@media (max-height: 800px), (max-width: 720px) {
-  .hero { padding: 12px 0 6px; gap: 14px !important; }
-  .hero-logo { width: 46px; height: 46px; }
-  .hero h1 { font-size: 18px; }
+  .hero { padding: 30px 0 14px; }
+.hero-logo { width: 84px; height: 84px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 4px 18px rgba(0,0,0,0.10); }
+.hero h1 { font-size: 27px; }
+/* Short or small screens: trim a little so it never eats the viewport */
+@media (max-height: 780px), (max-width: 720px) {
+  .hero { padding: 18px 0 10px; gap: 18px !important; }
+  .hero-logo { width: 62px; height: 62px; }
+  .hero h1 { font-size: 22px; }
 }
   .eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--gw-purple); margin-bottom: 16px; font-family: 'JetBrains Mono', monospace; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; }
   .eyebrow::before { content:''; width: 24px; height: 1px; background: var(--gw-purple); }
