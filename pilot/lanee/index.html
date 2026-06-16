@@ -922,19 +922,24 @@ function lastTouchLine(c) {
 
 // History popover: lazy-loads /contact-history on first open, cached per contact.
 const historyCache = new Map();
-// Flip a popover above its pill when it would fall off the bottom of the
-// viewport (the last queue row), and scroll it fully into view as a fallback.
+// Keep a popover fully on screen on any window height: open it in whichever
+// direction (below/above the pills) has more room, and cap its height to that
+// space so the whole thing is visible and scrolls internally. Short laptop
+// windows (the bottom-row bug) get a smaller, scrollable box instead of one
+// that runs off the screen.
 function positionPop(pop) {
   if (!pop || !pop.isConnected) return;
+  const anchor = (pop.parentElement && pop.parentElement.querySelector('.pill-row')) || pop.parentElement;
+  if (!anchor) return;
+  const a = anchor.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - a.bottom - 14;
+  const spaceAbove = a.top - 14;
   pop.classList.remove('flip-up');
-  const r = pop.getBoundingClientRect();
-  if (r.bottom > window.innerHeight - 12) {
-    pop.classList.add('flip-up');
-    // If flipping up still clips the top, just scroll it into view.
-    requestAnimationFrame(() => {
-      const r2 = pop.getBoundingClientRect();
-      if (r2.top < 12) pop.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    });
+  if (spaceBelow >= 200 || spaceBelow >= spaceAbove) {
+    pop.style.maxHeight = Math.max(150, spaceBelow) + 'px';   // open down
+  } else {
+    pop.classList.add('flip-up');                             // open up
+    pop.style.maxHeight = Math.max(150, spaceAbove) + 'px';
   }
 }
 
