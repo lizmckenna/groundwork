@@ -66,7 +66,8 @@
   .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--gw-green); box-shadow: 0 0 0 0 rgba(22,163,74,0.5); animation: pulse 2.4s infinite; }
   @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(22,163,74,0.45);} 70%{box-shadow:0 0 0 7px rgba(22,163,74,0);} 100%{box-shadow:0 0 0 0 rgba(22,163,74,0);} }
 
-  .section-h { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-tertiary); margin: 30px 0 14px; display: flex; align-items: center; gap: 10px; }
+  .section-h { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; color: var(--text-primary); margin: 36px 0 16px; display: flex; align-items: center; gap: 14px; }
+  .section-h .sh-count { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; color: var(--text-tertiary); background: var(--bg-elevated); border: 1px solid var(--border); padding: 2px 9px; border-radius: 999px; }
   .section-h::after { content:''; flex: 1; height: 1px; background: var(--border); }
 
   .ev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
@@ -240,6 +241,8 @@ function cardHTML(ev) {
   let tiles;
   if (ev.kind === 'launch') {
     tiles = tile(ev,'t-rsvp',ev.rsvp,'RSVP’d','rsvp')
+      + tile(ev,'t-conf',ev.confirmed||0,'Confirmed','confirmed')
+      + tile(ev,'t-unconf',ev.unconfirmed||0,'Yet to confirm','unconfirmed')
       + tile(ev,'t-att',ev.attended || 0,'Attended','attended', !ev.attended && du>0)
       + tile(ev,'t-pizza',ev.pizza||0,'Pizza plates','pizza')
       + tile(ev,'t-care',ev.childcare||0,'Kids needing care','childcare');
@@ -274,7 +277,7 @@ function render(data) {
   let html = '';
   for (const t of TYPE_ORDER) {
     if (!byType[t] || !byType[t].length) continue;
-    html += `<div class="section-h">${esc(labels[t] || t)} · ${byType[t].length}</div><div class="ev-grid">${byType[t].map(cardHTML).join('')}</div>`;
+    html += `<div class="section-h">${esc(labels[t] || t)}<span class="sh-count">${byType[t].length}</span></div><div class="ev-grid">${byType[t].map(cardHTML).join('')}</div>`;
   }
   document.getElementById('sections').innerHTML = html || '<div class="empty">No upcoming events found.</div>';
   document.getElementById('updated-txt').textContent = 'Updated ' + new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});

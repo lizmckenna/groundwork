@@ -3633,7 +3633,7 @@ function upcomingMetaEvents() {
 const TYPE_LABEL = { onboarding: 'Onboardings', hm: 'House Meeting trainings', amp: 'Amplifier trainings', kyn: 'Know Your Neighbor', launch: 'Emergency meetings' };
 
 async function getEventsOverview(env) {
-  const cached = await cacheGet(env, 'cache:events-overview:v1');
+  const cached = await cacheGet(env, 'cache:events-overview:v2');
   if (cached) return json(cached);
   const today = todayCT();
   const metas = upcomingMetaEvents();
@@ -3668,12 +3668,14 @@ async function getEventsOverview(env) {
   // Scan 2 — contact_log: confirm logs (meta events) + launch RSVP/attendance.
   const confirmByEvent = {};
   for (const m of metas) confirmByEvent[m.confirmEvent] = new Set();
-  const launches = {};            // name -> {rsvp,pizza,childcare}
+  const launches = {};            // name -> {rsvp,pizza,childcare,rsvpIds}
+  const launchConfirm = {};       // name -> Set(confirmed contact ids)
   const launchAttendByName = {};  // name -> attended count (merged only if it's a known launch)
   {
     const orClauses = [
       `{method}='Event RSVP'`,
       `{method}='Event attendance'`,
+      `{result}='Confirmed'`,
       ...metas.map(m => `{event}='${String(m.confirmEvent).replace(/'/g, "\\'")}'`),
     ];
     const formula = `OR(${orClauses.join(',')})`;
@@ -3687,16 +3689,23 @@ async function getEventsOverview(env) {
         if (f.method === 'Event RSVP') {
           const name = f.rsvp_launch || f.event;
           if (!name) continue;
-          if (!launches[name]) launches[name] = { rsvp: 0, pizza: 0, childcare_families: 0, childcare_kids: 0 };
+          if (!launches[name]) launches[name] = { rsvp: 0, pizza: 0, childcare_families: 0, childcare_kids: 0, rsvpIds: new Set() };
           launches[name].rsvp++;
+          const cid = (f.contact || [])[0]; if (cid) launches[name].rsvpIds.add(cid);
           if (f.rsvp_pizza === 'Yes') launches[name].pizza++;
           if (f.rsvp_childcare === 'Yes') { launches[name].childcare_families++; launches[name].childcare_kids += countKids(f.rsvp_childcare_kids); }
         } else if (f.method === 'Event attendance') {
           const name = f.rsvp_launch || f.event;
           if (name) launchAttendByName[name] = (launchAttendByName[name] || 0) + 1;
-        } else if (f.event && confirmByEvent[f.event] && f.result === 'Confirmed') {
+        } else if (f.result === 'Confirmed') {
           const cid = (f.contact || [])[0];
-          if (cid) confirmByEvent[f.event].add(cid);
+          if (f.event && confirmByEvent[f.event]) {
+            if (cid) confirmByEvent[f.event].add(cid);
+          } else {
+            // a confirmation call logged against a launch (event or rsvp_launch = the launch name)
+            const lname = String(f.rsvp_launch || f.event || '').replace(/^confirm\s+/i, '').trim();
+            if (lname && cid) { (launchConfirm[lname] = launchConfirm[lname] || new Set()).add(cid); }
+          }
         }
       }
       offset = d.offset;
@@ -3717,16 +3726,19 @@ async function getEventsOverview(env) {
   for (const [name, l] of Object.entries(launches)) {
     const date = parseLaunchDate(name);
     if (date && date < today) continue;   // upcoming only
+    const confSet = launchConfirm[name] || new Set();
+    let confirmed = 0;
+    for (const id of confSet) if (l.rsvpIds.has(id)) confirmed++;
     events.push({
       kind: 'launch', key: `launch:${name}`, type: 'launch', label: name, date: date || '',
-      time: null, rsvp: l.rsvp, pizza: l.pizza,
-      childcare: l.childcare_kids, childcare_families: l.childcare_families,
+      time: null, rsvp: l.rsvp, confirmed, unconfirmed: Math.max(0, l.rsvp - confirmed),
+      pizza: l.pizza, childcare: l.childcare_kids, childcare_families: l.childcare_families,
       attended: launchAttendByName[name] || 0,
     });
   }
   events.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
   const payload = { generated: new Date().toISOString(), today, events, type_labels: TYPE_LABEL };
-  await cachePut(env, 'cache:events-overview:v1', payload, 60);
+  await cachePut(env, 'cache:events-overview:v2', payload, 60);
   return json(payload);
 }
 
@@ -3754,6 +3766,32 @@ async function getEventRoster(env, urlObj) {
 
   if (key.startsWith('launch:')) {
     const name = key.slice(7);
+    const esc1 = name.replace(/'/g, "\\'");
+    // confirmed / unconfirmed: RSVPers split by whether a confirmation call was logged
+    if (segment === 'confirmed' || segment === 'unconfirmed') {
+      const rsvpIds = []; const rmeta = {};
+      let o = null;
+      do {
+        let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${esc1}',{event}='${esc1}'))`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=rsvp_pizza&fields%5B%5D=rsvp_childcare&fields%5B%5D=rsvp_childcare_kids`;
+        if (o) q += `&offset=${encodeURIComponent(o)}`;
+        const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+        for (const r of d.records) { const cid = (r.fields.contact || [])[0]; if (cid) { rsvpIds.push(cid); rmeta[cid] = { pizza: r.fields.rsvp_pizza === 'Yes', childcare: r.fields.rsvp_childcare === 'Yes', kids: r.fields.rsvp_childcare_kids || '' }; } }
+        o = d.offset;
+      } while (o);
+      const confIds = new Set();
+      let o2 = null;
+      do {
+        let q = `?filterByFormula=${encodeURIComponent(`AND({result}='Confirmed',OR({rsvp_launch}='${esc1}',{event}='${esc1}',{event}='Confirm ${esc1}'))`)}&pageSize=100&fields%5B%5D=contact`;
+        if (o2) q += `&offset=${encodeURIComponent(o2)}`;
+        const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+        for (const r of d.records) { const cid = (r.fields.contact || [])[0]; if (cid) confIds.add(cid); }
+        o2 = d.offset;
+      } while (o2);
+      const want = [...new Set(rsvpIds)].filter(id => segment === 'confirmed' ? confIds.has(id) : !confIds.has(id));
+      const contacts = await fetchContactsByIds(env, want);
+      const people = want.map(id => person(contacts[id] || {}, rmeta[id] || {}));
+      return json({ key, segment, count: people.length, people });
+    }
     const wantAttend = segment === 'attended';
     const method = wantAttend ? 'Event attendance' : 'Event RSVP';
     const matchField = wantAttend ? 'event' : 'rsvp_launch';
