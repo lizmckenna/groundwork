@@ -194,7 +194,7 @@
       <div><div class="mt" id="modal-title">People</div><div class="ms" id="modal-sub"></div></div>
       <button class="modal-x" id="modal-x">&times;</button>
     </div>
-    <div class="modal-tools"><button class="icon-btn" id="copy-btn">⧉ Copy names + phones</button></div>
+    <div class="modal-tools"><button class="icon-btn" id="copy-btn">✉ Copy emails</button></div>
     <div class="warn-line" id="modal-warn" style="display:none;"></div>
     <div class="modal-body" id="modal-body"></div>
   </div>
@@ -377,10 +377,12 @@ document.getElementById('modal-x').addEventListener('click', closeModal);
 document.getElementById('modal-bg').addEventListener('click', e => { if (e.target.id==='modal-bg') closeModal(); });
 document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
 document.getElementById('copy-btn').addEventListener('click', () => {
-  const txt = rosterPeople.map(p => `${p.name}\t${p.phone}\t${p.email}`).join('\n');
-  navigator.clipboard.writeText(txt).then(() => {
-    const b = document.getElementById('copy-btn'); const o = b.textContent; b.textContent = '✓ Copied';
-    setTimeout(()=>b.textContent=o, 1500);
+  const emails = [...new Set(rosterPeople.map(p => (p.email||'').trim().toLowerCase()).filter(Boolean))];
+  const b = document.getElementById('copy-btn');
+  if (!emails.length) { const o = b.textContent; b.textContent = 'No emails to copy'; setTimeout(()=>b.textContent=o, 1500); return; }
+  navigator.clipboard.writeText(emails.join(', ')).then(() => {
+    const o = b.textContent; b.textContent = `✓ Copied ${emails.length} email${emails.length===1?'':'s'}`;
+    setTimeout(()=>b.textContent=o, 1800);
   });
 });
 
