@@ -137,14 +137,21 @@
     <p>The two private GitHub repos (<code>lizmckenna/groundwork</code> and <code>lizmckenna/parents4mopublicschools</code>), the Airtable base, the Cloudflare account, and the secret keys will be shared with you <b>directly and securely</b>. They're intentionally not in this doc.</p>
   </div>
 
-  <h2>7 · Ripe for you to own</h2>
+  <h2>7 · Your areas of responsibility, and what already helps</h2>
   <div class="card">
+    <h3>Area 1 — In-house Airtable capacity</h3>
     <ul>
-      <li><b>Data cleanliness</b>: merge duplicate contacts, normalize the messy "who recruited" free text, keep test entries out.</li>
-      <li><b>Attendance ingestion</b>: turning Zoom registration CSVs into marked attendance after each event.</li>
-      <li><b>Turnout reporting</b>: owning the live spreadsheets and per-launch trackers.</li>
-      <li><b>The September cutover</b>: moving from this Airtable + Worker stopgap to the full Groundwork app, with a rehearsed migration.</li>
+      <li>Train regional co-leads and team leaders on Airtable for managing their base contact lists, commitment follow-ups, and event recruitment. <span class="note">The per-lead turnout trackers and the caller dashboards are the starting point.</span></li>
+      <li>List creation and curation for co-leads and team leaders to streamline the ideal flow of people. <span class="note">The live RSVP feed + claim sheets already do this per launch.</span></li>
+      <li>Tech support for Airtable issues, and systems to flag when follow-up and connections to the base aren't happening. <span class="note">The events dashboard surfaces a lot of this.</span></li>
     </ul>
+    <h3 style="margin-top:14px;">Area 2 — Google Calendar + Zoom infrastructure</h3>
+    <ul>
+      <li>Keep the PMOPS Google Calendars current with registrants from Airtable event tracking, especially in the 48 hours before an event.</li>
+      <li>Mass reminder emails to onboarding RSVPs 24h out, and follow-up emails to attendees and to no-shows within 24h. <span class="note">The dashboards expose the exact lists with copy-emails, and the Worker already sends Zoom confirmations.</span></li>
+      <li>Download each Zoom meeting's registrations and get attendance into Airtable within 18h. <span class="note">Partly built; the dashboard reads attendance the moment it's marked.</span></li>
+    </ul>
+    <p class="note" style="margin-top:12px;"><b>Optional / down the line:</b> deeper data cleanliness (merging duplicates, normalizing the "who recruited" free text), and the September cutover from this Airtable + Worker stopgap to the full Groundwork app.</p>
   </div>
 
   <footer>Internal data brief. Please don't share publicly. Questions → Liz McKenna.</footer>
