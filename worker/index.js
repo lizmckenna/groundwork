@@ -234,6 +234,10 @@ export default {
       if (url.pathname === '/house-meeting-hosts' && request.method === 'GET') return await houseMeetingHosts(env);
       if (url.pathname === '/event-detail' && request.method === 'GET') return await eventDetail(env, url);
       if (url.pathname === '/event-rsvp' && request.method === 'POST') return await eventRsvp(request, env);
+      // Live CSV feed for Google Sheets IMPORTDATA — token in the URL (no session,
+      // since IMPORTDATA can't send headers). The canonical deduped RSVP list, so
+      // a shared turnout-tracking Sheet always shows the same count as the dashboard.
+      if (url.pathname === '/export/rsvps.csv' && request.method === 'GET') return await rsvpExportCsv(env, url);
       // Admin endpoints — gated by X-Admin-Key header instead of session token
       if (url.pathname === '/admin/dedupe-merge' && request.method === 'POST') return await adminDedupeMerge(request, env);
       if (url.pathname === '/admin/contacts-dump' && request.method === 'GET') return await adminContactsDump(request, env, url);
@@ -3759,6 +3763,44 @@ async function getCommitmentConversion(env) {
   const payload = { generated: new Date().toISOString(), flows };
   await cachePut(env, 'cache:conversion:v2', payload, 120);
   return json(payload);
+}
+
+// Canonical deduped RSVP list as CSV, for Google Sheets =IMPORTDATA(). Token-gated.
+async function rsvpExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const event = urlObj.searchParams.get('event') || 'Northland Emergency Meeting 6/18';
+  const evEsc = event.replace(/'/g, "\\'");
+  const order = []; const recruited = {}; const seen = new Set();
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=notes`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      const cid = (r.fields.contact || [])[0];
+      if (!cid || seen.has(cid)) continue;
+      seen.add(cid); order.push(cid);
+      const m = String(r.fields.notes || '').match(/Recruited by:\s*([^|]+)/);
+      recruited[cid] = m ? m[1].trim() : '';
+    }
+    off = d.offset;
+  } while (off);
+  const det = {};
+  for (let i = 0; i < order.length; i += 40) {
+    const chunk = order.slice(i, i + 40);
+    const formula = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+    let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone&fields%5B%5D=role&fields%5B%5D=school&fields%5B%5D=district`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) det[r.id] = r.fields;
+  }
+  const csvEsc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [['First Name', 'Last Name', 'Email', 'Phone', 'Role', 'School', 'District', 'Who Recruited'].join(',')];
+  for (const cid of order) {
+    const f = det[cid] || {};
+    const role = Array.isArray(f.role) ? f.role.join(', ') : (f.role || '');
+    lines.push([f.first, f.last, f.email, f.phone, role, f.school, f.district, recruited[cid]].map(csvEsc).join(','));
+  }
+  return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
 }
 
 async function getEventsOverview(env) {
