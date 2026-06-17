@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
-<title>Groundwork · P4MPS Data System — Handoff</title>
+<title>Groundwork · P4MPS Data System Handoff</title>
 <link rel="icon" type="image/svg+xml" href="/groundwork/favicon.svg">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
@@ -46,7 +46,7 @@
 
   <div class="eyebrow">Parents for Missouri Public Schools · Groundwork</div>
   <h1>Data system handoff</h1>
-  <p class="sub">Everything that's been built — the website forms, Airtable, the backend, the organizer dashboards, and the turnout spreadsheets — so we can move fast on the call.</p>
+  <p class="sub">Everything that's been built (the website forms, Airtable, the backend, the organizer dashboards, and the turnout spreadsheets) so we can move fast on the call.</p>
   <p class="meta">For Ellen Schwartze · prepared by Liz McKenna · June 2026</p>
 
   <div class="tldr">
@@ -64,8 +64,8 @@
     <h3>parents4mopublicschools.org</h3>
     <p>A static site (hosted free on GitHub Pages). Each form posts directly to the Groundwork Worker, which writes the person into Airtable and sends any confirmation email. <span class="tag">repo: lizmckenna/parents4mopublicschools</span></p>
     <ul>
-      <li><b>Amendment 5 commitment form</b> — sign up + pick action commitments (Amplifier, house meeting, canvass, regional team, etc.)</li>
-      <li><b>Regional launch / emergency-meeting RSVP</b> — the public RSVP form for events like Northland 6/18 and KC 7/9 (name, contact, pizza, childcare, who recruited)</li>
+      <li><b>Amendment 5 commitment form</b>: sign up + pick action commitments (Amplifier, house meeting, canvass, regional team, etc.)</li>
+      <li><b>Regional launch / emergency-meeting RSVP</b>: the public RSVP form for events like Northland 6/18 and KC 7/9 (name, contact, pizza, childcare, who recruited)</li>
       <li><b>House meeting + training sign-ups</b>, <b>remind-me</b>, <b>by-district</b>, <b>ballot language</b>, <b>flyer</b></li>
     </ul>
     <div class="links">
@@ -76,20 +76,20 @@
     </div>
   </div>
 
-  <h2>2 · Airtable — the system of record</h2>
+  <h2>2 · Airtable, the system of record</h2>
   <div class="card">
     <h3>One base holds every person, event, and touch</h3>
     <p>All contacts and activity live here. Everything else reads from it. <span class="tag">base: appQdixHbuttPldx6</span></p>
     <ul>
-      <li><b>contacts</b> — one row per person. Key fields: <code>events_signed_up</code>, <code>leader_ladder</code> (Prospect → Core Leader), <code>assigned_organizer</code>, <code>amendment5_commitments</code>, and per-event status fields like <code>signup_6_23_status</code> / <code>confirm_6_23_status</code> / <code>attendance_6_23_status</code>.</li>
-      <li><b>contact_log</b> — one row per touch (call, text, RSVP, attendance, commitment). This is where calls and RSVPs are recorded.</li>
-      <li><b>events</b>, <b>event_attendance</b>, <b>organizers</b> — supporting tables.</li>
+      <li><b>contacts</b>: one row per person. Key fields: <code>events_signed_up</code>, <code>leader_ladder</code> (Prospect → Core Leader), <code>assigned_organizer</code>, <code>amendment5_commitments</code>, and per-event status fields like <code>signup_6_23_status</code> / <code>confirm_6_23_status</code> / <code>attendance_6_23_status</code>.</li>
+      <li><b>contact_log</b>: one row per touch (call, text, RSVP, attendance, commitment). This is where calls and RSVPs are recorded.</li>
+      <li><b>events</b>, <b>event_attendance</b>, <b>organizers</b>: supporting tables.</li>
     </ul>
-    <div class="warn"><b>The #1 data gotcha:</b> RSVP counts must be counted as <b>unique people</b>, not log rows. contact_log has one row per action (plus the occasional duplicate or test entry), so counting rows inflates the number. The dashboards and the live spreadsheets all dedupe to unique people — that's why they're the trustworthy count.</div>
+    <div class="warn"><b>The #1 data gotcha:</b> RSVP counts must be counted as <b>unique people</b>, not log rows. contact_log has one row per action (plus the occasional duplicate or test entry), so counting rows inflates the number. The dashboards and the live spreadsheets all dedupe to unique people, which is why they are the trustworthy count.</div>
     <div class="links"><a class="pill" href="https://airtable.com/appQdixHbuttPldx6" target="_blank">🗄️ Open the base</a></div>
   </div>
 
-  <h2>3 · Backend — the Cloudflare Worker</h2>
+  <h2>3 · Backend, the Cloudflare Worker</h2>
   <div class="card">
     <h3>A small API that does all the reading, writing, and cleanup</h3>
     <p>One serverless Worker (~40 endpoints) sits between everything and Airtable. It handles form submissions, the dashboards' data, magic-link logins, attendance, the commitment/conversion math, dedup, and the live CSV feed for the spreadsheets. <span class="tag">repo: lizmckenna/groundwork → worker/</span></p>
@@ -106,20 +106,20 @@
     <h3>Web dashboards the team uses day-to-day</h3>
     <p>Static pages (GitHub Pages) that pull live from the Worker. Sign in with a magic link. <span class="tag">repo: lizmckenna/groundwork → pilot/</span></p>
     <ul>
-      <li><b>Caller dashboards</b> (LaNeé, Stephanie, Kathryn) — work a call list (fresh / not-yet-reached / came-but-no-next-step / post-training follow-up), log outcomes, sign people up, mark confirmations + attendance, add walk-ins.</li>
-      <li><b>Events command center</b> (Ellen) — every upcoming &amp; past event with RSVP / confirmed / attended / turnout, pizza + childcare counts with an age chart, an Amendment 5 <b>commitments</b> panel, commitment→training <b>conversion</b>, and click-any-number-to-copy-emails.</li>
+      <li><b>Caller dashboards</b> (LaNeé, Stephanie, Kathryn): work a call list (fresh / not-yet-reached / came-but-no-next-step / post-training follow-up), log outcomes, sign people up, mark confirmations + attendance, add walk-ins.</li>
+      <li><b>Events command center</b> (Ellen): every upcoming &amp; past event with RSVP / confirmed / attended / turnout, pizza + childcare counts with an age chart, an Amendment 5 <b>commitments</b> panel, commitment→training <b>conversion</b>, and click-any-number-to-copy-emails.</li>
     </ul>
     <div class="links">
       <a class="pill" href="https://lizmckenna.github.io/groundwork/pilot/ellen/" target="_blank">📊 Events command center</a>
-      <a class="pill" href="https://lizmckenna.github.io/groundwork/pilot/stephanie/" target="_blank">Caller — Stephanie</a>
-      <a class="pill" href="https://lizmckenna.github.io/groundwork/pilot/kathryn/" target="_blank">Caller — Kathryn</a>
-      <a class="pill" href="https://lizmckenna.github.io/groundwork/pilot/lanee/" target="_blank">Caller — LaNeé</a>
+      <a class="pill" href="https://lizmckenna.github.io/groundwork/pilot/stephanie/" target="_blank">Caller · Stephanie</a>
+      <a class="pill" href="https://lizmckenna.github.io/groundwork/pilot/kathryn/" target="_blank">Caller · Kathryn</a>
+      <a class="pill" href="https://lizmckenna.github.io/groundwork/pilot/lanee/" target="_blank">Caller · LaNeé</a>
     </div>
   </div>
 
   <h2>5 · Turnout spreadsheets (Google Sheets)</h2>
   <div class="card">
-    <h3>Shared trackers for the regional leads — live-linked to Airtable</h3>
+    <h3>Shared trackers for the regional leads, live-linked to Airtable</h3>
     <p>The leads track turnout in Google Sheets they already know. The trick: the <b>"RSVPs (live)" tab pulls straight from Airtable</b> via a Worker CSV feed and <code>=IMPORTDATA()</code>, so it's always the deduped hard count (no more hand-copying or numbers that disagree). Leads "claim" their people in a dropdown, which rolls up to each lead's goal.</p>
     <ul>
       <li>One workbook per launch (Northland 6/18, KC 7/9). Tabs: Goals · RSVPs (live) · one per lead.</li>
@@ -130,20 +130,20 @@
 
   <h2>6 · Access &amp; credentials</h2>
   <div class="card">
-    <p>The two private GitHub repos (<code>lizmckenna/groundwork</code> and <code>lizmckenna/parents4mopublicschools</code>), the Airtable base, the Cloudflare account, and the secret keys will be shared with you <b>directly and securely</b> — they're intentionally not in this doc.</p>
+    <p>The two private GitHub repos (<code>lizmckenna/groundwork</code> and <code>lizmckenna/parents4mopublicschools</code>), the Airtable base, the Cloudflare account, and the secret keys will be shared with you <b>directly and securely</b>. They're intentionally not in this doc.</p>
   </div>
 
   <h2>7 · Ripe for you to own</h2>
   <div class="card">
     <ul>
-      <li><b>Data cleanliness</b> — merge duplicate contacts, normalize the messy "who recruited" free text, keep test entries out.</li>
-      <li><b>Attendance ingestion</b> — turning Zoom registration CSVs into marked attendance after each event.</li>
-      <li><b>Turnout reporting</b> — owning the live spreadsheets and per-launch trackers.</li>
-      <li><b>The September cutover</b> — moving from this Airtable + Worker stopgap to the full Groundwork app, with a rehearsed migration.</li>
+      <li><b>Data cleanliness</b>: merge duplicate contacts, normalize the messy "who recruited" free text, keep test entries out.</li>
+      <li><b>Attendance ingestion</b>: turning Zoom registration CSVs into marked attendance after each event.</li>
+      <li><b>Turnout reporting</b>: owning the live spreadsheets and per-launch trackers.</li>
+      <li><b>The September cutover</b>: moving from this Airtable + Worker stopgap to the full Groundwork app, with a rehearsed migration.</li>
     </ul>
   </div>
 
-  <footer>Internal handoff doc — please don't share publicly. Questions → Liz McKenna.</footer>
+  <footer>Internal handoff doc. Please don't share publicly. Questions → Liz McKenna.</footer>
 </div>
 </body>
 </html>
