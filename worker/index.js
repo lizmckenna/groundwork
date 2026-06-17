@@ -3615,25 +3615,37 @@ function parseLaunchDate(name) {
 }
 // "2 kids, 3 & 6" -> 2 ; "18mo and 4 years" -> 2 ; "I kid, age 5" -> 1.
 // childcare=Yes with a blank detail still counts as at least 1 child.
-function countKids(s) {
-  if (!s) return 1;
-  const t = String(s).toLowerCase().replace(/\bi\s+kid/, '1 kid');
-  const m = t.match(/^\s*(\d+)\s*(kids?|,|ages?)/);   // leading "N kids" / "N," / "N ages"
-  if (m) return parseInt(m[1], 10) || 1;
-  const ages = t.split(/\band\b|,|&/).filter(p => /\d/.test(p));   // else count listed ages
-  return Math.max(1, ages.length);
-}
-// Pull the actual ages out of the free-text kids field for a distribution.
-// "2 kids, 3 & 6" -> [3,6] ; "18mo and 4 years" -> [1,4] ; "3 kids- 10 yo, 6 yo, 3 yo" -> [10,6,3]
-function parseAges(s) {
-  if (!s) return [];
+// Childcare staffing is safety-critical, so read the free-text note defensively
+// and, when ambiguous, err toward MORE kids, not fewer. Returns {count, ages}.
+// "2 kods aged 7" (typo) -> {2,[7,7]} ; "twins, 5" -> {2,[5,5]} ; "two kids 3 & 6" -> {2,[3,6]}
+// "1 kid age 5" -> {1,[5]} ; "4 year old" -> {1,[4]} ; "18mo and 4 years" -> {2,[1,4]}
+const CC_AGE_UNITS = new Set(['year', 'years', 'yr', 'yrs', 'yo', 'mo', 'month', 'months', 'old', 'y']);
+const CC_WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8 };
+function parseChildcare(s) {
+  if (!s || !String(s).trim()) return { count: 1, ages: [] };   // childcare=Yes, no detail -> at least 1
+  const t = String(s).toLowerCase().replace(/\bi\s+kid/g, '1 kid');
+  let count = null, rest = t;
+  if (/\btriplets?\b/.test(t)) count = 3;
+  else if (/\btwins?\b/.test(t)) count = 2;
+  if (count === null) {
+    const m = t.match(/^\s*(\d+)\s*(,|[a-z]+)/);                 // leading digit + a word/comma
+    const w = t.match(/^\s*(one|two|three|four|five|six|seven|eight)\b/);
+    if (m && (m[2] === ',' || !CC_AGE_UNITS.has(m[2]))) { count = parseInt(m[1], 10); rest = t.slice(m[0].length); }
+    else if (w) { count = CC_WORD_NUM[w[1]]; rest = t.slice(w[0].length); }
+  }
   const ages = [];
-  let t = String(s).toLowerCase().replace(/\bi\s+kid/, '1 kid');
-  t = t.replace(/(\d+)\s*(?:mo\b|months?)/g, () => { ages.push(1); return ' '; });   // months -> toddler
-  t = t.replace(/^\s*(\d+)\s*(kids?|ages?|,)/, '$2');                                  // drop the leading count
-  for (const n of (t.match(/\d+/g) || [])) { const v = parseInt(n, 10); if (v >= 0 && v <= 18) ages.push(v); }
-  return ages;
+  rest = rest.replace(/(\d+)\s*(?:mo\b|months?)/g, () => { ages.push(1); return ' '; });   // months -> toddler
+  for (const n of (rest.match(/\d+/g) || [])) { const v = parseInt(n, 10); if (v >= 0 && v <= 18) ages.push(v); }
+  if (count === null) count = Math.max(1, ages.length);
+  // one age given for several kids ("2 kods aged 7") -> replicate so the age chart is right too
+  if (ages.length && ages.length < count && new Set(ages).size === 1) {
+    while (ages.length < count) ages.push(ages[0]);
+  }
+  count = Math.max(count, ages.length);
+  return { count, ages };
 }
+function countKids(s) { return parseChildcare(s).count; }
+function parseAges(s) { return parseChildcare(s).ages; }
 function ageBand(a) { return a <= 2 ? '0–2' : a <= 5 ? '3–5' : a <= 9 ? '6–9' : '10+'; }
 const AGE_BANDS = ['0–2', '3–5', '6–9', '10+'];
 function allMetaEvents() {
@@ -3645,7 +3657,7 @@ function allMetaEvents() {
 const TYPE_LABEL = { onboarding: 'Onboardings', hm: 'House Meeting trainings', amp: 'Amplifier trainings', kyn: 'Know Your Neighbor', camp: 'Power Camps', launch: 'Emergency meetings' };
 
 async function getEventsOverview(env) {
-  const cached = await cacheGet(env, 'cache:events-overview:v3');
+  const cached = await cacheGet(env, 'cache:events-overview:v4');
   if (cached) return json(cached);
   const today = todayCT();
   const metas = allMetaEvents();
@@ -3751,7 +3763,7 @@ async function getEventsOverview(env) {
   }
   events.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
   const payload = { generated: new Date().toISOString(), today, events, type_labels: TYPE_LABEL };
-  await cachePut(env, 'cache:events-overview:v3', payload, 60);
+  await cachePut(env, 'cache:events-overview:v4', payload, 60);
   return json(payload);
 }
 
