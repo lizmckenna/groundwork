@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Groundwork — Events · MOI Pilot</title>
+<link rel="icon" type="image/svg+xml" href="/groundwork/favicon.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg-primary: #ffffff; --bg-secondary: #fafafa; --bg-elevated: #f4f4f5; --bg-hover: #ececef;
+    --gw-purple: #5371ff; --gw-purple-light: #5371ff; --gw-purple-soft: rgba(83,113,255,0.08);
+    --gw-green: #16a34a; --gw-green-soft: rgba(22,163,74,0.12);
+    --gw-amber: #d97706; --gw-amber-soft: rgba(217,119,6,0.12);
+    --gw-pink: #db2777; --gw-pink-soft: rgba(219,39,119,0.10);
+    --gw-teal: #0d9488; --gw-teal-soft: rgba(13,148,136,0.12);
+    --gw-red: #dc2626; --gw-red-soft: rgba(220,38,38,0.10);
+    --text-primary: #18181b; --text-secondary: #3f3f46; --text-tertiary: #52525b;
+    --border: rgba(0,0,0,0.08); --border-hover: rgba(0,0,0,0.16);
+  }
+  :root[data-theme="dark"] {
+    --bg-primary: #0a0a0b; --bg-secondary: #111113; --bg-elevated: #18181b; --bg-hover: #1f1f23;
+    --gw-purple-light: #818cf8; --gw-purple-soft: rgba(83,113,255,0.16);
+    --gw-green: #22c55e; --gw-green-soft: rgba(34,197,94,0.15);
+    --gw-amber: #fbbf24; --gw-amber-soft: rgba(251,191,36,0.15);
+    --gw-pink: #f472b6; --gw-pink-soft: rgba(244,114,182,0.15);
+    --gw-teal: #2dd4bf; --gw-teal-soft: rgba(45,212,191,0.15);
+    --gw-red: #ef4444; --gw-red-soft: rgba(239,68,68,0.16);
+    --text-primary: #fafafa; --text-secondary: #a1a1aa; --text-tertiary: #71717a;
+    --border: rgba(255,255,255,0.06); --border-hover: rgba(255,255,255,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); line-height: 1.55; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+  a { color: inherit; text-decoration: none; }
+  .container { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+  .mono { font-family: 'JetBrains Mono', monospace; letter-spacing: 0.12em; text-transform: uppercase; }
+
+  header.site { border-bottom: 1px solid var(--border); padding: 16px 0; position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,0.94); backdrop-filter: blur(10px); }
+  :root[data-theme="dark"] header.site { background: rgba(10,10,11,0.92); }
+  .site-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-logo { width: 34px; height: 34px; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.10); }
+  .brand-name { font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
+  .brand-sub { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 2px; }
+  .user-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--gw-purple-soft); color: var(--gw-purple-light); border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; margin-left: 8px; vertical-align: 1px; }
+  .head-actions { display: flex; align-items: center; gap: 10px; }
+  .icon-btn { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 8px; padding: 7px 11px; font-size: 13px; font-family: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  .hero { padding: 30px 0 8px; display: flex; align-items: center; gap: 22px; }
+  .hero-logo { width: 76px; height: 76px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 4px 18px rgba(0,0,0,0.10); }
+  .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gw-purple); margin-bottom: 6px; }
+  .hero h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+  .hero p { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
+
+  .summary { display: flex; flex-wrap: wrap; gap: 14px; margin: 22px 0 8px; }
+  .sum-card { flex: 1; min-width: 150px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+  .sum-num { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+  .sum-lbl { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 2px; }
+
+  .updated { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin: 6px 0 28px; display: flex; align-items: center; gap: 8px; }
+  .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--gw-green); box-shadow: 0 0 0 0 rgba(22,163,74,0.5); animation: pulse 2.4s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(22,163,74,0.45);} 70%{box-shadow:0 0 0 7px rgba(22,163,74,0);} 100%{box-shadow:0 0 0 0 rgba(22,163,74,0);} }
+
+  .section-h { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; color: var(--text-primary); margin: 36px 0 16px; display: flex; align-items: center; gap: 14px; }
+  .section-h .sh-count { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; color: var(--text-tertiary); background: var(--bg-elevated); border: 1px solid var(--border); padding: 2px 9px; border-radius: 999px; }
+  .section-h::after { content:''; flex: 1; height: 1px; background: var(--border); }
+
+  /* Collapsible section with a shaded header bar */
+  .sec { margin-bottom: 6px; }
+  .sec-head { width: 100%; display: flex; align-items: center; gap: 11px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-family: inherit; color: var(--text-primary); margin: 26px 0 14px; text-align: left; }
+  .sec-head:hover { background: var(--bg-hover); }
+  .sec-chev { font-size: 10px; color: var(--text-tertiary); transition: transform 0.15s; flex-shrink: 0; }
+  .sec.collapsed .sec-chev { transform: rotate(-90deg); }
+  .sec-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+  .sec-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; color: var(--text-tertiary); background: var(--bg-secondary); border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px; }
+  .sec-sub { color: var(--text-tertiary); font-size: 12.5px; margin: -6px 0 14px; }
+  .sec.collapsed .sec-body { display: none; }
+
+  .ev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
+  .ev-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 14px; padding: 18px 18px 14px; transition: border-color 0.15s; }
+  .ev-card:hover { border-color: var(--border-hover); }
+  .ev-card.is-today { border-color: var(--gw-purple); box-shadow: 0 0 0 1px var(--gw-purple-soft); }
+  .ev-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+  .ev-top > div:first-child { min-width: 0; }
+  .ev-title { font-size: 15.5px; font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+  .ev-when { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; color: var(--text-tertiary); margin-top: 3px; }
+  .ev-chip { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
+  .chip-today { background: var(--gw-purple); color: #fff; }
+  .chip-days { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); }
+  .chip-turnout { background: var(--gw-green-soft); color: var(--gw-green); }
+  .ev-chip.tn-good { background: var(--gw-green-soft); color: var(--gw-green); }
+  .ev-chip.tn-mid  { background: var(--gw-amber-soft); color: var(--gw-amber); }
+  .ev-chip.tn-low  { background: var(--gw-red-soft);   color: var(--gw-red); }
+  .ev-card.past { opacity: 0.92; }
+  .ev-card.past .tiles { grid-template-columns: repeat(2, 1fr); }
+  .section-h.past-h { color: var(--text-secondary); margin-top: 44px; }
+
+  .commit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .commit-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; cursor: pointer; transition: all 0.12s; position: relative; }
+  .commit-card:hover { border-color: var(--gw-purple); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+  .commit-card .cc-n { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; color: var(--gw-purple-light); line-height: 1; }
+  .commit-card .cc-l { font-size: 14px; font-weight: 600; margin-top: 8px; }
+  .commit-card .cc-owner { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 6px; display: flex; align-items: center; gap: 5px; }
+  .commit-card .cc-owner::before { content: '→'; opacity: 0.6; }
+  .commit-card .cc-go { position: absolute; top: 16px; right: 16px; font-size: 11px; color: var(--text-tertiary); opacity: 0; transition: opacity 0.12s; }
+  .commit-card:hover .cc-go { opacity: 0.8; }
+
+  .conv-row { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 15px 18px; margin-bottom: 10px; cursor: pointer; transition: all 0.12s; }
+  .conv-row:hover { border-color: var(--gw-purple); }
+  .conv-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 9px; }
+  .conv-label { font-weight: 600; font-size: 14px; }
+  .conv-label small { color: var(--text-tertiary); font-weight: 400; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .conv-pct { font-size: 19px; font-weight: 700; flex-shrink: 0; }
+  .conv-bar { height: 14px; border-radius: 7px; background: var(--bg-elevated); overflow: hidden; }
+  .conv-bar .done { background: var(--gw-green); height: 100%; display: block; border-radius: 7px; min-width: 3px; transition: width 0.4s; }
+  .conv-foot { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-tertiary); margin-top: 8px; display: flex; justify-content: space-between; }
+  .conv-foot .gap { color: var(--gw-amber); font-weight: 500; }
+
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .tile { border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; cursor: pointer; transition: all 0.12s; background: var(--bg-primary); position: relative; }
+  .tile:hover { border-color: var(--border-hover); transform: translateY(-1px); }
+  .tile:active { transform: translateY(0); }
+  .tile .tn { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .tile .tl { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 5px; }
+  .tile .tgo { position: absolute; top: 10px; right: 11px; font-size: 11px; color: var(--text-tertiary); opacity: 0; transition: opacity 0.12s; }
+  .tile:hover .tgo { opacity: 0.7; }
+  .tile.t-rsvp .tn { color: var(--gw-purple-light); } .tile.t-rsvp { background: var(--gw-purple-soft); border-color: transparent; }
+  .tile.t-conf .tn { color: var(--gw-green); }
+  .tile.t-unconf .tn { color: var(--gw-amber); }
+  .tile.t-att .tn { color: var(--gw-green); }
+  .tile.t-pizza .tn { color: var(--gw-pink); }
+  .tile.t-care .tn { color: var(--gw-teal); }
+  .tile.tile-wide { grid-column: span 2; }
+  .tile.dim { opacity: 0.5; cursor: default; } .tile.dim:hover { transform: none; border-color: var(--border); }
+
+  /* roster modal */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; align-items: flex-start; justify-content: center; padding: 6vh 16px; }
+  .modal { background: var(--bg-primary); border: 1px solid var(--border-hover); border-radius: 16px; width: 100%; max-width: 560px; max-height: 84vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+  .modal-h { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .modal-h .mt { font-size: 15px; font-weight: 600; }
+  .modal-h .ms { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 2px; }
+  .modal-x { background: none; border: none; color: var(--text-tertiary); font-size: 22px; cursor: pointer; line-height: 1; padding: 0 4px; }
+  .modal-x:hover { color: var(--text-primary); }
+  .modal-tools { padding: 10px 22px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; }
+  .modal-body { overflow-y: auto; padding: 6px 0; }
+  .rperson { padding: 11px 22px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; gap: 14px; align-items: baseline; }
+  .rperson:last-child { border-bottom: none; }
+  .rname { font-weight: 500; font-size: 14px; }
+  .rmeta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+  .rtags { display: flex; gap: 6px; flex-shrink: 0; }
+  .rtag { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+  .rtag.pz { background: var(--gw-pink-soft); color: var(--gw-pink); }
+  .rtag.cc { background: var(--gw-teal-soft); color: var(--gw-teal); }
+  .empty { padding: 40px 22px; text-align: center; color: var(--text-tertiary); font-size: 13px; }
+  .warn-line { padding: 10px 22px; background: var(--gw-amber-soft); color: var(--gw-amber); font-size: 12px; }
+  .age-chart { padding: 14px 22px 16px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
+  .age-chart-h { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 10px; }
+  .age-row { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
+  .age-lbl { width: 38px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-secondary); text-align: right; flex-shrink: 0; }
+  .age-squares { flex: 1; display: flex; gap: 3px; flex-wrap: wrap; align-content: center; min-height: 16px; }
+  .age-sq { width: 14px; height: 14px; border-radius: 3px; background: var(--bg-elevated); box-shadow: inset 0 0 0 1px var(--border); }
+  .age-sq.on { background: var(--gw-teal); box-shadow: none; }
+  .age-n { width: 26px; font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: var(--gw-teal); flex-shrink: 0; text-align: right; }
+
+  footer { margin: 50px 0 30px; color: var(--text-tertiary); font-size: 12px; text-align: center; }
+
+  /* login */
+  #login-overlay { display:none; position:fixed; inset:0; background:var(--bg-primary); z-index:9999; align-items:center; justify-content:center; padding:32px; }
+  .login-card { max-width: 380px; width: 100%; text-align: center; }
+  .login-card h2 { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+  .login-card p { color: var(--text-secondary); font-size: 13.5px; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<div id="login-overlay">
+  <div class="login-card">
+    <img src="/groundwork/pfmps.png" alt="" style="width:64px;height:64px;border-radius:50%;margin-bottom:16px;">
+    <h2>Events command center</h2>
+    <p>Sign in to see live counts for every upcoming event.</p>
+    <input id="login-email" type="email" placeholder="you@example.com" autocomplete="email" style="width:100%;padding:12px 14px;background:var(--bg-elevated);border:1px solid var(--border-hover);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;margin-bottom:12px;">
+    <button id="login-btn" style="width:100%;padding:12px;background:var(--gw-purple);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Send sign-in link</button>
+    <p id="login-msg" style="display:none;margin-top:16px;font-size:13px;"></p>
+  </div>
+</div>
+
+<header class="site">
+  <div class="container site-inner">
+    <div class="brand">
+      <img src="/groundwork/pfmps.png" alt="" class="brand-logo">
+      <span class="brand-name">Groundwork<span class="user-pill">Events</span><small class="brand-sub">MOI Pilot · Missouri</small></span>
+    </div>
+    <div class="head-actions">
+      <button class="icon-btn" id="refresh-btn" title="Refresh now">↻ Refresh</button>
+      <button class="icon-btn" id="theme-btn" title="Toggle theme">◐</button>
+      <button class="icon-btn" id="signout-btn" title="Sign out">Sign out</button>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="hero">
+    <img src="/groundwork/pfmps.png" alt="Parents for Missouri Public Schools" class="hero-logo">
+    <div>
+      <div class="eyebrow">Events command center</div>
+      <h1>Every upcoming event, live</h1>
+      <p>RSVPs, confirmations, and logistics across onboardings, trainings, and emergency meetings. Click any number to see the people behind it.</p>
+    </div>
+  </div>
+
+  <div class="summary" id="summary"></div>
+  <div class="updated" id="updated"><span class="pulse"></span><span id="updated-txt">Loading…</span></div>
+
+  <div id="sections"></div>
+
+  <div id="commitments-wrap"></div>
+
+  <div id="conversion-wrap"></div>
+
+  <footer>Groundwork · Missouri pilot · Auto-refreshes every 60 seconds. Numbers come straight from Airtable.</footer>
+</main>
+
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <div class="modal-h">
+      <div><div class="mt" id="modal-title">People</div><div class="ms" id="modal-sub"></div></div>
+      <button class="modal-x" id="modal-x">&times;</button>
+    </div>
+    <div class="modal-tools"><button class="icon-btn" id="copy-btn">✉ Copy emails</button></div>
+    <div class="warn-line" id="modal-warn" style="display:none;"></div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
+function todayCT(){ return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date()); }
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const authHeaders = (extra={}) => ({ 'X-Groundwork-Session': localStorage.getItem('gw-session')||'', ...extra });
+async function authFetch(url, options={}) {
+  const r = await fetch(url, { ...options, headers: authHeaders(options.headers||{}) });
+  if (r.status === 401) { localStorage.removeItem('gw-session'); showLogin('Session expired. Sign in again.'); throw new Error('unauthorized'); }
+  return r;
+}
+
+// ---- theme ----
+if (localStorage.getItem('gw-theme') === 'dark') document.documentElement.setAttribute('data-theme','dark');
+document.getElementById('theme-btn').addEventListener('click', () => {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (dark) { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('gw-theme','light'); }
+  else { document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('gw-theme','dark'); }
+});
+
+// ---- date helpers ----
+function daysUntil(iso) {
+  if (!iso) return null;
+  const t = todayCT();
+  const a = new Date(t + 'T00:00:00'); const b = new Date(iso + 'T00:00:00');
+  return Math.round((b - a) / 86400000);
+}
+function whenLabel(ev) {
+  const parts = [];
+  if (ev.date) {
+    const d = new Date(ev.date + 'T00:00:00');
+    parts.push(d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }));
+  }
+  if (ev.time) parts.push(ev.time);
+  return parts.join(' · ');
+}
+
+// ---- render ----
+const TYPE_ORDER = ['onboarding','hm','amp','kyn','camp','launch'];
+let lastData = null;
+
+function tile(ev, cls, num, label, segment, dim) {
+  const clickable = !dim && num !== null;
+  return `<div class="tile ${cls}${dim?' dim':''}" ${clickable?`onclick="openRoster('${esc(ev.key)}','${segment}','${esc(label)}','${esc(ev.label)}')"`:''}>
+    <div class="tn">${num===null?'—':num}</div><div class="tl">${esc(label)}</div>${clickable?'<span class="tgo">view →</span>':''}</div>`;
+}
+
+function cardHTML(ev) {
+  const du = daysUntil(ev.date);
+  const isToday = du === 0;
+  let chip = '';
+  if (isToday) chip = '<span class="ev-chip chip-today">Today</span>';
+  else if (du === 1) chip = '<span class="ev-chip chip-days">Tomorrow</span>';
+  else if (du !== null && du > 0) chip = `<span class="ev-chip chip-days">in ${du} days</span>`;
+  let tiles;
+  if (ev.kind === 'launch') {
+    tiles = tile(ev,'t-rsvp',ev.rsvp,'RSVP’d','rsvp')
+      + tile(ev,'t-conf',ev.confirmed||0,'Confirmed','confirmed')
+      + tile(ev,'t-unconf',ev.unconfirmed||0,'Yet to confirm','unconfirmed')
+      + tile(ev,'t-att',ev.attended || 0,'Attended','attended', !ev.attended && du>0)
+      + tile(ev,'t-pizza',ev.pizza||0,'Pizza plates','pizza')
+      + tile(ev,'t-care',ev.childcare||0,'Kids needing care','childcare');
+  } else {
+    tiles = tile(ev,'t-rsvp',ev.rsvp,'RSVP’d','rsvp')
+      + tile(ev,'t-conf',ev.confirmed||0,'Confirmed','confirmed')
+      + tile(ev,'t-unconf',ev.unconfirmed||0,'Yet to confirm','unconfirmed')
+      + tile(ev,'t-att',ev.attended||0,'Attended','attended', !ev.attended && du>0);
+  }
+  return `<div class="ev-card${isToday?' is-today':''}">
+    <div class="ev-top"><div><div class="ev-title">${esc(ev.label)}</div><div class="ev-when">${esc(whenLabel(ev))}</div></div>${chip}</div>
+    <div class="tiles">${tiles}</div>
+  </div>`;
+}
+
+// Past events: what matters is registration vs turnout.
+function pastCardHTML(ev) {
+  const reg = ev.rsvp || 0, att = ev.attended || 0;
+  const pct = reg ? Math.round(att/reg*100) : null;
+  const tcls = pct===null ? '' : (pct >= 60 ? 'tn-good' : pct >= 35 ? 'tn-mid' : 'tn-low');
+  const chip = pct!==null ? `<span class="ev-chip ${tcls}">${pct}% turnout</span>`
+                          : (att ? `<span class="ev-chip chip-days">${att} attended</span>` : '');
+  return `<div class="ev-card past">
+    <div class="ev-top"><div><div class="ev-title">${esc(ev.label)}</div><div class="ev-when">${esc(whenLabel(ev))}</div></div>${chip}</div>
+    <div class="tiles">
+      ${tile(ev,'t-rsvp',reg||null,'Registered','rsvp')}
+      ${tile(ev,'t-att',att,'Attended','attended')}
+    </div>
+  </div>`;
+}
+
+// Collapsible shaded section. State persists per id in localStorage.
+function secCollapsed(id) { try { return localStorage.getItem('gw-sec-' + id) === '1'; } catch (e) { return false; } }
+function toggleSec(id) {
+  const el = document.querySelector(`.sec[data-sec="${id}"]`); if (!el) return;
+  const now = !el.classList.contains('collapsed');
+  el.classList.toggle('collapsed', now);
+  try { localStorage.setItem('gw-sec-' + id, now ? '1' : '0'); } catch (e) {}
+}
+function section(id, title, count, body, sub) {
+  return `<div class="sec${secCollapsed(id) ? ' collapsed' : ''}" data-sec="${id}">
+    <button class="sec-head" onclick="toggleSec('${id}')"><span class="sec-chev">▾</span><span class="sec-title">${esc(title)}</span>${count != null ? `<span class="sec-count">${count}</span>` : ''}</button>
+    <div class="sec-body">${sub ? `<p class="sec-sub">${esc(sub)}</p>` : ''}${body}</div>
+  </div>`;
+}
+
+function render(data) {
+  lastData = data;
+  const labels = data.type_labels || {};
+  const all = data.events || [];
+  const evs = all.filter(e => !e.past);          // upcoming
+  const past = all.filter(e => e.past).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const totalRsvp = evs.reduce((s,e)=>s+(e.rsvp||0),0);
+  const next = evs.find(e => daysUntil(e.date) >= 0);
+  const unconf = evs.filter(e=>e.kind==='meta').reduce((s,e)=>s+(e.unconfirmed||0),0);
+  document.getElementById('summary').innerHTML =
+    `<div class="sum-card"><div class="sum-num">${evs.length}</div><div class="sum-lbl">Upcoming events</div></div>
+     <div class="sum-card"><div class="sum-num">${totalRsvp}</div><div class="sum-lbl">Total RSVPs</div></div>
+     <div class="sum-card"><div class="sum-num">${unconf}</div><div class="sum-lbl">Yet to confirm</div></div>
+     <div class="sum-card"><div class="sum-num">${next?esc(next.label.replace(/ \\d.*$/,'').slice(0,18)||next.label):'—'}</div><div class="sum-lbl">Next up${next?' · '+ (daysUntil(next.date)===0?'today':daysUntil(next.date)+'d'):''}</div></div>`;
+  // upcoming sections grouped by type
+  const byType = {};
+  for (const e of evs) (byType[e.type] = byType[e.type] || []).push(e);
+  let html = '';
+  for (const t of TYPE_ORDER) {
+    if (!byType[t] || !byType[t].length) continue;
+    html += section('type-' + t, labels[t] || t, byType[t].length, `<div class="ev-grid">${byType[t].map(cardHTML).join('')}</div>`);
+  }
+  // past section — registration vs turnout, most recent first
+  if (past.length) {
+    html += section('past', 'Past events', past.length, `<div class="ev-grid">${past.map(pastCardHTML).join('')}</div>`);
+  }
+  document.getElementById('sections').innerHTML = html || '<div class="empty">No events found.</div>';
+  document.getElementById('updated-txt').textContent = 'Updated ' + new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+}
+
+async function load() {
+  try {
+    const r = await authFetch(`${WORKER}/events-overview`);
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    render(await r.json());
+  } catch (e) {
+    if (e.message !== 'unauthorized') document.getElementById('updated-txt').textContent = 'Could not load: ' + e.message;
+  }
+}
+
+async function loadCommitments() {
+  try {
+    const r = await authFetch(`${WORKER}/commitments-overview`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const buckets = d.buckets || [];
+    if (!buckets.length) { document.getElementById('commitments-wrap').innerHTML = ''; return; }
+    const cards = buckets.map(b => `<div class="commit-card" onclick="openRoster('commitment:${esc(b.key)}','commitment','${esc(b.label)}','${esc(b.label)} — Amendment 5 commitment')">
+      <div class="cc-n">${b.count}</div><div class="cc-l">${esc(b.label)}</div>${b.owner?`<div class="cc-owner">${esc(b.owner)}</div>`:''}<span class="cc-go">see people →</span></div>`).join('');
+    document.getElementById('commitments-wrap').innerHTML = section('commitments', 'Amendment 5 commitments', buckets.length,
+      `<div class="commit-grid">${cards}</div>`,
+      'Everyone who raised their hand for each action. Click to see the people and copy their emails.');
+  } catch (e) {}
+}
+
+async function loadConversion() {
+  try {
+    const r = await authFetch(`${WORKER}/commitment-conversion`);
+    if (!r.ok) return;
+    const flows = (await r.json()).flows || [];
+    if (!flows.length) { document.getElementById('conversion-wrap').innerHTML = ''; return; }
+    const rows = flows.map(f => {
+      const gap = f.committed - f.converted;
+      const col = f.rate >= 50 ? 'var(--gw-green)' : f.rate >= 20 ? 'var(--gw-amber)' : 'var(--gw-red)';
+      return `<div class="conv-row" onclick="openRoster('gap:${esc(f.key)}','gap','Committed but not yet at ${esc(f.training)}','${esc(f.label)} — still to follow up')">
+        <div class="conv-top"><div class="conv-label">${esc(f.label)} <small>→ showed up to ${esc(f.training)}</small></div><div class="conv-pct" style="color:${col}">${f.rate}%</div></div>
+        <div class="conv-bar"><span class="done" style="width:${f.rate}%"></span></div>
+        <div class="conv-foot"><span>${f.converted} of ${f.committed} have shown up</span><span class="gap">${gap} to follow up →</span></div>
+      </div>`;
+    }).join('');
+    document.getElementById('conversion-wrap').innerHTML = section('conversion', 'From commitment to training', flows.length, rows,
+      'How many who committed to an action have actually shown up to the matching training. Click a row for the follow-up list and their emails.');
+  } catch (e) {}
+}
+
+// ---- roster modal ----
+let rosterPeople = [];
+async function openRoster(key, segment, segLabel, evLabel) {
+  const bg = document.getElementById('modal-bg');
+  document.getElementById('modal-title').textContent = evLabel;
+  document.getElementById('modal-sub').textContent = segLabel;
+  document.getElementById('modal-warn').style.display = 'none';
+  document.getElementById('modal-body').innerHTML = '<div class="empty">Loading…</div>';
+  bg.style.display = 'flex';
+  try {
+    const r = await authFetch(`${WORKER}/event-roster?key=${encodeURIComponent(key)}&segment=${encodeURIComponent(segment)}`);
+    const d = await r.json();
+    rosterPeople = d.people || [];
+    const sub = (segment === 'childcare' && d.kids != null)
+      ? `${d.count} ${d.count===1?'family':'families'} · ${d.kids} kids total`
+      : `${segLabel} · ${d.count} ${d.count===1?'person':'people'}`;
+    document.getElementById('modal-sub').textContent = sub;
+    if (d.unlinked) {
+      const w = document.getElementById('modal-warn');
+      w.style.display = 'block';
+      w.textContent = `${d.unlinked} RSVP not linked to a contact record (likely a test or incomplete entry).`;
+    }
+    if (!rosterPeople.length) { document.getElementById('modal-body').innerHTML = '<div class="empty">Nobody here yet.</div>'; return; }
+    let chart = '';
+    if (segment === 'childcare' && d.age_dist && d.ages_known) {
+      const max = Math.max(1, ...d.age_dist.map(b => b.count));
+      chart = `<div class="age-chart"><div class="age-chart-h">Age distribution · ${d.ages_known} kids with ages given · 1 square = 1 kid</div>`
+        + d.age_dist.map(b => {
+            const squares = Array.from({length: max}, (_,i) => `<span class="age-sq${i < b.count ? ' on' : ''}"></span>`).join('');
+            return `<div class="age-row"><span class="age-lbl">${b.band}</span><span class="age-squares">${squares}</span><span class="age-n">${b.count}</span></div>`;
+          }).join('')
+        + `</div>`;
+    }
+    document.getElementById('modal-body').innerHTML = chart + rosterPeople.map(p => {
+      const meta = [p.phone, p.email].filter(Boolean).join('  ·  ');
+      const sub = [p.school, p.city].filter(Boolean).join(' · ');
+      const tags = (p.pizza?'<span class="rtag pz">pizza</span>':'') + (p.childcare?`<span class="rtag cc">childcare${p.kids?' '+esc(p.kids):''}</span>`:'');
+      return `<div class="rperson"><div><div class="rname">${esc(p.name)}</div><div class="rmeta">${esc(meta)}${sub?'  ·  '+esc(sub):''}</div></div><div class="rtags">${tags}</div></div>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('modal-body').innerHTML = `<div class="empty">Could not load: ${esc(e.message)}</div>`;
+  }
+}
+function closeModal(){ document.getElementById('modal-bg').style.display='none'; }
+document.getElementById('modal-x').addEventListener('click', closeModal);
+document.getElementById('modal-bg').addEventListener('click', e => { if (e.target.id==='modal-bg') closeModal(); });
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
+document.getElementById('copy-btn').addEventListener('click', () => {
+  const emails = [...new Set(rosterPeople.map(p => (p.email||'').trim().toLowerCase()).filter(Boolean))];
+  const b = document.getElementById('copy-btn');
+  if (!emails.length) { const o = b.textContent; b.textContent = 'No emails to copy'; setTimeout(()=>b.textContent=o, 1500); return; }
+  navigator.clipboard.writeText(emails.join(', ')).then(() => {
+    const o = b.textContent; b.textContent = `✓ Copied ${emails.length} email${emails.length===1?'':'s'}`;
+    setTimeout(()=>b.textContent=o, 1800);
+  });
+});
+
+document.getElementById('refresh-btn').addEventListener('click', () => { load(); loadCommitments(); loadConversion(); });
+document.getElementById('signout-btn').addEventListener('click', () => { localStorage.removeItem('gw-session'); localStorage.removeItem('gw-email'); location.reload(); });
+
+// ---- auth ----
+function showLogin(msg){ document.getElementById('login-overlay').style.display='flex'; if (msg){ const m=document.getElementById('login-msg'); m.textContent=msg; m.style.display='block'; m.style.color='var(--gw-red)'; } }
+function hideLogin(){ document.getElementById('login-overlay').style.display='none'; }
+document.getElementById('login-btn').addEventListener('click', async () => {
+  const email = document.getElementById('login-email').value.trim();
+  const msg = document.getElementById('login-msg'); const btn = document.getElementById('login-btn');
+  if (!email || !email.includes('@')) { msg.textContent='Enter a valid email'; msg.style.display='block'; msg.style.color='var(--gw-red)'; return; }
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const r = await fetch(`${WORKER}/auth/start`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, redirect_url: location.origin + location.pathname }) });
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    msg.textContent = `✓ Check ${email} for a sign-in link (expires in 10 min).`; msg.style.display='block'; msg.style.color='var(--gw-green)';
+    btn.textContent = 'Sent — check your email';
+  } catch (e) { msg.textContent = `Couldn't send: ${e.message}`; msg.style.display='block'; msg.style.color='var(--gw-red)'; btn.disabled=false; btn.textContent='Send sign-in link'; }
+});
+async function bootAuth() {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token');
+  if (token) {
+    try {
+      const r = await fetch(`${WORKER}/auth/verify`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: token }) });
+      const data = await r.json();
+      if (r.ok && data.session_token) { localStorage.setItem('gw-session', data.session_token); if (data.email) localStorage.setItem('gw-email', data.email); history.replaceState({}, '', location.pathname); return true; }
+      showLogin('Link expired or invalid. Enter your email to get a new one.'); return false;
+    } catch (e) { showLogin('Verification failed: ' + e.message); return false; }
+  }
+  if (localStorage.getItem('gw-session')) return true;
+  showLogin(); return false;
+}
+(async () => {
+  if (await bootAuth()) {
+    hideLogin();
+    await load();
+    loadCommitments();
+    loadConversion();
+    setInterval(() => { load(); loadCommitments(); loadConversion(); }, 60000);
+  }
+})();
+</script>
+</body>
+</html>
