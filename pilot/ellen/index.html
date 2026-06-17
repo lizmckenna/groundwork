@@ -272,9 +272,10 @@ function cardHTML(ev) {
 // Past events: what matters is registration vs turnout.
 function pastCardHTML(ev) {
   const reg = ev.rsvp || 0, att = ev.attended || 0;
-  const pct = reg ? Math.round(att / reg * 100) : 0;
+  const chip = reg ? `<span class="ev-chip chip-turnout">${Math.round(att/reg*100)}% turnout</span>`
+                   : (att ? `<span class="ev-chip chip-days">${att} attended</span>` : '');
   return `<div class="ev-card past">
-    <div class="ev-top"><div><div class="ev-title">${esc(ev.label)}</div><div class="ev-when">${esc(whenLabel(ev))}</div></div><span class="ev-chip chip-turnout">${pct}% turnout</span></div>
+    <div class="ev-top"><div><div class="ev-title">${esc(ev.label)}</div><div class="ev-when">${esc(whenLabel(ev))}</div></div>${chip}</div>
     <div class="tiles">
       ${tile(ev,'t-rsvp',reg,'Registered','rsvp')}
       ${tile(ev,'t-att',att,'Attended','attended')}
