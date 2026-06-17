@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Groundwork — Events · MOI Pilot</title>
+<link rel="icon" type="image/svg+xml" href="/groundwork/favicon.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg-primary: #ffffff; --bg-secondary: #fafafa; --bg-elevated: #f4f4f5; --bg-hover: #ececef;
+    --gw-purple: #5371ff; --gw-purple-light: #5371ff; --gw-purple-soft: rgba(83,113,255,0.08);
+    --gw-green: #16a34a; --gw-green-soft: rgba(22,163,74,0.12);
+    --gw-amber: #d97706; --gw-amber-soft: rgba(217,119,6,0.12);
+    --gw-pink: #db2777; --gw-pink-soft: rgba(219,39,119,0.10);
+    --gw-teal: #0d9488; --gw-teal-soft: rgba(13,148,136,0.12);
+    --gw-red: #dc2626;
+    --text-primary: #18181b; --text-secondary: #3f3f46; --text-tertiary: #52525b;
+    --border: rgba(0,0,0,0.08); --border-hover: rgba(0,0,0,0.16);
+  }
+  :root[data-theme="dark"] {
+    --bg-primary: #0a0a0b; --bg-secondary: #111113; --bg-elevated: #18181b; --bg-hover: #1f1f23;
+    --gw-purple-light: #818cf8; --gw-purple-soft: rgba(83,113,255,0.16);
+    --gw-green: #22c55e; --gw-green-soft: rgba(34,197,94,0.15);
+    --gw-amber: #fbbf24; --gw-amber-soft: rgba(251,191,36,0.15);
+    --gw-pink: #f472b6; --gw-pink-soft: rgba(244,114,182,0.15);
+    --gw-teal: #2dd4bf; --gw-teal-soft: rgba(45,212,191,0.15);
+    --gw-red: #ef4444;
+    --text-primary: #fafafa; --text-secondary: #a1a1aa; --text-tertiary: #71717a;
+    --border: rgba(255,255,255,0.06); --border-hover: rgba(255,255,255,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); line-height: 1.55; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+  a { color: inherit; text-decoration: none; }
+  .container { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+  .mono { font-family: 'JetBrains Mono', monospace; letter-spacing: 0.12em; text-transform: uppercase; }
+
+  header.site { border-bottom: 1px solid var(--border); padding: 16px 0; position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,0.94); backdrop-filter: blur(10px); }
+  :root[data-theme="dark"] header.site { background: rgba(10,10,11,0.92); }
+  .site-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-logo { width: 34px; height: 34px; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.10); }
+  .brand-name { font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
+  .brand-sub { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 2px; }
+  .user-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--gw-purple-soft); color: var(--gw-purple-light); border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; margin-left: 8px; vertical-align: 1px; }
+  .head-actions { display: flex; align-items: center; gap: 10px; }
+  .icon-btn { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 8px; padding: 7px 11px; font-size: 13px; font-family: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  .hero { padding: 30px 0 8px; display: flex; align-items: center; gap: 22px; }
+  .hero-logo { width: 76px; height: 76px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 4px 18px rgba(0,0,0,0.10); }
+  .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gw-purple); margin-bottom: 6px; }
+  .hero h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+  .hero p { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
+
+  .summary { display: flex; flex-wrap: wrap; gap: 14px; margin: 22px 0 8px; }
+  .sum-card { flex: 1; min-width: 150px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+  .sum-num { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+  .sum-lbl { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 2px; }
+
+  .updated { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin: 6px 0 28px; display: flex; align-items: center; gap: 8px; }
+  .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--gw-green); box-shadow: 0 0 0 0 rgba(22,163,74,0.5); animation: pulse 2.4s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(22,163,74,0.45);} 70%{box-shadow:0 0 0 7px rgba(22,163,74,0);} 100%{box-shadow:0 0 0 0 rgba(22,163,74,0);} }
+
+  .section-h { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-tertiary); margin: 30px 0 14px; display: flex; align-items: center; gap: 10px; }
+  .section-h::after { content:''; flex: 1; height: 1px; background: var(--border); }
+
+  .ev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
+  .ev-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 14px; padding: 18px 18px 14px; transition: border-color 0.15s; }
+  .ev-card:hover { border-color: var(--border-hover); }
+  .ev-card.is-today { border-color: var(--gw-purple); box-shadow: 0 0 0 1px var(--gw-purple-soft); }
+  .ev-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+  .ev-title { font-size: 15.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .ev-when { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; color: var(--text-tertiary); margin-top: 3px; }
+  .ev-chip { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
+  .chip-today { background: var(--gw-purple); color: #fff; }
+  .chip-days { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); }
+
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .tile { border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; cursor: pointer; transition: all 0.12s; background: var(--bg-primary); position: relative; }
+  .tile:hover { border-color: var(--border-hover); transform: translateY(-1px); }
+  .tile:active { transform: translateY(0); }
+  .tile .tn { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .tile .tl { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 5px; }
+  .tile .tgo { position: absolute; top: 10px; right: 11px; font-size: 11px; color: var(--text-tertiary); opacity: 0; transition: opacity 0.12s; }
+  .tile:hover .tgo { opacity: 0.7; }
+  .tile.t-rsvp .tn { color: var(--gw-purple-light); } .tile.t-rsvp { background: var(--gw-purple-soft); border-color: transparent; }
+  .tile.t-conf .tn { color: var(--gw-green); }
+  .tile.t-unconf .tn { color: var(--gw-amber); }
+  .tile.t-att .tn { color: var(--gw-green); }
+  .tile.t-pizza .tn { color: var(--gw-pink); }
+  .tile.t-care .tn { color: var(--gw-teal); }
+  .tile.tile-wide { grid-column: span 2; }
+  .tile.dim { opacity: 0.5; cursor: default; } .tile.dim:hover { transform: none; border-color: var(--border); }
+
+  /* roster modal */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; align-items: flex-start; justify-content: center; padding: 6vh 16px; }
+  .modal { background: var(--bg-primary); border: 1px solid var(--border-hover); border-radius: 16px; width: 100%; max-width: 560px; max-height: 84vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+  .modal-h { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .modal-h .mt { font-size: 15px; font-weight: 600; }
+  .modal-h .ms { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 2px; }
+  .modal-x { background: none; border: none; color: var(--text-tertiary); font-size: 22px; cursor: pointer; line-height: 1; padding: 0 4px; }
+  .modal-x:hover { color: var(--text-primary); }
+  .modal-tools { padding: 10px 22px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; }
+  .modal-body { overflow-y: auto; padding: 6px 0; }
+  .rperson { padding: 11px 22px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; gap: 14px; align-items: baseline; }
+  .rperson:last-child { border-bottom: none; }
+  .rname { font-weight: 500; font-size: 14px; }
+  .rmeta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+  .rtags { display: flex; gap: 6px; flex-shrink: 0; }
+  .rtag { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+  .rtag.pz { background: var(--gw-pink-soft); color: var(--gw-pink); }
+  .rtag.cc { background: var(--gw-teal-soft); color: var(--gw-teal); }
+  .empty { padding: 40px 22px; text-align: center; color: var(--text-tertiary); font-size: 13px; }
+  .warn-line { padding: 10px 22px; background: var(--gw-amber-soft); color: var(--gw-amber); font-size: 12px; }
+
+  footer { margin: 50px 0 30px; color: var(--text-tertiary); font-size: 12px; text-align: center; }
+
+  /* login */
+  #login-overlay { display:none; position:fixed; inset:0; background:var(--bg-primary); z-index:9999; align-items:center; justify-content:center; padding:32px; }
+  .login-card { max-width: 380px; width: 100%; text-align: center; }
+  .login-card h2 { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+  .login-card p { color: var(--text-secondary); font-size: 13.5px; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<div id="login-overlay">
+  <div class="login-card">
+    <img src="/groundwork/pfmps.png" alt="" style="width:64px;height:64px;border-radius:50%;margin-bottom:16px;">
+    <h2>Events command center</h2>
+    <p>Sign in to see live counts for every upcoming event.</p>
+    <input id="login-email" type="email" placeholder="you@example.com" autocomplete="email" style="width:100%;padding:12px 14px;background:var(--bg-elevated);border:1px solid var(--border-hover);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;margin-bottom:12px;">
+    <button id="login-btn" style="width:100%;padding:12px;background:var(--gw-purple);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Send sign-in link</button>
+    <p id="login-msg" style="display:none;margin-top:16px;font-size:13px;"></p>
+  </div>
+</div>
+
+<header class="site">
+  <div class="container site-inner">
+    <div class="brand">
+      <img src="/groundwork/pfmps.png" alt="" class="brand-logo">
+      <span class="brand-name">Groundwork<span class="user-pill">Events</span><small class="brand-sub">MOI Pilot · Missouri</small></span>
+    </div>
+    <div class="head-actions">
+      <button class="icon-btn" id="refresh-btn" title="Refresh now">↻ Refresh</button>
+      <button class="icon-btn" id="theme-btn" title="Toggle theme">◐</button>
+      <button class="icon-btn" id="signout-btn" title="Sign out">Sign out</button>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="hero">
+    <img src="/groundwork/pfmps.png" alt="Parents for Missouri Public Schools" class="hero-logo">
+    <div>
+      <div class="eyebrow">Events command center</div>
+      <h1>Every upcoming event, live</h1>
+      <p>RSVPs, confirmations, and logistics across onboardings, trainings, and emergency meetings. Click any number to see the people behind it.</p>
+    </div>
+  </div>
+
+  <div class="summary" id="summary"></div>
+  <div class="updated" id="updated"><span class="pulse"></span><span id="updated-txt">Loading…</span></div>
+
+  <div id="sections"></div>
+
+  <footer>Groundwork · Missouri pilot · Auto-refreshes every 60 seconds. Numbers come straight from Airtable.</footer>
+</main>
+
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <div class="modal-h">
+      <div><div class="mt" id="modal-title">People</div><div class="ms" id="modal-sub"></div></div>
+      <button class="modal-x" id="modal-x">&times;</button>
+    </div>
+    <div class="modal-tools"><button class="icon-btn" id="copy-btn">⧉ Copy names + phones</button></div>
+    <div class="warn-line" id="modal-warn" style="display:none;"></div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
+function todayCT(){ return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date()); }
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const authHeaders = (extra={}) => ({ 'X-Groundwork-Session': localStorage.getItem('gw-session')||'', ...extra });
+async function authFetch(url, options={}) {
+  const r = await fetch(url, { ...options, headers: authHeaders(options.headers||{}) });
+  if (r.status === 401) { localStorage.removeItem('gw-session'); showLogin('Session expired. Sign in again.'); throw new Error('unauthorized'); }
+  return r;
+}
+
+// ---- theme ----
+if (localStorage.getItem('gw-theme') === 'dark') document.documentElement.setAttribute('data-theme','dark');
+document.getElementById('theme-btn').addEventListener('click', () => {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (dark) { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('gw-theme','light'); }
+  else { document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('gw-theme','dark'); }
+});
+
+// ---- date helpers ----
+function daysUntil(iso) {
+  if (!iso) return null;
+  const t = todayCT();
+  const a = new Date(t + 'T00:00:00'); const b = new Date(iso + 'T00:00:00');
+  return Math.round((b - a) / 86400000);
+}
+function whenLabel(ev) {
+  const parts = [];
+  if (ev.date) {
+    const d = new Date(ev.date + 'T00:00:00');
+    parts.push(d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }));
+  }
+  if (ev.time) parts.push(ev.time);
+  return parts.join(' · ');
+}
+
+// ---- render ----
+const TYPE_ORDER = ['onboarding','hm','amp','kyn','launch'];
+let lastData = null;
+
+function tile(ev, cls, num, label, segment, dim) {
+  const clickable = !dim && num !== null;
+  return `<div class="tile ${cls}${dim?' dim':''}" ${clickable?`onclick="openRoster('${esc(ev.key)}','${segment}','${esc(label)}','${esc(ev.label)}')"`:''}>
+    <div class="tn">${num===null?'—':num}</div><div class="tl">${esc(label)}</div>${clickable?'<span class="tgo">view →</span>':''}</div>`;
+}
+
+function cardHTML(ev) {
+  const du = daysUntil(ev.date);
+  const isToday = du === 0;
+  let chip = '';
+  if (isToday) chip = '<span class="ev-chip chip-today">Today</span>';
+  else if (du === 1) chip = '<span class="ev-chip chip-days">Tomorrow</span>';
+  else if (du !== null && du > 0) chip = `<span class="ev-chip chip-days">in ${du} days</span>`;
+  let tiles;
+  if (ev.kind === 'launch') {
+    tiles = tile(ev,'t-rsvp',ev.rsvp,'RSVP’d','rsvp')
+      + tile(ev,'t-att',ev.attended || 0,'Attended','attended', !ev.attended && du>0)
+      + tile(ev,'t-pizza',ev.pizza||0,'Pizza','pizza')
+      + tile(ev,'t-care',ev.childcare||0,'Childcare','childcare');
+  } else {
+    tiles = tile(ev,'t-rsvp',ev.rsvp,'RSVP’d','rsvp')
+      + tile(ev,'t-conf',ev.confirmed||0,'Confirmed','confirmed')
+      + tile(ev,'t-unconf',ev.unconfirmed||0,'Yet to confirm','unconfirmed')
+      + tile(ev,'t-att',ev.attended||0,'Attended','attended', !ev.attended && du>0);
+  }
+  return `<div class="ev-card${isToday?' is-today':''}">
+    <div class="ev-top"><div><div class="ev-title">${esc(ev.label)}</div><div class="ev-when">${esc(whenLabel(ev))}</div></div>${chip}</div>
+    <div class="tiles">${tiles}</div>
+  </div>`;
+}
+
+function render(data) {
+  lastData = data;
+  const labels = data.type_labels || {};
+  // summary
+  const evs = data.events || [];
+  const totalRsvp = evs.reduce((s,e)=>s+(e.rsvp||0),0);
+  const next = evs.find(e => daysUntil(e.date) >= 0);
+  const unconf = evs.filter(e=>e.kind==='meta').reduce((s,e)=>s+(e.unconfirmed||0),0);
+  document.getElementById('summary').innerHTML =
+    `<div class="sum-card"><div class="sum-num">${evs.length}</div><div class="sum-lbl">Upcoming events</div></div>
+     <div class="sum-card"><div class="sum-num">${totalRsvp}</div><div class="sum-lbl">Total RSVPs</div></div>
+     <div class="sum-card"><div class="sum-num">${unconf}</div><div class="sum-lbl">Yet to confirm</div></div>
+     <div class="sum-card"><div class="sum-num">${next?esc(next.label.replace(/ \\d.*$/,'').slice(0,18)||next.label):'—'}</div><div class="sum-lbl">Next up${next?' · '+ (daysUntil(next.date)===0?'today':daysUntil(next.date)+'d'):''}</div></div>`;
+  // sections grouped by type
+  const byType = {};
+  for (const e of evs) (byType[e.type] = byType[e.type] || []).push(e);
+  let html = '';
+  for (const t of TYPE_ORDER) {
+    if (!byType[t] || !byType[t].length) continue;
+    html += `<div class="section-h">${esc(labels[t] || t)} · ${byType[t].length}</div><div class="ev-grid">${byType[t].map(cardHTML).join('')}</div>`;
+  }
+  document.getElementById('sections').innerHTML = html || '<div class="empty">No upcoming events found.</div>';
+  document.getElementById('updated-txt').textContent = 'Updated ' + new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+}
+
+async function load() {
+  try {
+    const r = await authFetch(`${WORKER}/events-overview`);
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    render(await r.json());
+  } catch (e) {
+    if (e.message !== 'unauthorized') document.getElementById('updated-txt').textContent = 'Could not load: ' + e.message;
+  }
+}
+
+// ---- roster modal ----
+let rosterPeople = [];
+async function openRoster(key, segment, segLabel, evLabel) {
+  const bg = document.getElementById('modal-bg');
+  document.getElementById('modal-title').textContent = evLabel;
+  document.getElementById('modal-sub').textContent = segLabel;
+  document.getElementById('modal-warn').style.display = 'none';
+  document.getElementById('modal-body').innerHTML = '<div class="empty">Loading…</div>';
+  bg.style.display = 'flex';
+  try {
+    const r = await authFetch(`${WORKER}/event-roster?key=${encodeURIComponent(key)}&segment=${encodeURIComponent(segment)}`);
+    const d = await r.json();
+    rosterPeople = d.people || [];
+    document.getElementById('modal-sub').textContent = `${segLabel} · ${d.count} ${d.count===1?'person':'people'}`;
+    if (d.unlinked) {
+      const w = document.getElementById('modal-warn');
+      w.style.display = 'block';
+      w.textContent = `${d.unlinked} RSVP not linked to a contact record (likely a test or incomplete entry).`;
+    }
+    if (!rosterPeople.length) { document.getElementById('modal-body').innerHTML = '<div class="empty">Nobody here yet.</div>'; return; }
+    document.getElementById('modal-body').innerHTML = rosterPeople.map(p => {
+      const meta = [p.phone, p.email].filter(Boolean).join('  ·  ');
+      const sub = [p.school, p.city].filter(Boolean).join(' · ');
+      const tags = (p.pizza?'<span class="rtag pz">pizza</span>':'') + (p.childcare?`<span class="rtag cc">childcare${p.kids?' '+esc(p.kids):''}</span>`:'');
+      return `<div class="rperson"><div><div class="rname">${esc(p.name)}</div><div class="rmeta">${esc(meta)}${sub?'  ·  '+esc(sub):''}</div></div><div class="rtags">${tags}</div></div>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('modal-body').innerHTML = `<div class="empty">Could not load: ${esc(e.message)}</div>`;
+  }
+}
+function closeModal(){ document.getElementById('modal-bg').style.display='none'; }
+document.getElementById('modal-x').addEventListener('click', closeModal);
+document.getElementById('modal-bg').addEventListener('click', e => { if (e.target.id==='modal-bg') closeModal(); });
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
+document.getElementById('copy-btn').addEventListener('click', () => {
+  const txt = rosterPeople.map(p => `${p.name}\t${p.phone}\t${p.email}`).join('\n');
+  navigator.clipboard.writeText(txt).then(() => {
+    const b = document.getElementById('copy-btn'); const o = b.textContent; b.textContent = '✓ Copied';
+    setTimeout(()=>b.textContent=o, 1500);
+  });
+});
+
+document.getElementById('refresh-btn').addEventListener('click', load);
+document.getElementById('signout-btn').addEventListener('click', () => { localStorage.removeItem('gw-session'); localStorage.removeItem('gw-email'); location.reload(); });
+
+// ---- auth ----
+function showLogin(msg){ document.getElementById('login-overlay').style.display='flex'; if (msg){ const m=document.getElementById('login-msg'); m.textContent=msg; m.style.display='block'; m.style.color='var(--gw-red)'; } }
+function hideLogin(){ document.getElementById('login-overlay').style.display='none'; }
+document.getElementById('login-btn').addEventListener('click', async () => {
+  const email = document.getElementById('login-email').value.trim();
+  const msg = document.getElementById('login-msg'); const btn = document.getElementById('login-btn');
+  if (!email || !email.includes('@')) { msg.textContent='Enter a valid email'; msg.style.display='block'; msg.style.color='var(--gw-red)'; return; }
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const r = await fetch(`${WORKER}/auth/start`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, redirect_url: location.origin + location.pathname }) });
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    msg.textContent = `✓ Check ${email} for a sign-in link (expires in 10 min).`; msg.style.display='block'; msg.style.color='var(--gw-green)';
+    btn.textContent = 'Sent — check your email';
+  } catch (e) { msg.textContent = `Couldn't send: ${e.message}`; msg.style.display='block'; msg.style.color='var(--gw-red)'; btn.disabled=false; btn.textContent='Send sign-in link'; }
+});
+async function bootAuth() {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token');
+  if (token) {
+    try {
+      const r = await fetch(`${WORKER}/auth/verify`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: token }) });
+      const data = await r.json();
+      if (r.ok && data.session_token) { localStorage.setItem('gw-session', data.session_token); if (data.email) localStorage.setItem('gw-email', data.email); history.replaceState({}, '', location.pathname); return true; }
+      showLogin('Link expired or invalid. Enter your email to get a new one.'); return false;
+    } catch (e) { showLogin('Verification failed: ' + e.message); return false; }
+  }
+  if (localStorage.getItem('gw-session')) return true;
+  showLogin(); return false;
+}
+(async () => {
+  if (await bootAuth()) {
+    hideLogin();
+    await load();
+    setInterval(load, 60000);
+  }
+})();
+</script>
+</body>
+</html>

@@ -980,6 +980,8 @@ export default {
       if (url.pathname === '/walkin' && request.method === 'POST') return await walkinSignup(request, env);
       if (url.pathname === '/today-stats') return await getTodayStats(env, url);
       if (url.pathname === '/event-stats') return await getEventStats(env, url);
+      if (url.pathname === '/events-overview') return await getEventsOverview(env);
+      if (url.pathname === '/event-roster') return await getEventRoster(env, url);
       if (url.pathname === '/training-totals') return await getTrainingTotals(env);
       if (url.pathname === '/recent-activity') return await getRecentActivity(env, url);
       if (url.pathname === '/search') return await searchContacts(env, url);
@@ -3598,6 +3600,217 @@ async function getTrainingTotals(env) {
   const payload = { signed_up: signed, trained: trainedIds.size };
   await cachePut(env, 'cache:training-totals', payload, 300);
   return json(payload);
+}
+
+// ── Ellen's events command center ─────────────────────────────────────────
+// One overview of every UPCOMING event (onboardings + HM/Amp/KYN trainings +
+// regional emergency-meeting launches) with live counts. Two scans total
+// (contacts once, contact_log once), cached 60s.
+
+// Trailing "M/D" in a launch name → ISO date (campaign is all 2026).
+function parseLaunchDate(name) {
+  const m = String(name || '').match(/(\d{1,2})\/(\d{1,2})\s*$/);
+  if (!m) return null;
+  return `2026-${String(m[1]).padStart(2, '0')}-${String(m[2]).padStart(2, '0')}`;
+}
+function upcomingMetaEvents() {
+  const today = todayCT();
+  return Object.entries(EVENT_META)
+    .filter(([, m]) => ['onboarding', 'hm', 'amp', 'kyn'].includes(m.type) && m.date >= today)
+    .map(([key, m]) => ({ key, ...m }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+const TYPE_LABEL = { onboarding: 'Onboardings', hm: 'House Meeting trainings', amp: 'Amplifier trainings', kyn: 'Know Your Neighbor', launch: 'Emergency meetings' };
+
+async function getEventsOverview(env) {
+  const cached = await cacheGet(env, 'cache:events-overview:v1');
+  if (cached) return json(cached);
+  const today = todayCT();
+  const metas = upcomingMetaEvents();
+  const stat = {};
+  for (const m of metas) stat[m.key] = { rsvp: 0, confirmed: 0, attended: 0, no_show: 0 };
+
+  // Scan 1 — contacts: signups + attendance for the upcoming meta events.
+  if (metas.length) {
+    const signupOr = metas.filter(m => m.signupField).map(m => `{${m.signupField}}='Signed up'`);
+    const attendOr = metas.map(m => `{${m.attendField}}!=BLANK()`);
+    const formula = `OR(${[...signupOr, ...attendOr].join(',')})`;
+    const fields = [];
+    for (const m of metas) { if (m.signupField) fields.push(m.signupField); fields.push(m.attendField); }
+    let offset = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
+      for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+      if (offset) q += `&offset=${encodeURIComponent(offset)}`;
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      for (const r of d.records) {
+        for (const m of metas) {
+          if (m.signupField && r.fields[m.signupField] === 'Signed up') stat[m.key].rsvp++;
+          const a = r.fields[m.attendField];
+          if (a === 'Attended' || a === 'Walk-in') stat[m.key].attended++;
+          else if (a === 'No-show') stat[m.key].no_show++;
+        }
+      }
+      offset = d.offset;
+    } while (offset);
+  }
+
+  // Scan 2 — contact_log: confirm logs (meta events) + launch RSVP/attendance.
+  const confirmByEvent = {};
+  for (const m of metas) confirmByEvent[m.confirmEvent] = new Set();
+  const launches = {};            // name -> {rsvp,pizza,childcare}
+  const launchAttendByName = {};  // name -> attended count (merged only if it's a known launch)
+  {
+    const orClauses = [
+      `{method}='Event RSVP'`,
+      `{method}='Event attendance'`,
+      ...metas.map(m => `{event}='${String(m.confirmEvent).replace(/'/g, "\\'")}'`),
+    ];
+    const formula = `OR(${orClauses.join(',')})`;
+    let offset = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=event&fields%5B%5D=result&fields%5B%5D=contact&fields%5B%5D=rsvp_launch&fields%5B%5D=rsvp_pizza&fields%5B%5D=rsvp_childcare`;
+      if (offset) q += `&offset=${encodeURIComponent(offset)}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+      for (const r of d.records) {
+        const f = r.fields;
+        if (f.method === 'Event RSVP') {
+          const name = f.rsvp_launch || f.event;
+          if (!name) continue;
+          if (!launches[name]) launches[name] = { rsvp: 0, pizza: 0, childcare: 0 };
+          launches[name].rsvp++;
+          if (f.rsvp_pizza === 'Yes') launches[name].pizza++;
+          if (f.rsvp_childcare === 'Yes') launches[name].childcare++;
+        } else if (f.method === 'Event attendance') {
+          const name = f.rsvp_launch || f.event;
+          if (name) launchAttendByName[name] = (launchAttendByName[name] || 0) + 1;
+        } else if (f.event && confirmByEvent[f.event] && f.result === 'Confirmed') {
+          const cid = (f.contact || [])[0];
+          if (cid) confirmByEvent[f.event].add(cid);
+        }
+      }
+      offset = d.offset;
+    } while (offset);
+  }
+
+  const events = [];
+  for (const m of metas) {
+    const s = stat[m.key];
+    const confirmed = confirmByEvent[m.confirmEvent].size;
+    events.push({
+      kind: 'meta', key: m.key, type: m.type, label: m.label, date: m.date,
+      time: m.time || null,
+      rsvp: s.rsvp, confirmed, unconfirmed: Math.max(0, s.rsvp - confirmed),
+      attended: s.attended, no_show: s.no_show,
+    });
+  }
+  for (const [name, l] of Object.entries(launches)) {
+    const date = parseLaunchDate(name);
+    if (date && date < today) continue;   // upcoming only
+    events.push({
+      kind: 'launch', key: `launch:${name}`, type: 'launch', label: name, date: date || '',
+      time: null, rsvp: l.rsvp, pizza: l.pizza, childcare: l.childcare,
+      attended: launchAttendByName[name] || 0,
+    });
+  }
+  events.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
+  const payload = { generated: new Date().toISOString(), today, events, type_labels: TYPE_LABEL };
+  await cachePut(env, 'cache:events-overview:v1', payload, 60);
+  return json(payload);
+}
+
+async function fetchContactsByIds(env, ids) {
+  const out = {};
+  const uniq = [...new Set(ids.filter(Boolean))];
+  for (let i = 0; i < uniq.length; i += 40) {
+    const chunk = uniq.slice(i, i + 40);
+    const formula = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+    let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=phone&fields%5B%5D=email&fields%5B%5D=school&fields%5B%5D=city`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) out[r.id] = r.fields;
+  }
+  return out;
+}
+
+// Names behind one number on a card (click-to-see-names drilldown).
+async function getEventRoster(env, urlObj) {
+  const key = urlObj.searchParams.get('key') || '';
+  const segment = urlObj.searchParams.get('segment') || 'rsvp';
+  const person = (f, extra = {}) => ({
+    name: `${f.first || ''} ${f.last || ''}`.trim() || '(no name)',
+    phone: f.phone || '', email: f.email || '', school: f.school || '', city: f.city || '', ...extra,
+  });
+
+  if (key.startsWith('launch:')) {
+    const name = key.slice(7);
+    const wantAttend = segment === 'attended';
+    const method = wantAttend ? 'Event attendance' : 'Event RSVP';
+    const matchField = wantAttend ? 'event' : 'rsvp_launch';
+    let extra = '';
+    if (segment === 'pizza') extra = `,{rsvp_pizza}='Yes'`;
+    if (segment === 'childcare') extra = `,{rsvp_childcare}='Yes'`;
+    const formula = `AND({method}='${method}',OR({rsvp_launch}='${name.replace(/'/g, "\\'")}',{event}='${name.replace(/'/g, "\\'")}')${extra})`;
+    const ids = []; let unlinked = 0; let offset = null;
+    const meta = {};
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=rsvp_pizza&fields%5B%5D=rsvp_childcare&fields%5B%5D=rsvp_childcare_kids&fields%5B%5D=notes`;
+      if (offset) q += `&offset=${encodeURIComponent(offset)}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+      for (const r of d.records) {
+        const cid = (r.fields.contact || [])[0];
+        if (!cid) { unlinked++; continue; }
+        ids.push(cid);
+        meta[cid] = { pizza: r.fields.rsvp_pizza === 'Yes', childcare: r.fields.rsvp_childcare === 'Yes', kids: r.fields.rsvp_childcare_kids || '' };
+      }
+      offset = d.offset;
+    } while (offset);
+    const contacts = await fetchContactsByIds(env, ids);
+    const people = ids.map(id => person(contacts[id] || {}, meta[id] || {}));
+    return json({ key, segment, count: people.length, unlinked, people });
+  }
+
+  // Meta event (onboarding / training)
+  const m = EVENT_META[key];
+  if (!m) return json({ error: 'unknown event' }, 400);
+  if (segment === 'attended') {
+    const formula = `OR({${m.attendField}}='Attended',{${m.attendField}}='Walk-in')`;
+    const people = []; let offset = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=phone&fields%5B%5D=email&fields%5B%5D=school&fields%5B%5D=city&fields%5B%5D=${encodeURIComponent(m.attendField)}`;
+      if (offset) q += `&offset=${encodeURIComponent(offset)}`;
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      for (const r of d.records) people.push(person(r.fields, { status: r.fields[m.attendField] }));
+      offset = d.offset;
+    } while (offset);
+    return json({ key, segment, count: people.length, people });
+  }
+  // rsvp / confirmed / unconfirmed all derive from signed-up ∩ confirm logs
+  const signed = {}; let offset = null;
+  const sf = m.signupField ? `{${m.signupField}}='Signed up'` : `{last_attempt_result}='Signed up'`;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(sf)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=phone&fields%5B%5D=email&fields%5B%5D=school&fields%5B%5D=city`;
+    if (offset) q += `&offset=${encodeURIComponent(offset)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) signed[r.id] = r.fields;
+    offset = d.offset;
+  } while (offset);
+  const confirmedIds = new Set();
+  {
+    let o2 = null;
+    const lf = `AND({event}='${String(m.confirmEvent).replace(/'/g, "\\'")}',{result}='Confirmed')`;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(lf)}&pageSize=100&fields%5B%5D=contact`;
+      if (o2) q += `&offset=${encodeURIComponent(o2)}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+      for (const r of d.records) { const cid = (r.fields.contact || [])[0]; if (cid) confirmedIds.add(cid); }
+      o2 = d.offset;
+    } while (o2);
+  }
+  let entries = Object.entries(signed);
+  if (segment === 'confirmed') entries = entries.filter(([id]) => confirmedIds.has(id));
+  if (segment === 'unconfirmed') entries = entries.filter(([id]) => !confirmedIds.has(id));
+  const people = entries.map(([id, f]) => person(f, { confirmed: confirmedIds.has(id) }));
+  return json({ key, segment, count: people.length, people });
 }
 
 async function getEventStats(env, urlObj) {
