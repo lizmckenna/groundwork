@@ -3712,29 +3712,42 @@ async function getCommitmentsOverview(env) {
 const ATT_STATES = ['Attended', 'Walk-in', 'Partial'];
 // Which commitment buckets convert into which training TYPE (attendance counts as showing up).
 const CONVERSION_MAP = [
-  { key: 'amplifier',     label: 'Be an Amplifier',      training: 'an Amplifier training',     type: 'amp' },
-  { key: 'house_meeting', label: 'Host a house meeting', training: 'a House Meeting training',  type: 'hm' },
+  { key: 'amplifier',     label: 'Be an Amplifier',           training: 'an Amplifier training',    type: 'amp' },
+  { key: 'house_meeting', label: 'Host a house meeting',      training: 'a House Meeting training', type: 'hm' },
+  { key: 'power_camp',    label: 'Attend Parent Power Camp',  training: 'a Power Camp',            type: 'camp' },
 ];
-// Contacts who attended ANY training of each type (from the per-event attendance fields).
+// Contacts who attended each type. amp/hm live in per-event contact fields; camps
+// live in Event-attendance log rows, so they need a separate scan.
 async function attendedByType(env) {
   const byType = {}; for (const c of CONVERSION_MAP) byType[c.type] = new Set();
   const metas = allMetaEvents().filter(m => byType[m.type]);
-  if (!metas.length) return byType;
-  const fields = metas.map(m => m.attendField);
-  const formula = `OR(${fields.map(f => `{${f}}!=BLANK()`).join(',')})`;
-  let off = null;
-  do {
-    let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
-    for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
-    if (off) q += `&offset=${encodeURIComponent(off)}`;
-    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
-    for (const r of d.records) for (const m of metas) if (ATT_STATES.includes(r.fields[m.attendField])) byType[m.type].add(r.id);
-    off = d.offset;
-  } while (off);
+  if (metas.length) {
+    const fields = metas.map(m => m.attendField);
+    const formula = `OR(${fields.map(f => `{${f}}!=BLANK()`).join(',')})`;
+    let off = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
+      for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+      if (off) q += `&offset=${encodeURIComponent(off)}`;
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      for (const r of d.records) for (const m of metas) if (ATT_STATES.includes(r.fields[m.attendField])) byType[m.type].add(r.id);
+      off = d.offset;
+    } while (off);
+  }
+  if (byType.camp) {
+    let off = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent("AND({method}='Event attendance',FIND('Power Camp',{event}&'')>0)")}&pageSize=100&fields%5B%5D=contact`;
+      if (off) q += `&offset=${encodeURIComponent(off)}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+      for (const r of d.records) { const cid = (r.fields.contact || [])[0]; if (cid) byType.camp.add(cid); }
+      off = d.offset;
+    } while (off);
+  }
   return byType;
 }
 async function getCommitmentConversion(env) {
-  const cached = await cacheGet(env, 'cache:conversion:v1');
+  const cached = await cacheGet(env, 'cache:conversion:v2');
   if (cached) return json(cached);
   const sets = await commitmentSets(env);
   const att = await attendedByType(env);
@@ -3744,7 +3757,7 @@ async function getCommitmentConversion(env) {
     return { key: c.key, label: c.label, training: c.training, committed: committed.length, converted, rate: committed.length ? Math.round(converted / committed.length * 100) : 0 };
   }).filter(f => f.committed > 0);
   const payload = { generated: new Date().toISOString(), flows };
-  await cachePut(env, 'cache:conversion:v1', payload, 120);
+  await cachePut(env, 'cache:conversion:v2', payload, 120);
   return json(payload);
 }
 

@@ -70,12 +70,24 @@
   .section-h .sh-count { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; color: var(--text-tertiary); background: var(--bg-elevated); border: 1px solid var(--border); padding: 2px 9px; border-radius: 999px; }
   .section-h::after { content:''; flex: 1; height: 1px; background: var(--border); }
 
+  /* Collapsible section with a shaded header bar */
+  .sec { margin-bottom: 6px; }
+  .sec-head { width: 100%; display: flex; align-items: center; gap: 11px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-family: inherit; color: var(--text-primary); margin: 26px 0 14px; text-align: left; }
+  .sec-head:hover { background: var(--bg-hover); }
+  .sec-chev { font-size: 10px; color: var(--text-tertiary); transition: transform 0.15s; flex-shrink: 0; }
+  .sec.collapsed .sec-chev { transform: rotate(-90deg); }
+  .sec-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+  .sec-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; color: var(--text-tertiary); background: var(--bg-secondary); border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px; }
+  .sec-sub { color: var(--text-tertiary); font-size: 12.5px; margin: -6px 0 14px; }
+  .sec.collapsed .sec-body { display: none; }
+
   .ev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
   .ev-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 14px; padding: 18px 18px 14px; transition: border-color 0.15s; }
   .ev-card:hover { border-color: var(--border-hover); }
   .ev-card.is-today { border-color: var(--gw-purple); box-shadow: 0 0 0 1px var(--gw-purple-soft); }
   .ev-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
-  .ev-title { font-size: 15.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .ev-top > div:first-child { min-width: 0; }
+  .ev-title { font-size: 15.5px; font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
   .ev-when { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; color: var(--text-tertiary); margin-top: 3px; }
   .ev-chip { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
   .chip-today { background: var(--gw-purple); color: #fff; }
@@ -314,6 +326,21 @@ function pastCardHTML(ev) {
   </div>`;
 }
 
+// Collapsible shaded section. State persists per id in localStorage.
+function secCollapsed(id) { try { return localStorage.getItem('gw-sec-' + id) === '1'; } catch (e) { return false; } }
+function toggleSec(id) {
+  const el = document.querySelector(`.sec[data-sec="${id}"]`); if (!el) return;
+  const now = !el.classList.contains('collapsed');
+  el.classList.toggle('collapsed', now);
+  try { localStorage.setItem('gw-sec-' + id, now ? '1' : '0'); } catch (e) {}
+}
+function section(id, title, count, body, sub) {
+  return `<div class="sec${secCollapsed(id) ? ' collapsed' : ''}" data-sec="${id}">
+    <button class="sec-head" onclick="toggleSec('${id}')"><span class="sec-chev">▾</span><span class="sec-title">${esc(title)}</span>${count != null ? `<span class="sec-count">${count}</span>` : ''}</button>
+    <div class="sec-body">${sub ? `<p class="sec-sub">${esc(sub)}</p>` : ''}${body}</div>
+  </div>`;
+}
+
 function render(data) {
   lastData = data;
   const labels = data.type_labels || {};
@@ -334,11 +361,11 @@ function render(data) {
   let html = '';
   for (const t of TYPE_ORDER) {
     if (!byType[t] || !byType[t].length) continue;
-    html += `<div class="section-h">${esc(labels[t] || t)}<span class="sh-count">${byType[t].length}</span></div><div class="ev-grid">${byType[t].map(cardHTML).join('')}</div>`;
+    html += section('type-' + t, labels[t] || t, byType[t].length, `<div class="ev-grid">${byType[t].map(cardHTML).join('')}</div>`);
   }
   // past section — registration vs turnout, most recent first
   if (past.length) {
-    html += `<div class="section-h past-h">Past events<span class="sh-count">${past.length}</span></div><div class="ev-grid">${past.map(pastCardHTML).join('')}</div>`;
+    html += section('past', 'Past events', past.length, `<div class="ev-grid">${past.map(pastCardHTML).join('')}</div>`);
   }
   document.getElementById('sections').innerHTML = html || '<div class="empty">No events found.</div>';
   document.getElementById('updated-txt').textContent = 'Updated ' + new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
@@ -363,10 +390,9 @@ async function loadCommitments() {
     if (!buckets.length) { document.getElementById('commitments-wrap').innerHTML = ''; return; }
     const cards = buckets.map(b => `<div class="commit-card" onclick="openRoster('commitment:${esc(b.key)}','commitment','${esc(b.label)}','${esc(b.label)} — Amendment 5 commitment')">
       <div class="cc-n">${b.count}</div><div class="cc-l">${esc(b.label)}</div>${b.owner?`<div class="cc-owner">${esc(b.owner)}</div>`:''}<span class="cc-go">see people →</span></div>`).join('');
-    document.getElementById('commitments-wrap').innerHTML =
-      `<div class="section-h">Amendment 5 commitments<span class="sh-count">${buckets.length}</span></div>
-       <p style="color:var(--text-tertiary);font-size:12.5px;margin:-6px 0 14px;">Everyone who raised their hand for each action. Click to see the people and copy their emails.</p>
-       <div class="commit-grid">${cards}</div>`;
+    document.getElementById('commitments-wrap').innerHTML = section('commitments', 'Amendment 5 commitments', buckets.length,
+      `<div class="commit-grid">${cards}</div>`,
+      'Everyone who raised their hand for each action. Click to see the people and copy their emails.');
   } catch (e) {}
 }
 
@@ -385,9 +411,8 @@ async function loadConversion() {
         <div class="conv-foot"><span>${f.converted} of ${f.committed} have shown up</span><span class="gap">${gap} to follow up →</span></div>
       </div>`;
     }).join('');
-    document.getElementById('conversion-wrap').innerHTML =
-      `<div class="section-h">From commitment to training<span class="sh-count">${flows.length}</span></div>
-       <p style="color:var(--text-tertiary);font-size:12.5px;margin:-6px 0 14px;">How many who committed to an action have actually shown up to the matching training. Click a row for the follow-up list and their emails.</p>${rows}`;
+    document.getElementById('conversion-wrap').innerHTML = section('conversion', 'From commitment to training', flows.length, rows,
+      'How many who committed to an action have actually shown up to the matching training. Click a row for the follow-up list and their emails.');
   } catch (e) {}
 }
 
