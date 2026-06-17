@@ -118,6 +118,13 @@
   .rtag.cc { background: var(--gw-teal-soft); color: var(--gw-teal); }
   .empty { padding: 40px 22px; text-align: center; color: var(--text-tertiary); font-size: 13px; }
   .warn-line { padding: 10px 22px; background: var(--gw-amber-soft); color: var(--gw-amber); font-size: 12px; }
+  .age-chart { padding: 14px 22px 16px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
+  .age-chart-h { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 10px; }
+  .age-row { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
+  .age-lbl { width: 38px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-secondary); text-align: right; flex-shrink: 0; }
+  .age-bar-wrap { flex: 1; height: 18px; background: var(--bg-elevated); border-radius: 5px; overflow: hidden; }
+  .age-bar { height: 100%; background: var(--gw-teal); border-radius: 5px; min-width: 2px; transition: width 0.3s; }
+  .age-n { width: 26px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--text-primary); flex-shrink: 0; }
 
   footer { margin: 50px 0 30px; color: var(--text-tertiary); font-size: 12px; text-align: center; }
 
@@ -316,7 +323,14 @@ async function openRoster(key, segment, segLabel, evLabel) {
       w.textContent = `${d.unlinked} RSVP not linked to a contact record (likely a test or incomplete entry).`;
     }
     if (!rosterPeople.length) { document.getElementById('modal-body').innerHTML = '<div class="empty">Nobody here yet.</div>'; return; }
-    document.getElementById('modal-body').innerHTML = rosterPeople.map(p => {
+    let chart = '';
+    if (segment === 'childcare' && d.age_dist && d.ages_known) {
+      const max = Math.max(1, ...d.age_dist.map(b => b.count));
+      chart = `<div class="age-chart"><div class="age-chart-h">Age distribution · ${d.ages_known} kids with ages given</div>`
+        + d.age_dist.map(b => `<div class="age-row"><span class="age-lbl">${b.band}</span><span class="age-bar-wrap"><span class="age-bar" style="width:${Math.round(b.count/max*100)}%"></span></span><span class="age-n">${b.count}</span></div>`).join('')
+        + `</div>`;
+    }
+    document.getElementById('modal-body').innerHTML = chart + rosterPeople.map(p => {
       const meta = [p.phone, p.email].filter(Boolean).join('  ·  ');
       const sub = [p.school, p.city].filter(Boolean).join(' · ');
       const tags = (p.pizza?'<span class="rtag pz">pizza</span>':'') + (p.childcare?`<span class="rtag cc">childcare${p.kids?' '+esc(p.kids):''}</span>`:'');

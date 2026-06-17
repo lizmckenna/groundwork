@@ -3623,6 +3623,19 @@ function countKids(s) {
   const ages = t.split(/\band\b|,|&/).filter(p => /\d/.test(p));   // else count listed ages
   return Math.max(1, ages.length);
 }
+// Pull the actual ages out of the free-text kids field for a distribution.
+// "2 kids, 3 & 6" -> [3,6] ; "18mo and 4 years" -> [1,4] ; "3 kids- 10 yo, 6 yo, 3 yo" -> [10,6,3]
+function parseAges(s) {
+  if (!s) return [];
+  const ages = [];
+  let t = String(s).toLowerCase().replace(/\bi\s+kid/, '1 kid');
+  t = t.replace(/(\d+)\s*(?:mo\b|months?)/g, () => { ages.push(1); return ' '; });   // months -> toddler
+  t = t.replace(/^\s*(\d+)\s*(kids?|ages?|,)/, '$2');                                  // drop the leading count
+  for (const n of (t.match(/\d+/g) || [])) { const v = parseInt(n, 10); if (v >= 0 && v <= 18) ages.push(v); }
+  return ages;
+}
+function ageBand(a) { return a <= 2 ? '0–2' : a <= 5 ? '3–5' : a <= 9 ? '6–9' : '10+'; }
+const AGE_BANDS = ['0–2', '3–5', '6–9', '10+'];
 function upcomingMetaEvents() {
   const today = todayCT();
   return Object.entries(EVENT_META)
@@ -3801,12 +3814,13 @@ async function getEventRoster(env, urlObj) {
     const formula = `AND({method}='${method}',OR({rsvp_launch}='${name.replace(/'/g, "\\'")}',{event}='${name.replace(/'/g, "\\'")}')${extra})`;
     const ids = []; let unlinked = 0; let offset = null; let kidsTotal = 0;
     const meta = {};
+    const allAges = [];
     do {
       let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=rsvp_pizza&fields%5B%5D=rsvp_childcare&fields%5B%5D=rsvp_childcare_kids&fields%5B%5D=notes`;
       if (offset) q += `&offset=${encodeURIComponent(offset)}`;
       const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
       for (const r of d.records) {
-        if (segment === 'childcare') kidsTotal += countKids(r.fields.rsvp_childcare_kids);
+        if (segment === 'childcare') { kidsTotal += countKids(r.fields.rsvp_childcare_kids); allAges.push(...parseAges(r.fields.rsvp_childcare_kids)); }
         const cid = (r.fields.contact || [])[0];
         if (!cid) { unlinked++; continue; }
         ids.push(cid);
@@ -3816,7 +3830,12 @@ async function getEventRoster(env, urlObj) {
     } while (offset);
     const contacts = await fetchContactsByIds(env, ids);
     const people = ids.map(id => person(contacts[id] || {}, meta[id] || {}));
-    const kidsOut = segment === 'childcare' ? { kids: kidsTotal } : {};
+    let kidsOut = {};
+    if (segment === 'childcare') {
+      const counts = Object.fromEntries(AGE_BANDS.map(b => [b, 0]));
+      for (const a of allAges) counts[ageBand(a)]++;
+      kidsOut = { kids: kidsTotal, age_dist: AGE_BANDS.map(b => ({ band: b, count: counts[b] })), ages_known: allAges.length };
+    }
     return json({ key, segment, count: people.length, unlinked, people, ...kidsOut });
   }
 
