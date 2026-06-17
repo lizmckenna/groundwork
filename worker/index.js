@@ -3658,12 +3658,12 @@ function allMetaEvents() {
 const TYPE_LABEL = { onboarding: 'Onboardings', hm: 'House Meeting trainings', amp: 'Amplifier trainings', kyn: 'Know Your Neighbor', camp: 'Power Camps', launch: 'Emergency meetings' };
 
 async function getEventsOverview(env) {
-  const cached = await cacheGet(env, 'cache:events-overview:v5');
+  const cached = await cacheGet(env, 'cache:events-overview:v7');
   if (cached) return json(cached);
   const today = todayCT();
   const metas = allMetaEvents();
   const stat = {};
-  for (const m of metas) stat[m.key] = { rsvp: 0, confirmed: 0, attended: 0, no_show: 0 };
+  for (const m of metas) stat[m.key] = { rsvp: 0, confirmed: 0, attended: 0, no_show: 0, onlist: 0 };
 
   // Scan 1 — contacts: signups + attendance for the upcoming meta events.
   if (metas.length) {
@@ -3682,8 +3682,11 @@ async function getEventsOverview(env) {
         for (const m of metas) {
           if (m.signupField && r.fields[m.signupField] === 'Signed up') stat[m.key].rsvp++;
           const a = r.fields[m.attendField];
-          if (a === 'Attended' || a === 'Walk-in') stat[m.key].attended++;
+          if (a === 'Attended' || a === 'Walk-in' || a === 'Partial') stat[m.key].attended++;
           else if (a === 'No-show') stat[m.key].no_show++;
+          // "on the list" = registered, inferable from the attendance field for legacy
+          // events (5/26) that never had a signup field.
+          if (a === 'Attended' || a === 'No-show' || a === 'Partial') stat[m.key].onlist++;
         }
       }
       offset = d.offset;
@@ -3741,10 +3744,11 @@ async function getEventsOverview(env) {
   for (const m of metas) {
     const s = stat[m.key];
     const confirmed = confirmByEvent[m.confirmEvent].size;
+    const reg = m.signupField ? s.rsvp : s.onlist;   // legacy events have no signup field
     events.push({
       kind: 'meta', key: m.key, type: m.type, label: m.label, date: m.date,
       time: m.time || null, past: m.date < today,
-      rsvp: s.rsvp, confirmed, unconfirmed: Math.max(0, s.rsvp - confirmed),
+      rsvp: reg, confirmed, unconfirmed: Math.max(0, reg - confirmed),
       attended: s.attended, no_show: s.no_show,
     });
   }
@@ -3764,7 +3768,7 @@ async function getEventsOverview(env) {
   }
   events.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
   const payload = { generated: new Date().toISOString(), today, events, type_labels: TYPE_LABEL };
-  await cachePut(env, 'cache:events-overview:v5', payload, 60);
+  await cachePut(env, 'cache:events-overview:v7', payload, 60);
   return json(payload);
 }
 
@@ -3855,8 +3859,12 @@ async function getEventRoster(env, urlObj) {
   // Meta event (onboarding / training)
   const m = EVENT_META[key];
   if (!m) return json({ error: 'unknown event' }, 400);
-  if (segment === 'attended') {
-    const formula = `OR({${m.attendField}}='Attended',{${m.attendField}}='Walk-in')`;
+  // Legacy events (5/26, no signup field): registration + attendance both come
+  // from the attendance field. on-list = Attended/No-show/Partial; came = Attended/Partial/Walk-in.
+  if (segment === 'attended' || (!m.signupField && (segment === 'rsvp' || segment === 'registered'))) {
+    const onList = !m.signupField && segment !== 'attended';
+    const states = onList ? ['Attended', 'No-show', 'Partial'] : ['Attended', 'Walk-in', 'Partial'];
+    const formula = `OR(${states.map(s => `{${m.attendField}}='${s}'`).join(',')})`;
     const people = []; let offset = null;
     do {
       let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=phone&fields%5B%5D=email&fields%5B%5D=school&fields%5B%5D=city&fields%5B%5D=${encodeURIComponent(m.attendField)}`;
@@ -3869,7 +3877,7 @@ async function getEventRoster(env, urlObj) {
   }
   // rsvp / confirmed / unconfirmed all derive from signed-up ∩ confirm logs
   const signed = {}; let offset = null;
-  const sf = m.signupField ? `{${m.signupField}}='Signed up'` : `{last_attempt_result}='Signed up'`;
+  const sf = `{${m.signupField}}='Signed up'`;
   do {
     let q = `?filterByFormula=${encodeURIComponent(sf)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=phone&fields%5B%5D=email&fields%5B%5D=school&fields%5B%5D=city`;
     if (offset) q += `&offset=${encodeURIComponent(offset)}`;
