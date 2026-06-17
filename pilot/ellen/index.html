@@ -80,6 +80,10 @@
   .ev-chip { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
   .chip-today { background: var(--gw-purple); color: #fff; }
   .chip-days { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); }
+  .chip-turnout { background: var(--gw-green-soft); color: var(--gw-green); }
+  .ev-card.past { opacity: 0.92; }
+  .ev-card.past .tiles { grid-template-columns: repeat(2, 1fr); }
+  .section-h.past-h { color: var(--text-secondary); margin-top: 44px; }
 
   .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .tile { border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; cursor: pointer; transition: all 0.12s; background: var(--bg-primary); position: relative; }
@@ -229,7 +233,7 @@ function whenLabel(ev) {
 }
 
 // ---- render ----
-const TYPE_ORDER = ['onboarding','hm','amp','kyn','launch'];
+const TYPE_ORDER = ['onboarding','hm','amp','kyn','camp','launch'];
 let lastData = null;
 
 function tile(ev, cls, num, label, segment, dim) {
@@ -265,11 +269,25 @@ function cardHTML(ev) {
   </div>`;
 }
 
+// Past events: what matters is registration vs turnout.
+function pastCardHTML(ev) {
+  const reg = ev.rsvp || 0, att = ev.attended || 0;
+  const pct = reg ? Math.round(att / reg * 100) : 0;
+  return `<div class="ev-card past">
+    <div class="ev-top"><div><div class="ev-title">${esc(ev.label)}</div><div class="ev-when">${esc(whenLabel(ev))}</div></div><span class="ev-chip chip-turnout">${pct}% turnout</span></div>
+    <div class="tiles">
+      ${tile(ev,'t-rsvp',reg,'Registered','rsvp')}
+      ${tile(ev,'t-att',att,'Attended','attended')}
+    </div>
+  </div>`;
+}
+
 function render(data) {
   lastData = data;
   const labels = data.type_labels || {};
-  // summary
-  const evs = data.events || [];
+  const all = data.events || [];
+  const evs = all.filter(e => !e.past);          // upcoming
+  const past = all.filter(e => e.past).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const totalRsvp = evs.reduce((s,e)=>s+(e.rsvp||0),0);
   const next = evs.find(e => daysUntil(e.date) >= 0);
   const unconf = evs.filter(e=>e.kind==='meta').reduce((s,e)=>s+(e.unconfirmed||0),0);
@@ -278,7 +296,7 @@ function render(data) {
      <div class="sum-card"><div class="sum-num">${totalRsvp}</div><div class="sum-lbl">Total RSVPs</div></div>
      <div class="sum-card"><div class="sum-num">${unconf}</div><div class="sum-lbl">Yet to confirm</div></div>
      <div class="sum-card"><div class="sum-num">${next?esc(next.label.replace(/ \\d.*$/,'').slice(0,18)||next.label):'—'}</div><div class="sum-lbl">Next up${next?' · '+ (daysUntil(next.date)===0?'today':daysUntil(next.date)+'d'):''}</div></div>`;
-  // sections grouped by type
+  // upcoming sections grouped by type
   const byType = {};
   for (const e of evs) (byType[e.type] = byType[e.type] || []).push(e);
   let html = '';
@@ -286,7 +304,11 @@ function render(data) {
     if (!byType[t] || !byType[t].length) continue;
     html += `<div class="section-h">${esc(labels[t] || t)}<span class="sh-count">${byType[t].length}</span></div><div class="ev-grid">${byType[t].map(cardHTML).join('')}</div>`;
   }
-  document.getElementById('sections').innerHTML = html || '<div class="empty">No upcoming events found.</div>';
+  // past section — registration vs turnout, most recent first
+  if (past.length) {
+    html += `<div class="section-h past-h">Past events<span class="sh-count">${past.length}</span></div><div class="ev-grid">${past.map(pastCardHTML).join('')}</div>`;
+  }
+  document.getElementById('sections').innerHTML = html || '<div class="empty">No events found.</div>';
   document.getElementById('updated-txt').textContent = 'Updated ' + new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
 }
 

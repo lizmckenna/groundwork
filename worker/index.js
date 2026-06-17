@@ -3636,20 +3636,19 @@ function parseAges(s) {
 }
 function ageBand(a) { return a <= 2 ? '0–2' : a <= 5 ? '3–5' : a <= 9 ? '6–9' : '10+'; }
 const AGE_BANDS = ['0–2', '3–5', '6–9', '10+'];
-function upcomingMetaEvents() {
-  const today = todayCT();
+function allMetaEvents() {
   return Object.entries(EVENT_META)
-    .filter(([, m]) => ['onboarding', 'hm', 'amp', 'kyn'].includes(m.type) && m.date >= today)
+    .filter(([, m]) => ['onboarding', 'hm', 'amp', 'kyn'].includes(m.type))
     .map(([key, m]) => ({ key, ...m }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
-const TYPE_LABEL = { onboarding: 'Onboardings', hm: 'House Meeting trainings', amp: 'Amplifier trainings', kyn: 'Know Your Neighbor', launch: 'Emergency meetings' };
+const TYPE_LABEL = { onboarding: 'Onboardings', hm: 'House Meeting trainings', amp: 'Amplifier trainings', kyn: 'Know Your Neighbor', camp: 'Power Camps', launch: 'Emergency meetings' };
 
 async function getEventsOverview(env) {
-  const cached = await cacheGet(env, 'cache:events-overview:v2');
+  const cached = await cacheGet(env, 'cache:events-overview:v3');
   if (cached) return json(cached);
   const today = todayCT();
-  const metas = upcomingMetaEvents();
+  const metas = allMetaEvents();
   const stat = {};
   for (const m of metas) stat[m.key] = { rsvp: 0, confirmed: 0, attended: 0, no_show: 0 };
 
@@ -3731,19 +3730,20 @@ async function getEventsOverview(env) {
     const confirmed = confirmByEvent[m.confirmEvent].size;
     events.push({
       kind: 'meta', key: m.key, type: m.type, label: m.label, date: m.date,
-      time: m.time || null,
+      time: m.time || null, past: m.date < today,
       rsvp: s.rsvp, confirmed, unconfirmed: Math.max(0, s.rsvp - confirmed),
       attended: s.attended, no_show: s.no_show,
     });
   }
   for (const [name, l] of Object.entries(launches)) {
     const date = parseLaunchDate(name);
-    if (date && date < today) continue;   // upcoming only
+    const isCamp = /power camp/i.test(name);
     const confSet = launchConfirm[name] || new Set();
     let confirmed = 0;
     for (const id of confSet) if (l.rsvpIds.has(id)) confirmed++;
     events.push({
-      kind: 'launch', key: `launch:${name}`, type: 'launch', label: name, date: date || '',
+      kind: 'launch', key: `launch:${name}`, type: isCamp ? 'camp' : 'launch', label: name,
+      date: date || '', past: !!(date && date < today),
       time: null, rsvp: l.rsvp, confirmed, unconfirmed: Math.max(0, l.rsvp - confirmed),
       pizza: l.pizza, childcare: l.childcare_kids, childcare_families: l.childcare_families,
       attended: launchAttendByName[name] || 0,
@@ -3751,7 +3751,7 @@ async function getEventsOverview(env) {
   }
   events.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
   const payload = { generated: new Date().toISOString(), today, events, type_labels: TYPE_LABEL };
-  await cachePut(env, 'cache:events-overview:v2', payload, 60);
+  await cachePut(env, 'cache:events-overview:v3', payload, 60);
   return json(payload);
 }
 
