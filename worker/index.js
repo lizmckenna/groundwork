@@ -983,6 +983,7 @@ export default {
       if (url.pathname === '/events-overview') return await getEventsOverview(env);
       if (url.pathname === '/event-roster') return await getEventRoster(env, url);
       if (url.pathname === '/commitments-overview') return await getCommitmentsOverview(env);
+      if (url.pathname === '/commitment-conversion') return await getCommitmentConversion(env);
       if (url.pathname === '/training-totals') return await getTrainingTotals(env);
       if (url.pathname === '/recent-activity') return await getRecentActivity(env, url);
       if (url.pathname === '/search') return await searchContacts(env, url);
@@ -3708,6 +3709,45 @@ async function getCommitmentsOverview(env) {
   return json(payload);
 }
 
+const ATT_STATES = ['Attended', 'Walk-in', 'Partial'];
+// Which commitment buckets convert into which training TYPE (attendance counts as showing up).
+const CONVERSION_MAP = [
+  { key: 'amplifier',     label: 'Be an Amplifier',      training: 'an Amplifier training',     type: 'amp' },
+  { key: 'house_meeting', label: 'Host a house meeting', training: 'a House Meeting training',  type: 'hm' },
+];
+// Contacts who attended ANY training of each type (from the per-event attendance fields).
+async function attendedByType(env) {
+  const byType = {}; for (const c of CONVERSION_MAP) byType[c.type] = new Set();
+  const metas = allMetaEvents().filter(m => byType[m.type]);
+  if (!metas.length) return byType;
+  const fields = metas.map(m => m.attendField);
+  const formula = `OR(${fields.map(f => `{${f}}!=BLANK()`).join(',')})`;
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
+    for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) for (const m of metas) if (ATT_STATES.includes(r.fields[m.attendField])) byType[m.type].add(r.id);
+    off = d.offset;
+  } while (off);
+  return byType;
+}
+async function getCommitmentConversion(env) {
+  const cached = await cacheGet(env, 'cache:conversion:v1');
+  if (cached) return json(cached);
+  const sets = await commitmentSets(env);
+  const att = await attendedByType(env);
+  const flows = CONVERSION_MAP.map(c => {
+    const committed = [...(sets[c.key] || [])];
+    const converted = committed.filter(id => att[c.type].has(id)).length;
+    return { key: c.key, label: c.label, training: c.training, committed: committed.length, converted, rate: committed.length ? Math.round(converted / committed.length * 100) : 0 };
+  }).filter(f => f.committed > 0);
+  const payload = { generated: new Date().toISOString(), flows };
+  await cachePut(env, 'cache:conversion:v1', payload, 120);
+  return json(payload);
+}
+
 async function getEventsOverview(env) {
   const cached = await cacheGet(env, 'cache:events-overview:v7');
   if (cached) return json(cached);
@@ -3853,6 +3893,19 @@ async function getEventRoster(env, urlObj) {
     const contacts = await fetchContactsByIds(env, ids);
     const people = ids.map(id => person(contacts[id] || {}));
     return json({ key, segment: 'commitment', count: people.length, people });
+  }
+
+  // committed to an action but hasn't shown up to the matching training yet — the follow-up list
+  if (key.startsWith('gap:')) {
+    const bk = key.slice('gap:'.length);
+    const conv = CONVERSION_MAP.find(c => c.key === bk);
+    if (!conv) return json({ error: 'unknown' }, 400);
+    const sets = await commitmentSets(env);
+    const att = await attendedByType(env);
+    const ids = [...(sets[bk] || [])].filter(id => !att[conv.type].has(id));
+    const contacts = await fetchContactsByIds(env, ids);
+    const people = ids.map(id => person(contacts[id] || {}));
+    return json({ key, segment: 'gap', count: people.length, people });
   }
 
   if (key.startsWith('launch:')) {

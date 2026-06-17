@@ -98,6 +98,17 @@
   .commit-card .cc-go { position: absolute; top: 16px; right: 16px; font-size: 11px; color: var(--text-tertiary); opacity: 0; transition: opacity 0.12s; }
   .commit-card:hover .cc-go { opacity: 0.8; }
 
+  .conv-row { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 15px 18px; margin-bottom: 10px; cursor: pointer; transition: all 0.12s; }
+  .conv-row:hover { border-color: var(--gw-purple); }
+  .conv-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 9px; }
+  .conv-label { font-weight: 600; font-size: 14px; }
+  .conv-label small { color: var(--text-tertiary); font-weight: 400; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .conv-pct { font-size: 19px; font-weight: 700; flex-shrink: 0; }
+  .conv-bar { height: 14px; border-radius: 7px; background: var(--bg-elevated); overflow: hidden; }
+  .conv-bar .done { background: var(--gw-green); height: 100%; display: block; border-radius: 7px; min-width: 3px; transition: width 0.4s; }
+  .conv-foot { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-tertiary); margin-top: 8px; display: flex; justify-content: space-between; }
+  .conv-foot .gap { color: var(--gw-amber); font-weight: 500; }
+
   .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .tile { border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; cursor: pointer; transition: all 0.12s; background: var(--bg-primary); position: relative; }
   .tile:hover { border-color: var(--border-hover); transform: translateY(-1px); }
@@ -196,6 +207,8 @@
   <div id="sections"></div>
 
   <div id="commitments-wrap"></div>
+
+  <div id="conversion-wrap"></div>
 
   <footer>Groundwork · Missouri pilot · Auto-refreshes every 60 seconds. Numbers come straight from Airtable.</footer>
 </main>
@@ -357,6 +370,27 @@ async function loadCommitments() {
   } catch (e) {}
 }
 
+async function loadConversion() {
+  try {
+    const r = await authFetch(`${WORKER}/commitment-conversion`);
+    if (!r.ok) return;
+    const flows = (await r.json()).flows || [];
+    if (!flows.length) { document.getElementById('conversion-wrap').innerHTML = ''; return; }
+    const rows = flows.map(f => {
+      const gap = f.committed - f.converted;
+      const col = f.rate >= 50 ? 'var(--gw-green)' : f.rate >= 20 ? 'var(--gw-amber)' : 'var(--gw-red)';
+      return `<div class="conv-row" onclick="openRoster('gap:${esc(f.key)}','gap','Committed but not yet at ${esc(f.training)}','${esc(f.label)} — still to follow up')">
+        <div class="conv-top"><div class="conv-label">${esc(f.label)} <small>→ showed up to ${esc(f.training)}</small></div><div class="conv-pct" style="color:${col}">${f.rate}%</div></div>
+        <div class="conv-bar"><span class="done" style="width:${f.rate}%"></span></div>
+        <div class="conv-foot"><span>${f.converted} of ${f.committed} have shown up</span><span class="gap">${gap} to follow up →</span></div>
+      </div>`;
+    }).join('');
+    document.getElementById('conversion-wrap').innerHTML =
+      `<div class="section-h">From commitment to training<span class="sh-count">${flows.length}</span></div>
+       <p style="color:var(--text-tertiary);font-size:12.5px;margin:-6px 0 14px;">How many who committed to an action have actually shown up to the matching training. Click a row for the follow-up list and their emails.</p>${rows}`;
+  } catch (e) {}
+}
+
 // ---- roster modal ----
 let rosterPeople = [];
 async function openRoster(key, segment, segLabel, evLabel) {
@@ -414,7 +448,7 @@ document.getElementById('copy-btn').addEventListener('click', () => {
   });
 });
 
-document.getElementById('refresh-btn').addEventListener('click', () => { load(); loadCommitments(); });
+document.getElementById('refresh-btn').addEventListener('click', () => { load(); loadCommitments(); loadConversion(); });
 document.getElementById('signout-btn').addEventListener('click', () => { localStorage.removeItem('gw-session'); localStorage.removeItem('gw-email'); location.reload(); });
 
 // ---- auth ----
@@ -451,7 +485,8 @@ async function bootAuth() {
     hideLogin();
     await load();
     loadCommitments();
-    setInterval(() => { load(); loadCommitments(); }, 60000);
+    loadConversion();
+    setInterval(() => { load(); loadCommitments(); loadConversion(); }, 60000);
   }
 })();
 </script>
