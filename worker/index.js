@@ -3650,14 +3650,15 @@ function ageBand(a) { return a <= 2 ? '0–2' : a <= 5 ? '3–5' : a <= 9 ? '6�
 const AGE_BANDS = ['0–2', '3–5', '6–9', '10+'];
 function allMetaEvents() {
   return Object.entries(EVENT_META)
-    .filter(([, m]) => ['onboarding', 'hm', 'amp', 'kyn'].includes(m.type))
-    .map(([key, m]) => ({ key, ...m }))
+    // 'legacy' = the 5/26 orientation (the first onboarding) — keep it so it shows in Past events.
+    .filter(([, m]) => ['legacy', 'onboarding', 'hm', 'amp', 'kyn'].includes(m.type))
+    .map(([key, m]) => ({ key, ...m, type: m.type === 'legacy' ? 'onboarding' : m.type }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 const TYPE_LABEL = { onboarding: 'Onboardings', hm: 'House Meeting trainings', amp: 'Amplifier trainings', kyn: 'Know Your Neighbor', camp: 'Power Camps', launch: 'Emergency meetings' };
 
 async function getEventsOverview(env) {
-  const cached = await cacheGet(env, 'cache:events-overview:v4');
+  const cached = await cacheGet(env, 'cache:events-overview:v5');
   if (cached) return json(cached);
   const today = todayCT();
   const metas = allMetaEvents();
@@ -3763,7 +3764,7 @@ async function getEventsOverview(env) {
   }
   events.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
   const payload = { generated: new Date().toISOString(), today, events, type_labels: TYPE_LABEL };
-  await cachePut(env, 'cache:events-overview:v4', payload, 60);
+  await cachePut(env, 'cache:events-overview:v5', payload, 60);
   return json(payload);
 }
 

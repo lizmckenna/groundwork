@@ -277,7 +277,7 @@ function pastCardHTML(ev) {
   return `<div class="ev-card past">
     <div class="ev-top"><div><div class="ev-title">${esc(ev.label)}</div><div class="ev-when">${esc(whenLabel(ev))}</div></div>${chip}</div>
     <div class="tiles">
-      ${tile(ev,'t-rsvp',reg,'Registered','rsvp')}
+      ${tile(ev,'t-rsvp',reg||null,'Registered','rsvp')}
       ${tile(ev,'t-att',att,'Attended','attended')}
     </div>
   </div>`;
