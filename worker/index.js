@@ -982,6 +982,7 @@ export default {
       if (url.pathname === '/event-stats') return await getEventStats(env, url);
       if (url.pathname === '/events-overview') return await getEventsOverview(env);
       if (url.pathname === '/event-roster') return await getEventRoster(env, url);
+      if (url.pathname === '/commitments-overview') return await getCommitmentsOverview(env);
       if (url.pathname === '/training-totals') return await getTrainingTotals(env);
       if (url.pathname === '/recent-activity') return await getRecentActivity(env, url);
       if (url.pathname === '/search') return await searchContacts(env, url);
@@ -3657,6 +3658,56 @@ function allMetaEvents() {
 }
 const TYPE_LABEL = { onboarding: 'Onboardings', hm: 'House Meeting trainings', amp: 'Amplifier trainings', kyn: 'Know Your Neighbor', camp: 'Power Camps', launch: 'Emergency meetings' };
 
+// Amendment 5 commitments, normalized across every form version's label variants.
+// `owner` = who follows up (shown on the card so each commitment routes somewhere).
+const COMMIT_BUCKETS = [
+  { key: 'amplifier',    label: 'Be an Amplifier',          owner: 'Amplifier program',     m: ['amplifier'] },
+  { key: 'house_meeting',label: 'Host a house meeting',     owner: 'House-meeting follow-up',m: ['host house meeting', 'host a house meeting', 'house meeting'] },
+  { key: 'canvass',      label: 'Canvass & outreach',       owner: '',                      m: ['canvass', 'outreach'] },
+  { key: 'school_board', label: 'School board resolution',  owner: '',                      m: ['school board'] },
+  { key: 'regional_team',label: 'Join regional team',       owner: 'Regional leads',        m: ['regional launch team', 'regional mo launch', 'regional team'] },
+  { key: 'parent_team',  label: 'Parent team at school',    owner: '',                      m: ['parent team'] },
+  { key: 'testimony',    label: 'Write testimony',          owner: '',                      m: ['testimony'] },
+  { key: 'talk5',        label: 'Talk to 5 neighbors',      owner: '',                      m: ['talk to 5'] },
+  { key: 'power_camp',   label: 'Parent Power Camp',        owner: 'Done (camps complete)', m: ['power camp'] },
+];
+function commitBucket(raw) {
+  const s = String(raw || '').toLowerCase();
+  for (const b of COMMIT_BUCKETS) if (b.m.some(x => s.includes(x))) return b.key;
+  return null;
+}
+// Every contact who committed to each bucket, from BOTH sources (log rows are the
+// complete record; the denormalized field is partial) -> union, deduped by contact.
+async function commitmentSets(env) {
+  const sets = {}; for (const b of COMMIT_BUCKETS) sets[b.key] = new Set();
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent("{method}='Commitment'")}&pageSize=100&fields%5B%5D=event&fields%5B%5D=contact`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) { const k = commitBucket(r.fields.event); const cid = (r.fields.contact || [])[0]; if (k && cid) sets[k].add(cid); }
+    off = d.offset;
+  } while (off);
+  off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent("{amendment5_commitments}!=BLANK()")}&pageSize=100&fields%5B%5D=amendment5_commitments`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) { const v = r.fields.amendment5_commitments; if (!v) continue; for (const part of String(v).split(/ · |\n/)) { const k = commitBucket(part); if (k) sets[k].add(r.id); } }
+    off = d.offset;
+  } while (off);
+  return sets;
+}
+async function getCommitmentsOverview(env) {
+  const cached = await cacheGet(env, 'cache:commitments:v1');
+  if (cached) return json(cached);
+  const sets = await commitmentSets(env);
+  const buckets = COMMIT_BUCKETS.map(b => ({ key: b.key, label: b.label, owner: b.owner, count: sets[b.key].size })).filter(b => b.count > 0);
+  const payload = { generated: new Date().toISOString(), buckets };
+  await cachePut(env, 'cache:commitments:v1', payload, 120);
+  return json(payload);
+}
+
 async function getEventsOverview(env) {
   const cached = await cacheGet(env, 'cache:events-overview:v7');
   if (cached) return json(cached);
@@ -3793,6 +3844,16 @@ async function getEventRoster(env, urlObj) {
     name: `${f.first || ''} ${f.last || ''}`.trim() || '(no name)',
     phone: f.phone || '', email: f.email || '', school: f.school || '', city: f.city || '', ...extra,
   });
+
+  if (key.startsWith('commitment:')) {
+    const bk = key.slice('commitment:'.length);
+    if (!COMMIT_BUCKETS.find(b => b.key === bk)) return json({ error: 'unknown commitment' }, 400);
+    const sets = await commitmentSets(env);
+    const ids = [...(sets[bk] || [])];
+    const contacts = await fetchContactsByIds(env, ids);
+    const people = ids.map(id => person(contacts[id] || {}));
+    return json({ key, segment: 'commitment', count: people.length, people });
+  }
 
   if (key.startsWith('launch:')) {
     const name = key.slice(7);
