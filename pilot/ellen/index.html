@@ -17,7 +17,7 @@
     --gw-amber: #d97706; --gw-amber-soft: rgba(217,119,6,0.12);
     --gw-pink: #db2777; --gw-pink-soft: rgba(219,39,119,0.10);
     --gw-teal: #0d9488; --gw-teal-soft: rgba(13,148,136,0.12);
-    --gw-red: #dc2626;
+    --gw-red: #dc2626; --gw-red-soft: rgba(220,38,38,0.10);
     --text-primary: #18181b; --text-secondary: #3f3f46; --text-tertiary: #52525b;
     --border: rgba(0,0,0,0.08); --border-hover: rgba(0,0,0,0.16);
   }
@@ -28,7 +28,7 @@
     --gw-amber: #fbbf24; --gw-amber-soft: rgba(251,191,36,0.15);
     --gw-pink: #f472b6; --gw-pink-soft: rgba(244,114,182,0.15);
     --gw-teal: #2dd4bf; --gw-teal-soft: rgba(45,212,191,0.15);
-    --gw-red: #ef4444;
+    --gw-red: #ef4444; --gw-red-soft: rgba(239,68,68,0.16);
     --text-primary: #fafafa; --text-secondary: #a1a1aa; --text-tertiary: #71717a;
     --border: rgba(255,255,255,0.06); --border-hover: rgba(255,255,255,0.12);
   }
@@ -81,6 +81,9 @@
   .chip-today { background: var(--gw-purple); color: #fff; }
   .chip-days { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); }
   .chip-turnout { background: var(--gw-green-soft); color: var(--gw-green); }
+  .ev-chip.tn-good { background: var(--gw-green-soft); color: var(--gw-green); }
+  .ev-chip.tn-mid  { background: var(--gw-amber-soft); color: var(--gw-amber); }
+  .ev-chip.tn-low  { background: var(--gw-red-soft);   color: var(--gw-red); }
   .ev-card.past { opacity: 0.92; }
   .ev-card.past .tiles { grid-template-columns: repeat(2, 1fr); }
   .section-h.past-h { color: var(--text-secondary); margin-top: 44px; }
@@ -126,9 +129,10 @@
   .age-chart-h { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 10px; }
   .age-row { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
   .age-lbl { width: 38px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-secondary); text-align: right; flex-shrink: 0; }
-  .age-bar-wrap { flex: 1; height: 18px; background: var(--bg-elevated); border-radius: 5px; overflow: hidden; }
-  .age-bar { height: 100%; background: var(--gw-teal); border-radius: 5px; min-width: 2px; transition: width 0.3s; }
-  .age-n { width: 26px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--text-primary); flex-shrink: 0; }
+  .age-squares { flex: 1; display: flex; gap: 3px; flex-wrap: wrap; align-content: center; min-height: 16px; }
+  .age-sq { width: 14px; height: 14px; border-radius: 3px; background: var(--bg-elevated); box-shadow: inset 0 0 0 1px var(--border); }
+  .age-sq.on { background: var(--gw-teal); box-shadow: none; }
+  .age-n { width: 26px; font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: var(--gw-teal); flex-shrink: 0; text-align: right; }
 
   footer { margin: 50px 0 30px; color: var(--text-tertiary); font-size: 12px; text-align: center; }
 
@@ -272,8 +276,10 @@ function cardHTML(ev) {
 // Past events: what matters is registration vs turnout.
 function pastCardHTML(ev) {
   const reg = ev.rsvp || 0, att = ev.attended || 0;
-  const chip = reg ? `<span class="ev-chip chip-turnout">${Math.round(att/reg*100)}% turnout</span>`
-                   : (att ? `<span class="ev-chip chip-days">${att} attended</span>` : '');
+  const pct = reg ? Math.round(att/reg*100) : null;
+  const tcls = pct===null ? '' : (pct >= 60 ? 'tn-good' : pct >= 35 ? 'tn-mid' : 'tn-low');
+  const chip = pct!==null ? `<span class="ev-chip ${tcls}">${pct}% turnout</span>`
+                          : (att ? `<span class="ev-chip chip-days">${att} attended</span>` : '');
   return `<div class="ev-card past">
     <div class="ev-top"><div><div class="ev-title">${esc(ev.label)}</div><div class="ev-when">${esc(whenLabel(ev))}</div></div>${chip}</div>
     <div class="tiles">
@@ -349,8 +355,11 @@ async function openRoster(key, segment, segLabel, evLabel) {
     let chart = '';
     if (segment === 'childcare' && d.age_dist && d.ages_known) {
       const max = Math.max(1, ...d.age_dist.map(b => b.count));
-      chart = `<div class="age-chart"><div class="age-chart-h">Age distribution · ${d.ages_known} kids with ages given</div>`
-        + d.age_dist.map(b => `<div class="age-row"><span class="age-lbl">${b.band}</span><span class="age-bar-wrap"><span class="age-bar" style="width:${Math.round(b.count/max*100)}%"></span></span><span class="age-n">${b.count}</span></div>`).join('')
+      chart = `<div class="age-chart"><div class="age-chart-h">Age distribution · ${d.ages_known} kids with ages given · 1 square = 1 kid</div>`
+        + d.age_dist.map(b => {
+            const squares = Array.from({length: max}, (_,i) => `<span class="age-sq${i < b.count ? ' on' : ''}"></span>`).join('');
+            return `<div class="age-row"><span class="age-lbl">${b.band}</span><span class="age-squares">${squares}</span><span class="age-n">${b.count}</span></div>`;
+          }).join('')
         + `</div>`;
     }
     document.getElementById('modal-body').innerHTML = chart + rosterPeople.map(p => {
