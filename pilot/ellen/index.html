@@ -241,8 +241,8 @@ function cardHTML(ev) {
   if (ev.kind === 'launch') {
     tiles = tile(ev,'t-rsvp',ev.rsvp,'RSVP’d','rsvp')
       + tile(ev,'t-att',ev.attended || 0,'Attended','attended', !ev.attended && du>0)
-      + tile(ev,'t-pizza',ev.pizza||0,'Pizza','pizza')
-      + tile(ev,'t-care',ev.childcare||0,'Childcare','childcare');
+      + tile(ev,'t-pizza',ev.pizza||0,'Pizza plates','pizza')
+      + tile(ev,'t-care',ev.childcare||0,'Kids needing care','childcare');
   } else {
     tiles = tile(ev,'t-rsvp',ev.rsvp,'RSVP’d','rsvp')
       + tile(ev,'t-conf',ev.confirmed||0,'Confirmed','confirmed')
@@ -303,7 +303,10 @@ async function openRoster(key, segment, segLabel, evLabel) {
     const r = await authFetch(`${WORKER}/event-roster?key=${encodeURIComponent(key)}&segment=${encodeURIComponent(segment)}`);
     const d = await r.json();
     rosterPeople = d.people || [];
-    document.getElementById('modal-sub').textContent = `${segLabel} · ${d.count} ${d.count===1?'person':'people'}`;
+    const sub = (segment === 'childcare' && d.kids != null)
+      ? `${d.count} ${d.count===1?'family':'families'} · ${d.kids} kids total`
+      : `${segLabel} · ${d.count} ${d.count===1?'person':'people'}`;
+    document.getElementById('modal-sub').textContent = sub;
     if (d.unlinked) {
       const w = document.getElementById('modal-warn');
       w.style.display = 'block';

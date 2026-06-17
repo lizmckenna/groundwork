@@ -3613,6 +3613,16 @@ function parseLaunchDate(name) {
   if (!m) return null;
   return `2026-${String(m[1]).padStart(2, '0')}-${String(m[2]).padStart(2, '0')}`;
 }
+// "2 kids, 3 & 6" -> 2 ; "18mo and 4 years" -> 2 ; "I kid, age 5" -> 1.
+// childcare=Yes with a blank detail still counts as at least 1 child.
+function countKids(s) {
+  if (!s) return 1;
+  const t = String(s).toLowerCase().replace(/\bi\s+kid/, '1 kid');
+  const m = t.match(/^\s*(\d+)\s*(kids?|,|ages?)/);   // leading "N kids" / "N," / "N ages"
+  if (m) return parseInt(m[1], 10) || 1;
+  const ages = t.split(/\band\b|,|&/).filter(p => /\d/.test(p));   // else count listed ages
+  return Math.max(1, ages.length);
+}
 function upcomingMetaEvents() {
   const today = todayCT();
   return Object.entries(EVENT_META)
@@ -3669,7 +3679,7 @@ async function getEventsOverview(env) {
     const formula = `OR(${orClauses.join(',')})`;
     let offset = null;
     do {
-      let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=event&fields%5B%5D=result&fields%5B%5D=contact&fields%5B%5D=rsvp_launch&fields%5B%5D=rsvp_pizza&fields%5B%5D=rsvp_childcare`;
+      let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=event&fields%5B%5D=result&fields%5B%5D=contact&fields%5B%5D=rsvp_launch&fields%5B%5D=rsvp_pizza&fields%5B%5D=rsvp_childcare&fields%5B%5D=rsvp_childcare_kids`;
       if (offset) q += `&offset=${encodeURIComponent(offset)}`;
       const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
       for (const r of d.records) {
@@ -3677,10 +3687,10 @@ async function getEventsOverview(env) {
         if (f.method === 'Event RSVP') {
           const name = f.rsvp_launch || f.event;
           if (!name) continue;
-          if (!launches[name]) launches[name] = { rsvp: 0, pizza: 0, childcare: 0 };
+          if (!launches[name]) launches[name] = { rsvp: 0, pizza: 0, childcare_families: 0, childcare_kids: 0 };
           launches[name].rsvp++;
           if (f.rsvp_pizza === 'Yes') launches[name].pizza++;
-          if (f.rsvp_childcare === 'Yes') launches[name].childcare++;
+          if (f.rsvp_childcare === 'Yes') { launches[name].childcare_families++; launches[name].childcare_kids += countKids(f.rsvp_childcare_kids); }
         } else if (f.method === 'Event attendance') {
           const name = f.rsvp_launch || f.event;
           if (name) launchAttendByName[name] = (launchAttendByName[name] || 0) + 1;
@@ -3709,7 +3719,8 @@ async function getEventsOverview(env) {
     if (date && date < today) continue;   // upcoming only
     events.push({
       kind: 'launch', key: `launch:${name}`, type: 'launch', label: name, date: date || '',
-      time: null, rsvp: l.rsvp, pizza: l.pizza, childcare: l.childcare,
+      time: null, rsvp: l.rsvp, pizza: l.pizza,
+      childcare: l.childcare_kids, childcare_families: l.childcare_families,
       attended: launchAttendByName[name] || 0,
     });
   }
@@ -3750,23 +3761,25 @@ async function getEventRoster(env, urlObj) {
     if (segment === 'pizza') extra = `,{rsvp_pizza}='Yes'`;
     if (segment === 'childcare') extra = `,{rsvp_childcare}='Yes'`;
     const formula = `AND({method}='${method}',OR({rsvp_launch}='${name.replace(/'/g, "\\'")}',{event}='${name.replace(/'/g, "\\'")}')${extra})`;
-    const ids = []; let unlinked = 0; let offset = null;
+    const ids = []; let unlinked = 0; let offset = null; let kidsTotal = 0;
     const meta = {};
     do {
       let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=rsvp_pizza&fields%5B%5D=rsvp_childcare&fields%5B%5D=rsvp_childcare_kids&fields%5B%5D=notes`;
       if (offset) q += `&offset=${encodeURIComponent(offset)}`;
       const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
       for (const r of d.records) {
+        if (segment === 'childcare') kidsTotal += countKids(r.fields.rsvp_childcare_kids);
         const cid = (r.fields.contact || [])[0];
         if (!cid) { unlinked++; continue; }
         ids.push(cid);
-        meta[cid] = { pizza: r.fields.rsvp_pizza === 'Yes', childcare: r.fields.rsvp_childcare === 'Yes', kids: r.fields.rsvp_childcare_kids || '' };
+        meta[cid] = { pizza: r.fields.rsvp_pizza === 'Yes', childcare: r.fields.rsvp_childcare === 'Yes', kids: r.fields.rsvp_childcare_kids || '', kid_count: countKids(r.fields.rsvp_childcare_kids) };
       }
       offset = d.offset;
     } while (offset);
     const contacts = await fetchContactsByIds(env, ids);
     const people = ids.map(id => person(contacts[id] || {}, meta[id] || {}));
-    return json({ key, segment, count: people.length, unlinked, people });
+    const kidsOut = segment === 'childcare' ? { kids: kidsTotal } : {};
+    return json({ key, segment, count: people.length, unlinked, people, ...kidsOut });
   }
 
   // Meta event (onboarding / training)
