@@ -146,6 +146,7 @@ const ALLOWLIST = [
   'elizabethmck@gmail.com',
   'emckenna@hks.harvard.edu',
   'ellenginkc@gmail.com',
+  'ellenschwartze@gmail.com',
   'mcflemi@gmail.com',
   'tianyi@statepowerfund.org',
   'joymcushman@gmail.com',
@@ -3770,21 +3771,25 @@ async function rsvpExportCsv(env, urlObj) {
   if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
   const event = urlObj.searchParams.get('event') || 'Northland Emergency Meeting 6/18';
   const evEsc = event.replace(/'/g, "\\'");
-  const order = []; const recruited = {}; const seen = new Set();
+  let order = []; const recruited = {}; const seen = new Set(); const rdate = {};
   let off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=notes`;
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=notes&fields%5B%5D=date`;
     if (off) q += `&offset=${encodeURIComponent(off)}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
     for (const r of d.records) {
       const cid = (r.fields.contact || [])[0];
       if (!cid || seen.has(cid)) continue;
       seen.add(cid); order.push(cid);
+      rdate[cid] = r.fields.date || '';
       const m = String(r.fields.notes || '').match(/Recruited by:\s*([^|]+)/);
       recruited[cid] = m ? m[1].trim() : '';
     }
     off = d.offset;
   } while (off);
+  // Append-only order: sort by RSVP date so existing rows never move and new
+  // RSVPs land at the bottom — keeps the Sheet's manual "Claimed by" column aligned.
+  order = order.sort((a, b) => String(rdate[a]).localeCompare(String(rdate[b])));
   const det = {};
   for (let i = 0; i < order.length; i += 40) {
     const chunk = order.slice(i, i + 40);
