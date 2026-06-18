@@ -239,6 +239,10 @@ export default {
       // since IMPORTDATA can't send headers). The canonical deduped RSVP list, so
       // a shared turnout-tracking Sheet always shows the same count as the dashboard.
       if (url.pathname === '/export/rsvps.csv' && request.method === 'GET') return await rsvpExportCsv(env, url);
+      // Sheet → Airtable attendance write-back for launches (gated by EXPORT_KEY,
+      // same key the turnout Sheets already carry). Leads mark Attended/No-show in
+      // the Sheet; this upserts the 'Event attendance' rows the dashboard counts.
+      if (url.pathname === '/sheet-attendance' && request.method === 'POST') return await sheetAttendance(request, env);
       // Admin endpoints — gated by X-Admin-Key header instead of session token
       if (url.pathname === '/admin/dedupe-merge' && request.method === 'POST') return await adminDedupeMerge(request, env);
       if (url.pathname === '/admin/contacts-dump' && request.method === 'GET') return await adminContactsDump(request, env, url);
@@ -3822,6 +3826,65 @@ async function rsvpExportCsv(env, urlObj) {
     lines.push([f.first, f.last, f.email, f.phone, role, f.school, f.district, recruited[cid]].map(csvEsc).join(','));
   }
   return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Sheet → Airtable launch attendance. Body: { event, marks: [{email, status}] }.
+// Idempotent: Attended/Walk-in ensures one 'Event attendance' row exists for that
+// person+launch; anything else removes it. The events dashboard counts these rows.
+async function sheetAttendance(request, env) {
+  if (!env.EXPORT_KEY || new URL(request.url).searchParams.get('key') !== env.EXPORT_KEY)
+    return new Response('forbidden', { status: 403 });
+  const body = await request.json().catch(() => null);
+  if (!body || !body.event || !Array.isArray(body.marks)) return json({ error: 'bad request' }, 400);
+  const event = String(body.event);
+  const evEsc = event.replace(/'/g, "\\'");
+
+  // Resolve emails -> contact ids.
+  const emails = [...new Set(body.marks.map(m => String(m.email || '').trim().toLowerCase()).filter(Boolean))];
+  if (!emails.length) return json({ ok: true, created: 0, deleted: 0 });
+  const emailToCid = {};
+  for (let i = 0; i < emails.length; i += 40) {
+    const chunk = emails.slice(i, i + 40);
+    const f = `OR(${chunk.map(e => `LOWER({email})='${e.replace(/'/g, "\\'")}'`).join(',')})`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=email`);
+    for (const r of d.records) { const em = String(r.fields.email || '').trim().toLowerCase(); if (em && !emailToCid[em]) emailToCid[em] = r.id; }
+  }
+
+  // Existing attendance rows for this launch: contact id -> log row id.
+  const existing = {};
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) { const cid = (r.fields.contact || [])[0]; if (cid && !existing[cid]) existing[cid] = r.id; }
+    off = d.offset;
+  } while (off);
+
+  const present = s => /^(attended|walk[\s-]?in|yes|present)$/i.test(String(s || '').trim());
+  const toCreate = [], toDelete = [];
+  const handled = new Set();
+  for (const mk of body.marks) {
+    const cid = emailToCid[String(mk.email || '').trim().toLowerCase()];
+    if (!cid || handled.has(cid)) continue;
+    handled.add(cid);
+    if (present(mk.status)) { if (!existing[cid]) toCreate.push(cid); }
+    else if (existing[cid]) { toDelete.push(existing[cid]); }
+  }
+
+  for (let i = 0; i < toCreate.length; i += 10) {
+    const recs = toCreate.slice(i, i + 10).map(cid => ({ fields: {
+      Summary: `${todayCT()} — Attended (${event})`,
+      date: todayCT(), method: 'Event attendance', result: 'Attended', rsvp_launch: event, contact: [cid],
+    }}));
+    await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: recs, typecast: true }) });
+  }
+  for (let i = 0; i < toDelete.length; i += 10) {
+    const qs = toDelete.slice(i, i + 10).map(id => `records[]=${encodeURIComponent(id)}`).join('&');
+    await at(env, `/${BASE}/${CONTACT_LOG_TBL}?${qs}`, { method: 'DELETE' });
+  }
+  await env.KV_BINDING.delete('cache:events-overview:v7').catch(() => null);
+  return json({ ok: true, created: toCreate.length, deleted: toDelete.length });
 }
 
 async function getEventsOverview(env) {

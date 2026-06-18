@@ -11,11 +11,12 @@ const KEY    = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
 const EVENT  = 'Eastern Jackson County Emergency Meeting 7/1';
 const LEADS  = 'LaNee,David,Facebook,Other';                 // <-- the lead names (+ Facebook/Other)
 const STATUS = 'Not started,Texted,Called,Left message,Confirmed coming,No answer,Declined';
+const ATTEND = 'Attended,No-show,Walk-in';                    // Attendance dropdown
 const RSVP_URL = 'https://parents4mopublicschools.org/launches/eastern-jackson-county/';
 
 const TAB = 'RSVPs (live)';
 const DATA_COLS = 8;                                          // A–H come from the feed
-const MANUAL = ['Claimed by','Reminder: assigned to','Reminder: status'];  // I, J, K
+const MANUAL = ['Claimed by','Reminder: assigned to','Reminder: status','Attendance'];  // I, J, K, L
 const M_START = DATA_COLS + 1;                                // I = 9
 const TOTAL_COLS = DATA_COLS + MANUAL.length;                 // 11 (A..K)
 const EMAIL_COL = 3;                                          // C = email, the join key
@@ -47,6 +48,7 @@ function setUp(){
   sh.getRange(FIRST, M_START,     400, 1).setDataValidation(dv(LEADS));   // Claimed by
   sh.getRange(FIRST, M_START + 1, 400, 1).setDataValidation(dv(LEADS));   // Reminder assigned to
   sh.getRange(FIRST, M_START + 2, 400, 1).setDataValidation(dv(STATUS));  // Reminder status
+  sh.getRange(FIRST, M_START + 3, 400, 1).setDataValidation(dv(ATTEND));  // Attendance
   sh.setFrozenRows(2);
   sh.setFrozenColumns(2);
   // Warn anyone who tries to edit the live data columns A–H
@@ -55,6 +57,9 @@ function setUp(){
   // Auto-refresh every minute
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction()==='refreshRSVPs') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('refreshRSVPs').timeBased().everyMinutes(1).create();
+  // When a lead picks Attended / No-show in the Attendance column, push it to Airtable + the dashboard.
+  ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction()==='onAttendanceEdit') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('onAttendanceEdit').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
   refreshRSVPs();
   installHelp();
   SpreadsheetApp.getUi().alert('All set: banner + frozen name columns, refreshes every minute, Claimed by / Reminder columns, a How-to tab, and pizza/childcare counts on the Goals tab.');
@@ -81,6 +86,27 @@ function refreshRSVPs(){
   const reM = body.map(r => byEmail[String(r[2]||'').trim().toLowerCase()] || new Array(N).fill(''));
   sh.getRange(FIRST, M_START, reM.length, N).setValues(reM);
   writeStats();
+}
+
+// Fires when a lead edits the Attendance column. Pushes Attended/No-show to
+// Airtable so the events dashboard turnout updates. (Installable trigger, so it
+// only runs on human edits, never on the script's own refresh writes.)
+function onAttendanceEdit(e){
+  if (!e || !e.range) return;
+  const sh = e.range.getSheet();
+  if (sh.getName() !== TAB) return;
+  const ATT_COL = M_START + 3;   // Attendance column (L)
+  if (e.range.getColumn() > ATT_COL || e.range.getLastColumn() < ATT_COL) return;
+  const r0 = Math.max(e.range.getRow(), FIRST), r1 = e.range.getLastRow();
+  const marks = [];
+  for (let r = r0; r <= r1; r++){
+    const email = String(sh.getRange(r, EMAIL_COL).getValue()||'').trim();
+    if (!email) continue;
+    marks.push({ email: email, status: String(sh.getRange(r, ATT_COL).getValue()||'').trim() });
+  }
+  if (!marks.length) return;
+  UrlFetchApp.fetch('https://groundwork-pilot.elizabethmck.workers.dev/sheet-attendance?key='+encodeURIComponent(KEY),
+    { method:'post', contentType:'application/json', payload: JSON.stringify({ event: EVENT, marks: marks }), muteHttpExceptions:true });
 }
 
 // Pizza + childcare totals onto the Goals tab (same counts the events dashboard
@@ -141,6 +167,9 @@ function installHelp(){
     ['','gap'],
     ['Reminder calls and texts','h'],
     ['On the RSVPs (live) tab, use the yellow "Reminder: assigned to" and "Reminder: status" columns. They stay attached to each person through every refresh.','p'],
+    ['','gap'],
+    ['Mark who showed up','h'],
+    ['At or after the event, set each person to Attended or No-show in the "Attendance" column. That flows straight to the database and the turnout shows up on the events dashboard automatically.','p'],
     ['','gap'],
     ['Change a goal','h'],
     ['On the Goals tab, type a new number in the "Goal" column. Everything recalculates on its own.','p'],
