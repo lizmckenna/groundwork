@@ -72,4 +72,22 @@ function refreshRSVPs(){
   sh.getRange(FIRST, 1, body.length, DATA_COLS).setValues(body.map(r => r.slice(0, DATA_COLS)));
   const reM = body.map(r => byEmail[String(r[2]||'').trim().toLowerCase()] || new Array(N).fill(''));
   sh.getRange(FIRST, M_START, reM.length, N).setValues(reM);
+  writeStats();
+}
+
+// Pizza + childcare totals onto the Goals tab (same counts the events dashboard
+// shows; childcare kids parsed server-side). Found by label, so it survives you
+// inserting lead rows.
+function writeStats(){
+  const g = SpreadsheetApp.getActive().getSheetByName('Goals'); if (!g) return;
+  const url = 'https://groundwork-pilot.elizabethmck.workers.dev/export/rsvps.csv?stats=1&key='+encodeURIComponent(KEY)+'&event='+encodeURIComponent(EVENT)+'&t='+Date.now();
+  let m = {};
+  try { Utilities.parseCsv(UrlFetchApp.fetch(url,{muteHttpExceptions:true}).getContentText()).slice(1).forEach(r => m[r[0]] = Number(r[1])||0); } catch(e){ return; }
+  const items = [['Want pizza:', m.pizza||0], ['Childcare (families):', m.childcare_families||0], ['Childcare (kids total):', m.childcare_kids||0]];
+  const colA = g.getRange(1, 1, Math.max(g.getLastRow(),1), 1).getValues().map(r => String(r[0]));
+  items.forEach(function(it){
+    let row = colA.indexOf(it[0]) + 1;
+    if (row === 0){ row = g.getLastRow() + 1; g.getRange(row, 1).setValue(it[0]).setFontWeight('bold'); }
+    g.getRange(row, 3).setValue(it[1]);
+  });
 }

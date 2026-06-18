@@ -3772,9 +3772,10 @@ async function rsvpExportCsv(env, urlObj) {
   const event = urlObj.searchParams.get('event') || 'Northland Emergency Meeting 6/18';
   const evEsc = event.replace(/'/g, "\\'");
   let order = []; const recruited = {}; const seen = new Set(); const rdate = {};
+  let pizza = 0, ccFam = 0, ccKids = 0;   // logistics totals for the stats feed
   let off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=notes&fields%5B%5D=date`;
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=notes&fields%5B%5D=date&fields%5B%5D=rsvp_pizza&fields%5B%5D=rsvp_childcare&fields%5B%5D=rsvp_childcare_kids`;
     if (off) q += `&offset=${encodeURIComponent(off)}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
     for (const r of d.records) {
@@ -3784,12 +3785,27 @@ async function rsvpExportCsv(env, urlObj) {
       rdate[cid] = r.fields.date || '';
       const m = String(r.fields.notes || '').match(/Recruited by:\s*([^|]+)/);
       recruited[cid] = m ? m[1].trim() : '';
+      if (r.fields.rsvp_pizza === 'Yes') pizza++;
+      if (r.fields.rsvp_childcare === 'Yes') { ccFam++; ccKids += countKids(r.fields.rsvp_childcare_kids); }
     }
     off = d.offset;
   } while (off);
   // Append-only order: sort by RSVP date so existing rows never move and new
   // RSVPs land at the bottom — keeps the Sheet's manual "Claimed by" column aligned.
   order = order.sort((a, b) => String(rdate[a]).localeCompare(String(rdate[b])));
+  // stats=1 → just the logistics rollup (registered / pizza / childcare), so the
+  // Goals tab can show the same counts the events dashboard does. Computed above,
+  // so we skip the per-contact detail fetch.
+  if (urlObj.searchParams.get('stats')) {
+    const out = [
+      ['metric', 'value'].join(','),
+      ['registered', order.length].join(','),
+      ['pizza', pizza].join(','),
+      ['childcare_families', ccFam].join(','),
+      ['childcare_kids', ccKids].join(','),
+    ].join('\n');
+    return new Response(out, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
+  }
   const det = {};
   for (let i = 0; i < order.length; i += 40) {
     const chunk = order.slice(i, i + 40);
