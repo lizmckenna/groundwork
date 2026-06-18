@@ -11,7 +11,7 @@ const KEY    = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
 const EVENT  = 'Eastern Jackson County Emergency Meeting 7/1';
 const LEADS  = 'LaNee,David,Facebook,Other';                 // <-- the lead names (+ Facebook/Other)
 const STATUS = 'Not started,Texted,Called,Left message,Confirmed coming,No answer,Declined';
-const ATTEND = 'Attended,No-show,Walk-in';                    // Attendance dropdown
+const ATTEND = 'Attended,No-show,Walk-in,Canceled';                    // Attendance dropdown
 const RSVP_URL = 'https://parents4mopublicschools.org/launches/eastern-jackson-county/';
 
 const TAB = 'RSVPs (live)';

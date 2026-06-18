@@ -12,7 +12,7 @@ function addAttendance(){
   const sh = SpreadsheetApp.getActive().getSheetByName(TAB);
   const ATT_COL = M_START + 3;   // L — after Claimed by / Reminder assigned / Reminder status
   sh.getRange(1, ATT_COL).setValue('Attendance').setFontWeight('bold').setBackground('#FFF4CC');
-  const dv = SpreadsheetApp.newDataValidation().requireValueInList(['Attended','No-show','Walk-in'], true).setAllowInvalid(true).build();
+  const dv = SpreadsheetApp.newDataValidation().requireValueInList(['Attended','No-show','Walk-in','Canceled'], true).setAllowInvalid(true).build();
   sh.getRange(2, ATT_COL, 600, 1).setDataValidation(dv);
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction()==='onAttendanceEdit') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('onAttendanceEdit').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
