@@ -1,5 +1,5 @@
 /**
- * Groundwork live turnout tracker — EASTERN JACKSON COUNTY (7/1).
+ * Groundwork live turnout tracker — KANSAS CITY (7/9).
  * Paste into Extensions → Apps Script, Save, run setUp() once (authorize when asked).
  *
  * setUp builds everything: frozen A/B name columns, red "do not edit" banner on
@@ -8,10 +8,10 @@
  * "📖 How to use" tab, and pizza/childcare + per-lead counts on the Goals tab.
  */
 const KEY    = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
-const EVENT  = 'Eastern Jackson County Emergency Meeting 7/1';
+const EVENT  = 'Kansas City Emergency Meeting 7/9';
 const LEADS  = 'LaNee,David,Facebook,Other';                 // <-- the lead names (+ Facebook/Other)
 const STATUS = 'Not started,Texted,Called,Left message,Confirmed coming,No answer,Declined';
-const RSVP_URL = 'https://parents4mopublicschools.org/launches/eastern-jackson-county/';
+const RSVP_URL = 'https://parents4mopublicschools.org/launches/kc/';
 
 const TAB = 'RSVPs (live)';
 const DATA_COLS = 8;                                          // A–H come from the feed
