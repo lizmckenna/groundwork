@@ -239,6 +239,9 @@ export default {
       // since IMPORTDATA can't send headers). The canonical deduped RSVP list, so
       // a shared turnout-tracking Sheet always shows the same count as the dashboard.
       if (url.pathname === '/export/rsvps.csv' && request.method === 'GET') return await rsvpExportCsv(env, url);
+      // Full deduped mailable contact list for the newsletter, ranked warmest-first
+      // with a warm-up batch column. Feeds a read-only Google Sheet for comms.
+      if (url.pathname === '/export/contacts.csv' && request.method === 'GET') return await contactsExportCsv(env, url);
       // Sheet → Airtable attendance write-back for launches (gated by EXPORT_KEY,
       // same key the turnout Sheets already carry). Leads mark Attended/No-show in
       // the Sheet; this upserts the 'Event attendance' rows the dashboard counts.
@@ -3826,6 +3829,42 @@ async function rsvpExportCsv(env, urlObj) {
     lines.push([f.first, f.last, f.email, f.phone, role, f.school, f.district, recruited[cid]].map(csvEsc).join(','));
   }
   return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Full deduped mailable contact list for the newsletter. Excludes do-not-contact
+// flags and rows without an email, dedupes by email (keeping the most engaged
+// record), ranks warmest-first, and stamps a warm-up batch (1 = first 50, 2 =
+// next 200, 3 = next 500, 4 = the rest) so comms can send in waves.
+async function contactsExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const fields = ['first','last','email','dnc_flag_date','leader_ladder','events_attended_count','wants_amendment5_updates','wants_to_volunteer'];
+  const LADDER = { 'Core Leader': 40, 'Leader': 30, 'Supporter': 15, 'Prospect': 5 };
+  const byEmail = {};
+  let off = null;
+  do {
+    let q = `?pageSize=100`;
+    for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) {
+      const f = r.fields;
+      if (f.dnc_flag_date) continue;
+      const em = String(f.email || '').trim().toLowerCase();
+      if (!em || !em.includes('@')) continue;
+      const attended = Number(f.events_attended_count) || 0;
+      const score = attended * 100 + (LADDER[f.leader_ladder] || 0) + (f.wants_amendment5_updates ? 5 : 0) + (f.wants_to_volunteer ? 5 : 0);
+      const tier = attended >= 1 ? `Attended ${attended} event${attended > 1 ? 's' : ''}` : (f.leader_ladder || 'On file');
+      const cur = byEmail[em];
+      if (!cur || score > cur.score) byEmail[em] = { first: f.first || '', last: f.last || '', email: f.email || em, score, tier };
+    }
+    off = d.offset;
+  } while (off);
+  const list = Object.values(byEmail).sort((a, b) => b.score - a.score);
+  list.forEach((p, i) => { p.batch = i < 50 ? 1 : i < 250 ? 2 : i < 750 ? 3 : 4; });
+  const csvEsc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [['Email', 'First Name', 'Last Name', 'Warm-up batch', 'Engagement'].join(',')];
+  for (const p of list) lines.push([p.email, p.first, p.last, p.batch, p.tier].map(csvEsc).join(','));
+  return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=300', 'Access-Control-Allow-Origin': '*' } });
 }
 
 // Sheet → Airtable launch attendance. Body: { event, marks: [{email, status}] }.
