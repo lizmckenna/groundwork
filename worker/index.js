@@ -263,6 +263,8 @@ export default {
       if (url.pathname === '/export/house-meetings.csv' && request.method === 'GET') return await houseMeetingsExportCsv(env, url);
       // Per-amplifier activity rollup (who's calling, how many, unique voters) — read-only leaderboard feed.
       if (url.pathname === '/export/amplifiers.csv' && request.method === 'GET') return await amplifiersExportCsv(env, url);
+      // Voters who committed during an amplifier conversation — follow-up feed (HM-shaped, reuses HM sheet + write-back).
+      if (url.pathname === '/export/amplifier-commits.csv' && request.method === 'GET') return await amplifierCommitsExportCsv(env, url);
       // Sheet → Airtable write-back for HM follow-up columns (status, 1-1, notes), by contact id.
       if (url.pathname === '/sheet-hm-followup' && request.method === 'POST') return await sheetHmFollowup(request, env);
       // Sheet → Airtable attendance write-back for launches (gated by EXPORT_KEY,
@@ -4044,6 +4046,49 @@ async function amplifiersExportCsv(env, urlObj) {
     const a = amp[n];
     lines.push([n, a.total, a.voters.size, a.c1, a.c2, a.c3, a.last].map(e).join(','));
   }
+  return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Voters who said yes to something during an amplifier conversation — the
+// amplifier-commitments follow-up feed (same shape as house-meetings.csv so it
+// reuses the HM follow-up Sheet). Commitments are parsed from commitments_added,
+// the amplifier from the contact source. Write-back uses /sheet-hm-followup.
+async function amplifierCommitsExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const flds = ['first', 'last', 'phone', 'email', 'commitments_added', 'school', 'district', 'county', 'source', 'one_on_one_booked'];
+  const recs = []; let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`FIND('via amplifier',LOWER({commitments_added}&''))>0`)}&pageSize=100`
+      + flds.map(f => `&fields%5B%5D=${encodeURIComponent(f)}`).join('');
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    recs.push(...d.records);
+    off = d.offset;
+  } while (off);
+  const out = [];
+  for (const r of recs) {
+    const f = r.fields;
+    const first = f.first || '', last = f.last || '';
+    const src = String(f.source || '');
+    const amp = src.includes('·') ? src.split('·').pop().trim() : '(unknown)';
+    if (/test|smoke|delete me/i.test(`${first} ${last} ${amp}`)) continue;   // drop test rows
+    const interests = []; let maxDate = '';
+    for (const ln of String(f.commitments_added || '').split('\n')) {
+      if (!/via amplifier/i.test(ln)) continue;
+      const dm = ln.match(/^\s*(\d{4}-\d{2}-\d{2})/); if (dm && dm[1] > maxDate) maxDate = dm[1];
+      const im = ln.match(/·\s*(.+?)\s*\(via amplifier\)/i); if (im && im[1]) interests.push(im[1].trim());
+    }
+    out.push({ id: r.id, first, last, amp, date: maxDate, phone: f.phone || '', email: f.email || '', commit: interests.join(' · '), school: f.school || '', district: f.district || '', county: f.county || '', oo: f.one_on_one_booked });
+  }
+  out.sort((a, b) => `${a.amp.toLowerCase()}|${a.last}`.localeCompare(`${b.amp.toLowerCase()}|${b.last}`));
+  if (urlObj.searchParams.get('stats')) {
+    const amps = new Set(out.map(r => r.amp.toLowerCase()));
+    const s = [['metric', 'value'].join(','), ['voters', out.length].join(','), ['amplifiers', amps.size].join(',')].join('\n');
+    return new Response(s, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
+  }
+  const e = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [['First Name', 'Last Name', 'Amplifier', 'Date', 'Phone', 'Email', 'Commitments', 'School', 'District', 'County', 'Contact ID', '1-1 booked'].join(',')];
+  for (const r of out) lines.push([r.first, r.last, r.amp, r.date, r.phone, r.email, r.commit, r.school, r.district, r.county, r.id, r.oo ? 'Yes' : ''].map(e).join(','));
   return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
 }
 
