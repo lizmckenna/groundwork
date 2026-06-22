@@ -244,6 +244,9 @@ export default {
       // Full deduped mailable contact list for the newsletter, ranked warmest-first
       // with a warm-up batch column. Feeds a read-only Google Sheet for comms.
       if (url.pathname === '/export/contacts.csv' && request.method === 'GET') return await contactsExportCsv(env, url);
+      // Who has attended/checked in (by email) — lets the turnout Sheet fill its
+      // Attendance column live from check-ins without shifting any columns.
+      if (url.pathname === '/export/attendance.csv' && request.method === 'GET') return await attendanceExportCsv(env, url);
       // Sheet → Airtable attendance write-back for launches (gated by EXPORT_KEY,
       // same key the turnout Sheets already carry). Leads mark Attended/No-show in
       // the Sheet; this upserts the 'Event attendance' rows the dashboard counts.
@@ -3957,6 +3960,31 @@ async function rsvpExportCsv(env, urlObj) {
 // flags and rows without an email, dedupes by email (keeping the most engaged
 // record), ranks warmest-first, and stamps a warm-up batch (1 = first 50, 2 =
 // next 200, 3 = next 500, 4 = the rest) so comms can send in waves.
+// Emails of everyone with an 'Event attendance' row for the event (check-ins +
+// dashboard marks). One email per line. The turnout Sheet pulls this to fill its
+// Attendance column live, while still keeping manual No-show / Canceled marks.
+async function attendanceExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const event = urlObj.searchParams.get('event') || '';
+  const evEsc = event.replace(/'/g, "\\'");
+  const cids = []; const seen = new Set(); let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) { const c = (r.fields.contact || [])[0]; if (c && !seen.has(c)) { seen.add(c); cids.push(c); } }
+    off = d.offset;
+  } while (off);
+  const emails = [];
+  for (let i = 0; i < cids.length; i += 40) {
+    const chunk = cids.slice(i, i + 40);
+    const f = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=email`);
+    for (const r of d.records) { const e = String(r.fields.email || '').trim().toLowerCase(); if (e) emails.push(e); }
+  }
+  return new Response(emails.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=30', 'Access-Control-Allow-Origin': '*' } });
+}
+
 async function contactsExportCsv(env, urlObj) {
   if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
   const fields = ['first','last','email','dnc_flag_date','leader_ladder','events_attended_count','wants_amendment5_updates','wants_to_volunteer'];

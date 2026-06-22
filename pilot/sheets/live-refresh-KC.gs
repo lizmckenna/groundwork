@@ -83,7 +83,22 @@ function refreshRSVPs(){
   sh.getRange(HDR, 1, 1, DATA_COLS).setValues([rows[0].slice(0, DATA_COLS)]);   // data headers on row 2
   const body = rows.slice(1); if (!body.length) { writeStats(); return; }
   sh.getRange(FIRST, 1, body.length, DATA_COLS).setValues(body.map(r => r.slice(0, DATA_COLS)));
-  const reM = body.map(r => byEmail[String(r[2]||'').trim().toLowerCase()] || new Array(N).fill(''));
+  // Who has checked in / been marked attended in the database, to fill Attendance live.
+  let attended = new Set();
+  try {
+    const au = 'https://groundwork-pilot.elizabethmck.workers.dev/export/attendance.csv?key='+encodeURIComponent(KEY)+'&event='+encodeURIComponent(EVENT)+'&t='+Date.now();
+    String(UrlFetchApp.fetch(au, {muteHttpExceptions:true}).getContentText()).split('\n').forEach(e => { e=e.trim().toLowerCase(); if (e) attended.add(e); });
+  } catch(e){}
+  const reM = body.map(r => {
+    const em = String(r[2]||'').trim().toLowerCase();
+    const pm = byEmail[em]; const m = pm ? pm.slice() : new Array(N).fill('');
+    // Attendance = last manual column: "Attended" comes live from the database
+    // (check-ins + dashboard); keep a manual No-show / Canceled if a lead set one.
+    let att = attended.has(em) ? 'Attended' : '';
+    if (!att && /^(no.?show|canceled|cancelled)$/i.test(String(m[N-1]||''))) att = m[N-1];
+    m[N-1] = att;
+    return m;
+  });
   sh.getRange(FIRST, M_START, reM.length, N).setValues(reM);
   writeStats();
 }
