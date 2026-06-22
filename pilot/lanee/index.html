@@ -1238,20 +1238,20 @@ let activeList = localStorage.getItem('gw-call-list') || 'fresh';
 // LaNeé and Stephanie run the onramp, follow-up cadence, and onboarding lists.
 const LISTS = ORGANIZER === 'kathryn'
   ? [
-      { v: 'unconverted', label: 'Came to onboarding · recruit for training' },
+      { v: 'unconverted', label: 'House meeting / amplifier only · recruit for training' },
       { v: 'training_followup', label: 'Training follow-up' },
     ]
   : [
       { v: 'fresh', label: 'Fresh prospects · first-ever contact' },
       { v: 'unreached', label: 'Attempted, not reached · due after 4 days' },
-      { v: 'unconverted', label: 'Came to an onboarding' },
+      { v: 'unconverted', label: 'Follow-ups to commitments' },
     ];
 const LIST_HINTS = {
   fresh: 'People never attempted before. First touch.',
   unreached: 'Attempted with no answer, due again after 4 days. Oldest first, with the suggested next channel. People drop off for good after 5 attempts.',
   unconverted: ORGANIZER === 'kathryn'
-    ? 'Committed to ONLY house meeting and/or amplifier (whether or not they attended an onboarding).'
-    : 'Came to an onboarding or made Amendment 5 commitments. No training signup or 1-1 yet; they fall off once either happens.',
+    ? 'Committed to ONLY house meeting and/or amplifier, statewide (whether or not they attended an onboarding).'
+    : 'People in your turf who completed an Amendment 5 commitment form (plus, for no-team counties, onboarding attendees). No training signup or 1-1 yet; they fall off once either happens.',
   training_followup: 'Came to a training.',
 };
 (function fillListPicker() {

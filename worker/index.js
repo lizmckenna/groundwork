@@ -78,6 +78,13 @@ const ELLENG_ID = 'recLxOVc6xTdYGdB8';
 const LANEE_COUNTIES = ['jackson', 'cass', 'johnson', 'platte', 'clay', 'lafayette', 'buchanan', 'ray'];
 // Ellen Glover owns commitment-form follow-up in these counties (her ask 6/22).
 const ELLENG_COUNTIES = ['clay', 'platte', 'buchanan', 'clinton'];
+// "Follow-ups to commitments" routing (Ellen G spec 6/22, confirmed).
+const LANEE_FOLLOWUP_COUNTIES = ['jackson', 'cass', 'johnson', 'lafayette', 'ray'];
+// Stephanie never gets these 9 (KC region + Ellen G counties) on her follow-up list.
+const STEPHANIE_EXCLUDE_COUNTIES = ['jackson', 'cass', 'johnson', 'lafayette', 'ray', 'clay', 'platte', 'buchanan', 'clinton'];
+// Counties with an established regional team — Stephanie's onboarding catch skips
+// these and only fires for new/no-team counties (where we're trying to launch).
+const STEPHANIE_TEAM_COUNTIES = ['jackson', 'cass', 'johnson', 'lafayette', 'ray', 'clay', 'platte', 'buchanan', 'clinton', 'st. charles', 'st. louis', 'jefferson', 'franklin'];
 // KC-metro cities — fallback when no county is supplied
 const LANEE_KC_CITIES = ['kansas city','independence','liberty','gladstone','raytown','grandview',"lee's summit",'lees summit','blue springs','belton','overland park','shawnee','olathe','lenexa','leawood','mission','merriam'];
 // ZIP → county lookup for MO + KS (generated from pgeocode/GeoNames data — 1905 entries).
@@ -2690,23 +2697,43 @@ async function getCallList(env, urlObj) {
     const trainingExcl = Object.values(EVENT_META)
       .filter(m => ['hm','amp','kyn'].includes(m.type) && m.signupField)
       .map(m => `NOT({${m.signupField}}='Signed up')`);
-    // Ellen G's follow-up list is county-scoped, not assigned-organizer-scoped:
-    // commitment-form completers in Clay/Platte/Buchanan/Clinton (her ask 6/22),
-    // regardless of who they were previously assigned to. Everyone else stays
-    // on the assigned_organizer split.
-    const isElleng = organizerId(organizer) === ELLENG_ID;
-    const followupCore = isElleng
-      ? [
-          `TRIM({amendment5_commitments}&'')!=''`,
-          `OR(${ELLENG_COUNTIES.map(c => `FIND('${c}',LOWER({county}&''))>0`).join(',')})`,
-        ]
-      : [ `OR(${attendClauses},TRIM({amendment5_commitments}&'')!='')` ];
+    // "Follow-ups to commitments" — county/commitment-scoped per Ellen G's spec
+    // (6/22, confirmed). The split is by county + commitment content, NOT by
+    // assigned_organizer, so it's robust to legacy assignments.
+    const oid = organizerId(organizer);
+    const C = `LOWER({county}&'')`;
+    const A5 = `LOWER({amendment5_commitments}&'')`;
+    const countyOr = (cs) => `OR(${cs.map(c => `FIND('${c}',${C})>0`).join(',')})`;
+    const hasCommit = `TRIM({amendment5_commitments}&'')!=''`;
+    const attendedOnboarding = `OR(${attendClauses})`;
+    // "only amplifier and/or house meeting": has amp or hm, and no other commitment type.
+    const ampHmOnly = `AND(OR(FIND('amplifier',${A5}),FIND('house meeting',${A5}),FIND('host a house',${A5})),`
+      + `NOT(FIND('power camp',${A5})),NOT(FIND('regional',${A5})),NOT(FIND('school board',${A5})),`
+      + `NOT(FIND('parent team',${A5})),NOT(FIND('canvass',${A5})),NOT(FIND('testimony',${A5})),`
+      + `NOT(FIND('talk to 5',${A5})),NOT(FIND('other:',${A5})))`;
+    let followupCore, orgScope = null;
+    if (oid === LANEE_ID) {
+      followupCore = [ hasCommit, countyOr(LANEE_FOLLOWUP_COUNTIES) ];
+    } else if (oid === ELLENG_ID) {
+      followupCore = [ hasCommit, countyOr(ELLENG_COUNTIES) ];
+    } else if (oid === STEPHANIE_ID) {
+      // commitment anywhere except the 9, OR onboarding attendee in a no-team county
+      followupCore = [
+        `OR(AND(${hasCommit},NOT(${countyOr(STEPHANIE_EXCLUDE_COUNTIES)})),`
+        + `AND(${attendedOnboarding},NOT(${countyOr(STEPHANIE_TEAM_COUNTIES)})))`,
+      ];
+    } else if (oid === organizerId('kathryn')) {
+      followupCore = [ ampHmOnly ];   // statewide, amp/hm-only commitments
+    } else {
+      followupCore = [ `OR(${attendClauses},${hasCommit})` ];
+      orgScope = organizer;   // any other caller stays on the assigned_organizer split
+    }
     const filter = `AND(${[
       ...followupCore,
       ...trainingExcl,
       `NOT({one_on_one_booked})`,
       `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4)`,
-      ...callableExclusions(isElleng ? null : organizer),
+      ...callableExclusions(orgScope),
     ].join(',')})`;
     const fields = [...PROSPECT_FIELDS, ...Object.values(EVENT_META).map(m => m.attendField)];
     const candidates = [];
