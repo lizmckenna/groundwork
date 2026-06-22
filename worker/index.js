@@ -4019,6 +4019,8 @@ async function amplifiersExportCsv(env, urlObj) {
     const f = r.fields;
     const m = String(f.notes || '').match(/Amplifier:\s*([^·\n]+?)(?:\s*·|$)/);
     const name = m && m[1] ? m[1].trim() : '(unknown)';
+    // Skip test/smoke entries (and Liz's own test runs) so the leaderboard is real amplifiers only.
+    if (/test|smoke/i.test(name) || name.toLowerCase() === 'liz mckenna') continue;
     const a = amp[name] || (amp[name] = { total: 0, voters: new Set(), c1: 0, c2: 0, c3: 0, last: '' });
     a.total++;
     (f.contact || []).forEach(id => a.voters.add(id));
