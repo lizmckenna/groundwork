@@ -1428,7 +1428,8 @@ async function amendment5Signup(request, env) {
   // Organizer assignment via county → city → zip cascade.
   // Override: commitment-form completers in Ellen Glover's counties are hers
   // (Clay, Platte, Buchanan, Clinton — her ask 6/22). Applies to new + existing.
-  const cmtCounty = (zipToCounty(String(zip || '').trim().slice(0, 5)) || '').toLowerCase();
+  const derivedCounty = zipToCounty(String(zip || '').trim().slice(0, 5)) || '';
+  const cmtCounty = derivedCounty.toLowerCase();
   const isElleng = !!cmtCounty && ELLENG_COUNTIES.some(x => cmtCounty.includes(x));
   const organizerId = isElleng ? ELLENG_ID : deriveOrganizerId({ city, zip });
 
@@ -1449,6 +1450,7 @@ async function amendment5Signup(request, env) {
   if (street_address) baseFields.street_address = String(street_address).trim();
   if (city) baseFields.city = String(city).trim();
   if (zip) baseFields.zip = String(zip).trim();
+  if (derivedCounty) baseFields.county = derivedCounty;   // store county so turf routing works
   if (district) baseFields.district = String(district).trim();
   if (school) baseFields.school = String(school).trim();
   if (cRecruiter) baseFields.recruited_by = cRecruiter;
