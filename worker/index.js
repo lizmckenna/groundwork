@@ -2690,12 +2690,23 @@ async function getCallList(env, urlObj) {
     const trainingExcl = Object.values(EVENT_META)
       .filter(m => ['hm','amp','kyn'].includes(m.type) && m.signupField)
       .map(m => `NOT({${m.signupField}}='Signed up')`);
+    // Ellen G's follow-up list is county-scoped, not assigned-organizer-scoped:
+    // commitment-form completers in Clay/Platte/Buchanan/Clinton (her ask 6/22),
+    // regardless of who they were previously assigned to. Everyone else stays
+    // on the assigned_organizer split.
+    const isElleng = organizerId(organizer) === ELLENG_ID;
+    const followupCore = isElleng
+      ? [
+          `TRIM({amendment5_commitments}&'')!=''`,
+          `OR(${ELLENG_COUNTIES.map(c => `FIND('${c}',LOWER({county}&''))>0`).join(',')})`,
+        ]
+      : [ `OR(${attendClauses},TRIM({amendment5_commitments}&'')!='')` ];
     const filter = `AND(${[
-      `OR(${attendClauses},TRIM({amendment5_commitments}&'')!='')`,
+      ...followupCore,
       ...trainingExcl,
       `NOT({one_on_one_booked})`,
       `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4)`,
-      ...callableExclusions(organizer),
+      ...callableExclusions(isElleng ? null : organizer),
     ].join(',')})`;
     const fields = [...PROSPECT_FIELDS, ...Object.values(EVENT_META).map(m => m.attendField)];
     const candidates = [];
