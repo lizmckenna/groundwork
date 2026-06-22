@@ -4271,7 +4271,7 @@ async function getEventRoster(env, urlObj) {
       } while (o2);
       const want = [...new Set(rsvpIds)].filter(id => segment === 'confirmed' ? confIds.has(id) : !confIds.has(id));
       const contacts = await fetchContactsByIds(env, want);
-      const people = want.map(id => person(contacts[id] || {}, rmeta[id] || {}));
+      const people = want.map(id => person(contacts[id] || {}, { id, ...(rmeta[id] || {}) }));
       return json({ key, segment, count: people.length, people });
     }
     const wantAttend = segment === 'attended';
@@ -4298,7 +4298,7 @@ async function getEventRoster(env, urlObj) {
       offset = d.offset;
     } while (offset);
     const contacts = await fetchContactsByIds(env, ids);
-    const people = ids.map(id => person(contacts[id] || {}, meta[id] || {}));
+    const people = ids.map(id => person(contacts[id] || {}, { id, ...(meta[id] || {}) }));
     let kidsOut = {};
     if (segment === 'childcare') {
       const counts = Object.fromEntries(AGE_BANDS.map(b => [b, 0]));

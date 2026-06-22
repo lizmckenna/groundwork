@@ -418,7 +418,9 @@ async function loadConversion() {
 
 // ---- roster modal ----
 let rosterPeople = [];
+let rosterKey = '';
 async function openRoster(key, segment, segLabel, evLabel) {
+  rosterKey = key;
   const bg = document.getElementById('modal-bg');
   document.getElementById('modal-title').textContent = evLabel;
   document.getElementById('modal-sub').textContent = segLabel;
@@ -453,11 +455,23 @@ async function openRoster(key, segment, segLabel, evLabel) {
       const meta = [p.phone, p.email].filter(Boolean).join('  ·  ');
       const sub = [p.school, p.city].filter(Boolean).join(' · ');
       const tags = (p.pizza?'<span class="rtag pz">pizza</span>':'') + (p.childcare?`<span class="rtag cc">childcare${p.kids?' '+esc(p.kids):''}</span>`:'');
-      return `<div class="rperson"><div><div class="rname">${esc(p.name)}</div><div class="rmeta">${esc(meta)}${sub?'  ·  '+esc(sub):''}</div></div><div class="rtags">${tags}</div></div>`;
+      const zoomBtn = (p.id && p.email) ? `<button onclick="sendZoom(this,'${esc(p.id)}')" style="font:600 11px/1 system-ui;border:1px solid #2F5E3D;color:#2F5E3D;background:transparent;border-radius:6px;padding:5px 9px;cursor:pointer;margin-left:8px;white-space:nowrap">Send Zoom</button>` : '';
+      return `<div class="rperson"><div><div class="rname">${esc(p.name)}</div><div class="rmeta">${esc(meta)}${sub?'  ·  '+esc(sub):''}</div></div><div class="rtags">${tags}${zoomBtn}</div></div>`;
     }).join('');
   } catch (e) {
     document.getElementById('modal-body').innerHTML = `<div class="empty">Could not load: ${esc(e.message)}</div>`;
   }
+}
+async function sendZoom(btn, cid){
+  if(!cid || !rosterKey) return;
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const r = await authFetch(`${WORKER}/send-zoom-email`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ contact_id: cid, event: rosterKey }) });
+    const d = await r.json();
+    if (r.ok && d.ok) { btn.textContent = '✓ Sent'; btn.style.background='#2F5E3D'; btn.style.color='#fff'; }
+    else { btn.textContent = 'Failed'; btn.disabled=false; setTimeout(()=>{btn.textContent=orig;}, 2500); }
+  } catch(e){ btn.textContent='Failed'; btn.disabled=false; setTimeout(()=>{btn.textContent=orig;}, 2500); }
 }
 function closeModal(){ document.getElementById('modal-bg').style.display='none'; }
 document.getElementById('modal-x').addEventListener('click', closeModal);
