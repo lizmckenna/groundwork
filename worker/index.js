@@ -3967,22 +3967,24 @@ async function attendanceExportCsv(env, urlObj) {
   if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
   const event = urlObj.searchParams.get('event') || '';
   const evEsc = event.replace(/'/g, "\\'");
-  const cids = []; const seen = new Set(); let off = null;
+  const cidSelf = {};  // contact id -> true if any of their attendance rows is a self check-in
+  let off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=notes`;
     if (off) q += `&offset=${encodeURIComponent(off)}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
-    for (const r of d.records) { const c = (r.fields.contact || [])[0]; if (c && !seen.has(c)) { seen.add(c); cids.push(c); } }
+    for (const r of d.records) { const c = (r.fields.contact || [])[0]; if (!c) continue; cidSelf[c] = cidSelf[c] || /self check-in/i.test(String(r.fields.notes || '')); }
     off = d.offset;
   } while (off);
-  const emails = [];
+  const cids = Object.keys(cidSelf);
+  const lines = [];   // email,status  (status = "Self check-in" or "Attended")
   for (let i = 0; i < cids.length; i += 40) {
     const chunk = cids.slice(i, i + 40);
     const f = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
     const d = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=email`);
-    for (const r of d.records) { const e = String(r.fields.email || '').trim().toLowerCase(); if (e) emails.push(e); }
+    for (const r of d.records) { const e = String(r.fields.email || '').trim().toLowerCase(); if (e) lines.push(e + ',' + (cidSelf[r.id] ? 'Self check-in' : 'Attended')); }
   }
-  return new Response(emails.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=30', 'Access-Control-Allow-Origin': '*' } });
+  return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=30', 'Access-Control-Allow-Origin': '*' } });
 }
 
 async function contactsExportCsv(env, urlObj) {
@@ -4050,7 +4052,7 @@ async function sheetAttendance(request, env) {
     off = d.offset;
   } while (off);
 
-  const present = s => /^(attended|walk[\s-]?in|yes|present)$/i.test(String(s || '').trim());
+  const present = s => /^(attended|walk[\s-]?in|yes|present|self.?check.?in)$/i.test(String(s || '').trim());
   const toCreate = [], toDelete = [];
   const handled = new Set();
   for (const mk of body.marks) {

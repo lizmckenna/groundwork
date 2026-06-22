@@ -11,7 +11,7 @@ const KEY    = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
 const EVENT  = 'Eastern Jackson County Emergency Meeting 7/1';
 const LEADS  = 'LaNee,David,Facebook,Other';                 // <-- the lead names (+ Facebook/Other)
 const STATUS = 'Not started,Texted,Called,Left message,Confirmed coming,No answer,Declined';
-const ATTEND = 'Attended,No-show,Walk-in,Canceled';                    // Attendance dropdown
+const ATTEND = 'Self check-in,Attended,No-show,Walk-in,Canceled';       // Attendance dropdown
 const RSVP_URL = 'https://parents4mopublicschools.org/launches/eastern-jackson-county/';
 
 const TAB = 'RSVPs (live)';
@@ -54,6 +54,17 @@ function setUp(){
   // Warn anyone who tries to edit the live data columns A–H
   sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(p => { if (p.getDescription()==='GW live') p.remove(); });
   sh.getRange(1, 1, sh.getMaxRows(), DATA_COLS).protect().setDescription('GW live').setWarningOnly(true);
+  // Color the Attendance column so a self check-in pops green as people arrive.
+  const attCol = M_START + 3;
+  const attRange = sh.getRange(FIRST, attCol, sh.getMaxRows() - FIRST + 1, 1);
+  let cfRules = sh.getConditionalFormatRules().filter(r => !r.getRanges().some(rg => rg.getColumn() === attCol));
+  const cf = (txt, bg, fc) => { let b = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(txt).setBackground(bg); if (fc) b = b.setFontColor(fc); return b.setRanges([attRange]).build(); };
+  cfRules.push(cf('Self check-in', '#188038', '#ffffff'));  // strong green = checked themselves in
+  cfRules.push(cf('Attended', '#CEEAD6'));                  // soft green
+  cfRules.push(cf('Walk-in', '#CEEAD6'));
+  cfRules.push(cf('No-show', '#F4C7C3'));                   // soft red
+  cfRules.push(cf('Canceled', '#E0E0E0'));                  // grey
+  sh.setConditionalFormatRules(cfRules);
   // Auto-refresh every minute
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction()==='refreshRSVPs') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('refreshRSVPs').timeBased().everyMinutes(1).create();
@@ -83,18 +94,18 @@ function refreshRSVPs(){
   sh.getRange(HDR, 1, 1, DATA_COLS).setValues([rows[0].slice(0, DATA_COLS)]);   // data headers on row 2
   const body = rows.slice(1); if (!body.length) { writeStats(); return; }
   sh.getRange(FIRST, 1, body.length, DATA_COLS).setValues(body.map(r => r.slice(0, DATA_COLS)));
-  // Who has checked in / been marked attended in the database, to fill Attendance live.
-  let attended = new Set();
+  // Attendance from the database, with its type: "Self check-in" (door QR) vs "Attended".
+  let attMap = {};
   try {
     const au = 'https://groundwork-pilot.elizabethmck.workers.dev/export/attendance.csv?key='+encodeURIComponent(KEY)+'&event='+encodeURIComponent(EVENT)+'&t='+Date.now();
-    String(UrlFetchApp.fetch(au, {muteHttpExceptions:true}).getContentText()).split('\n').forEach(e => { e=e.trim().toLowerCase(); if (e) attended.add(e); });
+    Utilities.parseCsv(UrlFetchApp.fetch(au, {muteHttpExceptions:true}).getContentText()).forEach(row => { const e=String(row[0]||'').trim().toLowerCase(); if (e) attMap[e] = String(row[1]||'Attended').trim(); });
   } catch(e){}
   const reM = body.map(r => {
     const em = String(r[2]||'').trim().toLowerCase();
     const pm = byEmail[em]; const m = pm ? pm.slice() : new Array(N).fill('');
-    // Attendance = last manual column: "Attended" comes live from the database
-    // (check-ins + dashboard); keep a manual No-show / Canceled if a lead set one.
-    let att = attended.has(em) ? 'Attended' : '';
+    // Attendance = last manual column: live status from the database (Self check-in /
+    // Attended); keep a manual No-show / Canceled if a lead set one.
+    let att = attMap[em] || '';
     if (!att && /^(no.?show|canceled|cancelled)$/i.test(String(m[N-1]||''))) att = m[N-1];
     m[N-1] = att;
     return m;
