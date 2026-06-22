@@ -261,6 +261,8 @@ export default {
       // Live feed of house-meeting attendees + their commitments for the HM
       // follow-up Sheet (host follow-up). Append-ordered so manual columns stay aligned.
       if (url.pathname === '/export/house-meetings.csv' && request.method === 'GET') return await houseMeetingsExportCsv(env, url);
+      // Per-amplifier activity rollup (who's calling, how many, unique voters) — read-only leaderboard feed.
+      if (url.pathname === '/export/amplifiers.csv' && request.method === 'GET') return await amplifiersExportCsv(env, url);
       // Sheet → Airtable write-back for HM follow-up columns (status, 1-1, notes), by contact id.
       if (url.pathname === '/sheet-hm-followup' && request.method === 'POST') return await sheetHmFollowup(request, env);
       // Sheet → Airtable attendance write-back for launches (gated by EXPORT_KEY,
@@ -3996,6 +3998,51 @@ async function sheetHmFollowup(request, env) {
     updated += batch.length;
   }
   return json({ ok: true, updated });
+}
+
+// Per-amplifier rollup for the amplifier activity tracker: who's making calls,
+// how many conversations, unique voters reached, broken out by conversation round.
+// Amplifier identity is parsed from the log notes ("Amplifier: <name>").
+async function amplifiersExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const recs = []; let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`{method}='Amplifier conversation'`)}&pageSize=100`
+      + ['notes', 'contact', 'event', 'date'].map(f => `&fields%5B%5D=${encodeURIComponent(f)}`).join('');
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    recs.push(...d.records);
+    off = d.offset;
+  } while (off);
+  const amp = {};   // name -> { total, voters:Set, c1, c2, c3, last }
+  for (const r of recs) {
+    const f = r.fields;
+    const m = String(f.notes || '').match(/Amplifier:\s*([^·\n]+?)(?:\s*·|$)/);
+    const name = m && m[1] ? m[1].trim() : '(unknown)';
+    const a = amp[name] || (amp[name] = { total: 0, voters: new Set(), c1: 0, c2: 0, c3: 0, last: '' });
+    a.total++;
+    (f.contact || []).forEach(id => a.voters.add(id));
+    const ev = String(f.event || '');
+    if (/Conv 1/.test(ev)) a.c1++;
+    else if (/Conv 2/.test(ev)) a.c2++;
+    else if (/Conv 3|Election/i.test(ev)) a.c3++;
+    const dt = String(f.date || '');
+    if (dt > a.last) a.last = dt;
+  }
+  const names = Object.keys(amp).sort((x, y) => amp[y].total - amp[x].total || x.localeCompare(y));
+  if (urlObj.searchParams.get('stats')) {
+    const allVoters = new Set(); let totalConv = 0;
+    for (const n of names) { totalConv += amp[n].total; amp[n].voters.forEach(v => allVoters.add(v)); }
+    const out = [['metric', 'value'].join(','), ['amplifiers', names.length].join(','), ['conversations', totalConv].join(','), ['unique_voters', allVoters.size].join(',')].join('\n');
+    return new Response(out, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
+  }
+  const e = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [['Amplifier', 'Total conversations', 'Unique voters', 'Conv 1 (Stakes)', 'Conv 2 (Vote plan)', 'Conv 3 / Election day', 'Last activity'].join(',')];
+  for (const n of names) {
+    const a = amp[n];
+    lines.push([n, a.total, a.voters.size, a.c1, a.c2, a.c3, a.last].map(e).join(','));
+  }
+  return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
 }
 
 async function rsvpExportCsv(env, urlObj) {
