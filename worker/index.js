@@ -3205,17 +3205,9 @@ ${ev.preview}
 
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%">
 
-        <tr><td style="padding:0 0 28px">
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-            <tr>
-              <td width="64" style="padding-right:14px;vertical-align:middle">
-                <img src="https://parents4mopublicschools.org/brand/logo-circle-512.png" width="64" height="64" alt="Parents for Missouri Public Schools" style="display:block;border:0;border-radius:50%">
-              </td>
-              <td style="vertical-align:middle;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:16px;line-height:1.15;text-transform:uppercase;letter-spacing:.01em;color:#1A2418">
-                Parents for Missouri<br/>Public Schools
-              </td>
-            </tr>
-          </table>
+        <tr><td align="center" style="padding:0 0 26px">
+          <img src="https://parents4mopublicschools.org/brand/logo-circle-512.png" width="120" height="120" alt="Parents for Missouri Public Schools" style="display:block;border:0;border-radius:50%;margin:0 auto 10px">
+          <div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:13px;line-height:1.2;text-transform:uppercase;letter-spacing:.04em;color:#1A2418;white-space:nowrap">Parents for Missouri Public Schools</div>
         </td></tr>
 
         <tr><td style="padding:0 0 20px">
