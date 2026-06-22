@@ -27,7 +27,6 @@ function setUp(){
     .setWrap(true).setVerticalAlignment('middle');
   sh.setRowHeight(1,44);
   sh.setFrozenRows(2);
-  sh.setFrozenColumns(1);
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction()==='refreshAMP') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('refreshAMP').timeBased().everyMinutes(1).create();
   refreshAMP();
