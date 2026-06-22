@@ -3967,10 +3967,10 @@ async function houseMeetingsExportCsv(env, urlObj) {
     return new Response(out, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
   }
   const e = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [['Contact ID', 'Host', 'HM Date', 'First Name', 'Last Name', 'Email', 'Phone', 'Commitments', 'School', 'District', 'County', '1-1 booked'].join(',')];
+  const lines = [['First Name', 'Last Name', 'Host', 'HM Date', 'Phone', 'Email', 'Commitments', 'School', 'District', 'County', 'Contact ID', '1-1 booked'].join(',')];
   for (const r of recs) {
     const f = r.fields;
-    lines.push([r.id, f.house_meeting_host || '', f.house_meeting_date || '', f.first || '', f.last || '', f.email || '', f.phone || '', f.house_meeting_commitments || '', f.school || '', f.district || '', f.county || '', f.one_on_one_booked ? 'Yes' : ''].map(e).join(','));
+    lines.push([f.first || '', f.last || '', f.house_meeting_host || '', f.house_meeting_date || '', f.phone || '', f.email || '', f.house_meeting_commitments || '', f.school || '', f.district || '', f.county || '', r.id, f.one_on_one_booked ? 'Yes' : ''].map(e).join(','));
   }
   return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
 }
