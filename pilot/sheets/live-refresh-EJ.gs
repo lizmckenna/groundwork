@@ -224,3 +224,60 @@ function installHelp(){
   h.activate();
   SpreadsheetApp.flush();
 }
+
+
+// Standalone: rebuild ONLY the How-to tab (no network, fast — safe to run anytime).
+// Features the door sign-in link in a yellow highlight for registrants AND walk-ins.
+function rebuildHowTo(){
+  const ss = SpreadsheetApp.getActive();
+  const CHECKIN_URL = 'https://parents4mopublicschools.org/checkin/eastern-jackson-county/';
+  const RSVP_LINK = 'https://parents4mopublicschools.org/launches/eastern-jackson-county/';
+  let h = ss.getSheetByName('\uD83D\uDCD6 How to use');
+  if (!h) h = ss.insertSheet('\uD83D\uDCD6 How to use', 0);
+  h.clear();
+  try { h.setHiddenGridlines(true); } catch(e){}
+  h.setColumnWidth(1, 860);
+  const rows = [
+    ['\uD83D\uDCD6 How to use this tracker','title'],
+    ['','gap'],
+    ['\u2B50 Door sign-in link \u2014 share with registrants AND walk-ins','h'],
+    [CHECKIN_URL,'linkhl'],
+    ['Put this on a tablet or a printed QR at the welcome table. Registrants start typing their name and tap it; walk-ins tap "I am new here" and add their info (incl. school + district). Self check-ins turn green in the Attendance column automatically.','p'],
+    ['','gap'],
+    ['Claim someone who registered','h'],
+    ['On the RSVPs (live) tab, find the person and pick your name in the yellow "Claimed by" column. It adds to your number on the Goals tab right away.','p'],
+    ['Never type a person into the RSVPs (live) tab. It is the live list from the database, and anything typed there is erased on the next refresh.','note'],
+    ['','gap'],
+    ['Attendance fills itself in','h'],
+    ['When someone checks in at the door, their row turns green and shows "Self check-in" on its own. You can also hand-mark Attended / No-show / Canceled for anyone who did not scan.','p'],
+    ['','gap'],
+    ['Reminder calls and texts','h'],
+    ['Use the yellow "Reminder: assigned to" and "Reminder: status" columns. They stay attached to each person through every refresh.','p'],
+    ['','gap'],
+    ['Change a goal','h'],
+    ['On the Goals tab, type a new number in the "Goal" column. Everything recalculates on its own.','p'],
+    ['','gap'],
+    ['Add a new lead','h'],
+    ['Goals tab: type the new name above TOTAL and set their Goal, then copy the row above and paste into the new row. Duplicate the "Template (copy me)" tab for their personal list.','p'],
+    ['','gap'],
+    ['RSVP link (to recruit before the event)','h'],
+    [RSVP_LINK,'link'],
+  ];
+  h.getRange(1,1,rows.length,1).setValues(rows.map(function(r){ return [r[0]]; }));
+  rows.forEach(function(it,i){
+    const c = h.getRange(i+1,1).setWrap(true).setVerticalAlignment('middle');
+    if (it[1]==='title'){ c.setFontSize(18).setFontWeight('bold').setFontColor('#ffffff').setBackground('#1F5C3D'); h.setRowHeight(i+1,48); }
+    else if (it[1]==='h'){ c.setFontSize(13).setFontWeight('bold').setFontColor('#1F5C3D'); h.setRowHeight(i+1,28); }
+    else if (it[1]==='note'){ c.setFontSize(11).setFontColor('#9A3412').setFontStyle('italic'); h.setRowHeight(i+1,42); }
+    else if (it[1]==='link'){ c.setFontSize(11).setFontColor('#2563EB'); h.setRowHeight(i+1,24); }
+    else if (it[1]==='linkhl'){
+      const rt = SpreadsheetApp.newRichTextValue().setText(it[0]).setLinkUrl(it[0])
+        .setTextStyle(SpreadsheetApp.newTextStyle().setBold(true).setFontSize(13).build()).build();
+      c.setRichTextValue(rt).setBackground('#FFF4CC'); h.setRowHeight(i+1,36);
+    }
+    else if (it[1]==='gap'){ h.setRowHeight(i+1,8); }
+    else { c.setFontSize(11).setFontColor('#1A2418'); h.setRowHeight(i+1,38); }
+  });
+  h.activate();
+  SpreadsheetApp.flush();
+}
