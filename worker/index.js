@@ -4322,7 +4322,7 @@ async function getEventRoster(env, urlObj) {
       let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=phone&fields%5B%5D=email&fields%5B%5D=school&fields%5B%5D=city&fields%5B%5D=${encodeURIComponent(m.attendField)}`;
       if (offset) q += `&offset=${encodeURIComponent(offset)}`;
       const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
-      for (const r of d.records) people.push(person(r.fields, { status: r.fields[m.attendField] }));
+      for (const r of d.records) people.push(person(r.fields, { id: r.id, status: r.fields[m.attendField] }));
       offset = d.offset;
     } while (offset);
     return json({ key, segment, count: people.length, people });
@@ -4352,7 +4352,7 @@ async function getEventRoster(env, urlObj) {
   let entries = Object.entries(signed);
   if (segment === 'confirmed') entries = entries.filter(([id]) => confirmedIds.has(id));
   if (segment === 'unconfirmed') entries = entries.filter(([id]) => !confirmedIds.has(id));
-  const people = entries.map(([id, f]) => person(f, { confirmed: confirmedIds.has(id) }));
+  const people = entries.map(([id, f]) => person(f, { id, confirmed: confirmedIds.has(id) }));
   return json({ key, segment, count: people.length, people });
 }
 
