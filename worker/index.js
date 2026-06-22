@@ -258,6 +258,11 @@ export default {
       // Who has attended/checked in (by email) — lets the turnout Sheet fill its
       // Attendance column live from check-ins without shifting any columns.
       if (url.pathname === '/export/attendance.csv' && request.method === 'GET') return await attendanceExportCsv(env, url);
+      // Live feed of house-meeting attendees + their commitments for the HM
+      // follow-up Sheet (host follow-up). Append-ordered so manual columns stay aligned.
+      if (url.pathname === '/export/house-meetings.csv' && request.method === 'GET') return await houseMeetingsExportCsv(env, url);
+      // Sheet → Airtable write-back for HM follow-up columns (status, 1-1, notes), by contact id.
+      if (url.pathname === '/sheet-hm-followup' && request.method === 'POST') return await sheetHmFollowup(request, env);
       // Sheet → Airtable attendance write-back for launches (gated by EXPORT_KEY,
       // same key the turnout Sheets already carry). Leads mark Attended/No-show in
       // the Sheet; this upserts the 'Event attendance' rows the dashboard counts.
@@ -3936,6 +3941,63 @@ async function getCommitmentConversion(env) {
 }
 
 // Canonical deduped RSVP list as CSV, for Google Sheets =IMPORTDATA(). Token-gated.
+// Live feed of house-meeting attendees + their commitments, for the HM follow-up
+// Sheet. Append-ordered (date, host, last name) so the Sheet's manual columns
+// stay aligned as new attendees come in.
+async function houseMeetingsExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const flds = ['first','last','email','phone','house_meeting_host','house_meeting_date','house_meeting_commitments','school','district','county','one_on_one_booked'];
+  const recs = []; let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`TRIM({house_meeting_date}&'')!=''`)}&pageSize=100`
+      + flds.map(f => `&fields%5B%5D=${encodeURIComponent(f)}`).join('');
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    recs.push(...d.records);
+    off = d.offset;
+  } while (off);
+  recs.sort((a, b) => {
+    const k = r => `${r.fields.house_meeting_date || ''}|${(r.fields.house_meeting_host || '').toLowerCase()}|${r.fields.last || ''}`;
+    return k(a).localeCompare(k(b));
+  });
+  if (urlObj.searchParams.get('stats')) {
+    const hosts = new Set(); let commits = 0;
+    for (const r of recs) { const h = (r.fields.house_meeting_host || '').toLowerCase().trim(); if (h) hosts.add(h); if ((r.fields.house_meeting_commitments || '').trim()) commits++; }
+    const out = [['metric', 'value'].join(','), ['attendees', recs.length].join(','), ['hosts', hosts.size].join(','), ['made_commitments', commits].join(',')].join('\n');
+    return new Response(out, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
+  }
+  const e = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [['Contact ID', 'Host', 'HM Date', 'First Name', 'Last Name', 'Email', 'Phone', 'Commitments', 'School', 'District', 'County', '1-1 booked'].join(',')];
+  for (const r of recs) {
+    const f = r.fields;
+    lines.push([r.id, f.house_meeting_host || '', f.house_meeting_date || '', f.first || '', f.last || '', f.email || '', f.phone || '', f.house_meeting_commitments || '', f.school || '', f.district || '', f.county || '', f.one_on_one_booked ? 'Yes' : ''].map(e).join(','));
+  }
+  return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Sheet → Airtable write-back for the HM follow-up Sheet. Only one_on_one_booked
+// rounds back to Airtable for now (the conversion signal that drops people off
+// other follow-up lists); status/claimed/notes live in the Sheet until we add
+// dedicated fields. rows: [{ contact_id, one_on_one }].
+async function sheetHmFollowup(request, env) {
+  if (!env.EXPORT_KEY) return json({ error: 'not configured' }, 500);
+  const body = await request.json().catch(() => ({}));
+  if (body.key !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  const records = [];
+  for (const r of rows) {
+    if (!r.contact_id || r.one_on_one === undefined) continue;
+    records.push({ id: r.contact_id, fields: { one_on_one_booked: !!r.one_on_one } });
+  }
+  let updated = 0;
+  for (let i = 0; i < records.length; i += 10) {
+    const batch = records.slice(i, i + 10);
+    await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+    updated += batch.length;
+  }
+  return json({ ok: true, updated });
+}
+
 async function rsvpExportCsv(env, urlObj) {
   if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
   const event = urlObj.searchParams.get('event') || 'Northland Emergency Meeting 6/18';
