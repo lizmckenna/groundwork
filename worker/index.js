@@ -1697,6 +1697,8 @@ async function eventCheckin(request, env) {
   const cLast = clean(body.last);
   const cEmail = body.email ? String(body.email).toLowerCase().trim() : '';
   const cPhone = body.phone ? String(body.phone).trim() : '';
+  const cSchool = clean(body.school);
+  const cDistrict = clean(body.district);
   const event = clean(body.event);
   const pickedId = /^rec[A-Za-z0-9]{14,}$/.test(clean(body.contact_id)) ? clean(body.contact_id) : null;
   if (!event) return json({ error: 'missing event' }, 400);
@@ -1730,6 +1732,8 @@ async function eventCheckin(request, env) {
         const fields = { first: cFirst, last: cLast, leader_ladder: 'Prospect', source: `checked in at ${event}`, events_signed_up: [event] };
         if (cEmail) fields.email = cEmail;
         if (cPhone) fields.phone = cPhone;
+        if (cSchool) fields.school = cSchool;
+        if (cDistrict) fields.district = cDistrict;
         const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
         cid = created.records[0].id;
       } catch (e) {
