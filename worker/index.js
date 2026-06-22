@@ -231,6 +231,7 @@ export default {
       if (url.pathname === '/amendment5-signup' && request.method === 'POST') return await amendment5Signup(request, env);
       if (url.pathname === '/training-signup' && request.method === 'POST') return await trainingSignup(request, env);
       if (url.pathname === '/launch-rsvp' && request.method === 'POST') return await launchRsvp(request, env);
+      if (url.pathname === '/event-checkin' && request.method === 'POST') return await eventCheckin(request, env);
       if (url.pathname === '/remind-signup' && request.method === 'POST') return await remindSignup(request, env);
       if (url.pathname === '/house-meeting-hosts' && request.method === 'GET') return await houseMeetingHosts(env);
       if (url.pathname === '/event-detail' && request.method === 'GET') return await eventDetail(env, url);
@@ -1670,6 +1671,85 @@ function normalizeLaunch(launch) {
     return `${region} Emergency Meeting${date}`;
   }
   return s;
+}
+
+// Public self check-in at the door (parents4mopublicschools.org/checkin/...).
+// One QR for everyone: registered folks check themselves off, walk-ins get
+// created on the spot, and attendance flows straight to the events dashboard.
+async function eventCheckin(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:checkin:${ip}`;
+  let count = 0;
+  try { count = parseInt(await env.KV_BINDING.get(rlKey) || '0'); } catch {}
+  if (count >= 80) return json({ error: 'too many requests, try again later' }, 429, { 'Retry-After': '300' });
+  try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
+
+  const body = await request.json().catch(() => null);
+  if (!body) return json({ error: 'bad request' }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
+
+  const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
+  const cFirst = clean(body.first);
+  const cLast = clean(body.last);
+  const cEmail = body.email ? String(body.email).toLowerCase().trim() : '';
+  const cPhone = body.phone ? String(body.phone).trim() : '';
+  const event = clean(body.event);
+  if (!event) return json({ error: 'missing event' }, 400);
+  if (!cFirst || !cLast) return json({ error: 'first and last name are required' }, 400);
+  if (!cEmail && !cPhone) return json({ error: 'please give an email or a phone number' }, 400);
+  const today = todayCT();
+
+  // Find an existing contact by email then phone.
+  let cid = null;
+  try {
+    if (cEmail) {
+      const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+      if (r.records.length) cid = r.records[0].id;
+    }
+    if (!cid && cPhone) {
+      const digits = cPhone.replace(/\D/g, '').slice(-10);
+      if (digits.length === 10) {
+        const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+        if (r2.records.length) cid = r2.records[0].id;
+      }
+    }
+  } catch (e) { /* fall through and create */ }
+
+  const walkIn = !cid;
+  if (!cid) {
+    try {
+      const fields = { first: cFirst, last: cLast, leader_ladder: 'Prospect', source: `checked in at ${event}`, events_signed_up: [event] };
+      if (cEmail) fields.email = cEmail;
+      if (cPhone) fields.phone = cPhone;
+      const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+      cid = created.records[0].id;
+    } catch (e) {
+      return json({ error: 'could not check you in, please see a volunteer' }, 500);
+    }
+  }
+
+  // Idempotent: one attendance row per person per event (handles double-scans).
+  let already = false;
+  try {
+    const evEsc = event.replace(/'/g, "\\'");
+    const q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    already = (d.records || []).some(r => (r.fields.contact || []).includes(cid));
+  } catch (e) {}
+
+  if (!already) {
+    try {
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
+        Summary: `${today} — Checked in: ${event} (${cFirst} ${cLast})`,
+        date: today, method: 'Event attendance', result: 'Attended', rsvp_launch: event, contact: [cid],
+        notes: walkIn ? 'Self check-in at the door (walk-in)' : 'Self check-in at the door',
+      }}], typecast: true }) });
+    } catch (e) {
+      return json({ error: 'could not check you in, please see a volunteer' }, 500);
+    }
+  }
+  await env.KV_BINDING.delete('cache:events-overview:v7').catch(() => null);
+  return json({ ok: true, checked_in: true, already, walk_in: walkIn, name: cFirst });
 }
 
 async function launchRsvp(request, env) {
