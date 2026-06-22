@@ -74,7 +74,10 @@ const SIGNUP_OUTCOME_EVENTS = Object.fromEntries(
 );
 const LANEE_ID = 'rec0OmDN68hlffkTn';
 const STEPHANIE_ID = 'recnnEdYIPcclnPLY';
+const ELLENG_ID = 'recLxOVc6xTdYGdB8';
 const LANEE_COUNTIES = ['jackson', 'cass', 'johnson', 'platte', 'clay', 'lafayette', 'buchanan', 'ray'];
+// Ellen Glover owns commitment-form follow-up in these counties (her ask 6/22).
+const ELLENG_COUNTIES = ['clay', 'platte', 'buchanan', 'clinton'];
 // KC-metro cities — fallback when no county is supplied
 const LANEE_KC_CITIES = ['kansas city','independence','liberty','gladstone','raytown','grandview',"lee's summit",'lees summit','blue springs','belton','overland park','shawnee','olathe','lenexa','leawood','mission','merriam'];
 // ZIP → county lookup for MO + KS (generated from pgeocode/GeoNames data — 1905 entries).
@@ -111,6 +114,7 @@ const ORGANIZER_IDS_LC = {
   'laneé':     LANEE_ID,
   'stephanie': STEPHANIE_ID,
   'kathryn':   'recMGgwIl623aOVX2',   // Kathryn Evans — walk-ins + signups from her dashboard attribute to her
+  'elleng':    ELLENG_ID,             // Ellen Glover — commitment follow-up in Clay/Platte/Buchanan/Clinton
 };
 function organizerId(name) {
   if (!name) return null;
@@ -1414,8 +1418,12 @@ async function amendment5Signup(request, env) {
     }
   }
 
-  // Organizer assignment via county → city → zip cascade
-  const organizerId = deriveOrganizerId({ city, zip });
+  // Organizer assignment via county → city → zip cascade.
+  // Override: commitment-form completers in Ellen Glover's counties are hers
+  // (Clay, Platte, Buchanan, Clinton — her ask 6/22). Applies to new + existing.
+  const cmtCounty = (zipToCounty(String(zip || '').trim().slice(0, 5)) || '').toLowerCase();
+  const isElleng = !!cmtCounty && ELLENG_COUNTIES.some(x => cmtCounty.includes(x));
+  const organizerId = isElleng ? ELLENG_ID : deriveOrganizerId({ city, zip });
 
   // Determine which event this commitment belongs to based on today's date
   const today = todayCT();
@@ -1451,6 +1459,8 @@ async function amendment5Signup(request, env) {
     if (other_text && commitments.includes('Other')) parts.push(`Other: ${other_text}`);
     baseFields.amendment5_commitments = parts.join(' · ');
   }
+  // Ellen G owns commitment follow-up in her counties — reassign even existing contacts.
+  if (isElleng) baseFields.assigned_organizer = [ELLENG_ID];
 
   let contactId;
   if (existingId) {
@@ -2513,6 +2523,7 @@ const ORGANIZER_NAMES_LC = {
   'laneé':     'Bridewell',
   'stephanie': 'Stephanie Rittgers',
   'kathryn':   'Kathryn',           // partial match on first name — her queue is whoever's assigned to her
+  'elleng':    'Ellen Glover',
 };
 function organizerName(name) {
   if (!name) return null;

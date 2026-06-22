@@ -27,6 +27,15 @@ const PAGES = {
     eyebrow: 'Follow-up calls · Kathryn',
     defaultList: 'unconverted',
   },
+  elleng: {
+    slug: 'elleng',
+    pill: 'Ellen G',
+    fullName: 'Ellen Glover',
+    // Ellen G's slice: commitment-form follow-up in Clay, Platte, Buchanan,
+    // and Clinton Counties (assigned to her). Default to the follow-up queue.
+    eyebrow: 'Commitment follow-up · Ellen Glover',
+    defaultList: 'unconverted',
+  },
 };
 
 for (const page of Object.values(PAGES)) {
