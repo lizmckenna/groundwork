@@ -232,6 +232,7 @@ export default {
       if (url.pathname === '/training-signup' && request.method === 'POST') return await trainingSignup(request, env);
       if (url.pathname === '/launch-rsvp' && request.method === 'POST') return await launchRsvp(request, env);
       if (url.pathname === '/event-checkin' && request.method === 'POST') return await eventCheckin(request, env);
+      if (url.pathname === '/event-roster-public' && request.method === 'GET') return await eventRosterPublic(env, url);
       if (url.pathname === '/remind-signup' && request.method === 'POST') return await remindSignup(request, env);
       if (url.pathname === '/house-meeting-hosts' && request.method === 'GET') return await houseMeetingHosts(env);
       if (url.pathname === '/event-detail' && request.method === 'GET') return await eventDetail(env, url);
@@ -1694,37 +1695,43 @@ async function eventCheckin(request, env) {
   const cEmail = body.email ? String(body.email).toLowerCase().trim() : '';
   const cPhone = body.phone ? String(body.phone).trim() : '';
   const event = clean(body.event);
+  const pickedId = /^rec[A-Za-z0-9]{14,}$/.test(clean(body.contact_id)) ? clean(body.contact_id) : null;
   if (!event) return json({ error: 'missing event' }, 400);
-  if (!cFirst || !cLast) return json({ error: 'first and last name are required' }, 400);
-  if (!cEmail && !cPhone) return json({ error: 'please give an email or a phone number' }, 400);
+  if (!pickedId) {
+    if (!cFirst || !cLast) return json({ error: 'first and last name are required' }, 400);
+    if (!cEmail && !cPhone) return json({ error: 'please give an email or a phone number' }, 400);
+  }
   const today = todayCT();
 
-  // Find an existing contact by email then phone.
-  let cid = null;
-  try {
-    if (cEmail) {
-      const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
-      if (r.records.length) cid = r.records[0].id;
-    }
-    if (!cid && cPhone) {
-      const digits = cPhone.replace(/\D/g, '').slice(-10);
-      if (digits.length === 10) {
-        const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
-        if (r2.records.length) cid = r2.records[0].id;
-      }
-    }
-  } catch (e) { /* fall through and create */ }
-
-  const walkIn = !cid;
+  // Resolve the contact: a registrant picked from the name search, else match by
+  // email/phone, else create a walk-in.
+  let cid = pickedId;
+  let walkIn = false;
   if (!cid) {
     try {
-      const fields = { first: cFirst, last: cLast, leader_ladder: 'Prospect', source: `checked in at ${event}`, events_signed_up: [event] };
-      if (cEmail) fields.email = cEmail;
-      if (cPhone) fields.phone = cPhone;
-      const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
-      cid = created.records[0].id;
-    } catch (e) {
-      return json({ error: 'could not check you in, please see a volunteer' }, 500);
+      if (cEmail) {
+        const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+        if (r.records.length) cid = r.records[0].id;
+      }
+      if (!cid && cPhone) {
+        const digits = cPhone.replace(/\D/g, '').slice(-10);
+        if (digits.length === 10) {
+          const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+          if (r2.records.length) cid = r2.records[0].id;
+        }
+      }
+    } catch (e) { /* fall through and create */ }
+    walkIn = !cid;
+    if (!cid) {
+      try {
+        const fields = { first: cFirst, last: cLast, leader_ladder: 'Prospect', source: `checked in at ${event}`, events_signed_up: [event] };
+        if (cEmail) fields.email = cEmail;
+        if (cPhone) fields.phone = cPhone;
+        const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+        cid = created.records[0].id;
+      } catch (e) {
+        return json({ error: 'could not check you in, please see a volunteer' }, 500);
+      }
     }
   }
 
@@ -1750,6 +1757,41 @@ async function eventCheckin(request, env) {
   }
   await env.KV_BINDING.delete('cache:events-overview:v7').catch(() => null);
   return json({ ok: true, checked_in: true, already, walk_in: walkIn, name: cFirst });
+}
+
+// Public name search for the check-in page: type a couple letters, get matching
+// registrants to pick from. Returns names + record ids only (no emails/phones) —
+// a paper sign-in sheet made digital. Cached per event so keystrokes are cheap.
+async function eventRosterPublic(env, urlObj) {
+  const event = (urlObj.searchParams.get('event') || '').trim();
+  const q = (urlObj.searchParams.get('q') || '').trim().toLowerCase();
+  if (!event || q.length < 2) return json({ matches: [] });
+  const ckey = 'cache:roster:' + event;
+  let roster = await cacheGet(env, ckey);
+  if (!roster) { roster = await buildEventRoster(env, event); await cachePut(env, ckey, roster, 120); }
+  const matches = roster.filter(p => p.name.toLowerCase().includes(q)).slice(0, 25);
+  return json({ matches });
+}
+
+async function buildEventRoster(env, event) {
+  const evEsc = event.replace(/'/g, "\\'");
+  const ids = []; const seen = new Set(); let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) { const c = (r.fields.contact || [])[0]; if (c && !seen.has(c)) { seen.add(c); ids.push(c); } }
+    off = d.offset;
+  } while (off);
+  const out = [];
+  for (let i = 0; i < ids.length; i += 40) {
+    const chunk = ids.slice(i, i + 40);
+    const f = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last`);
+    for (const r of d.records) { const nm = `${r.fields.first || ''} ${r.fields.last || ''}`.trim(); if (nm) out.push({ id: r.id, name: nm }); }
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
 }
 
 async function launchRsvp(request, env) {
