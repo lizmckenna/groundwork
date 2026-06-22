@@ -38,7 +38,7 @@ function setUp(){
   if (!sh) sh = ss.insertSheet(TAB);
   sh.getRange(1, 1, 1, TOTAL_COLS).breakApart();
   sh.getRange(1, 3, 1, TOTAL_COLS - 2).merge()
-    .setValue(BANNER).setFontWeight('bold').setFontColor('#7A1F1A').setBackground('#FCE2DE')
+    .setValue(BANNER).setFontWeight('bold').setFontColor('#1F5C3D').setBackground('#E6F0E8')
     .setWrap(true).setVerticalAlignment('middle').setHorizontalAlignment('left');
   sh.setRowHeight(1, 54);
   sh.getRange(HDR, M_START, 1, MANUAL.length).setValues([MANUAL]).setFontWeight('bold').setBackground('#FFF4CC');
@@ -82,7 +82,8 @@ function refreshHM(){
   const rows = Utilities.parseCsv(UrlFetchApp.fetch(url,{muteHttpExceptions:true}).getContentText());
   if (rows.length < 1) return;
   if (last >= FIRST) sh.getRange(FIRST,1,last-FIRST+1,TOTAL_COLS).clearContent();
-  sh.getRange(HDR,1,1,DATA_COLS).setValues([rows[0].slice(0,DATA_COLS)]);
+  sh.getRange(HDR,1,1,DATA_COLS).setValues([rows[0].slice(0,DATA_COLS)])
+    .setFontWeight('bold').setBackground('#1F5C3D').setFontColor('#ffffff');
   const body = rows.slice(1); if (!body.length) return;
   sh.getRange(FIRST,1,body.length,DATA_COLS).setValues(body.map(r=>r.slice(0,DATA_COLS)));
   const reM = body.map(r=>{
