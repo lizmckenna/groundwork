@@ -6,3 +6,13 @@ keep_vars = true
 [[kv_namespaces]]
 binding = "KV_BINDING"
 id = "62821503789649ffa80d2882919a8741"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
