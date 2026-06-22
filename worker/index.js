@@ -3208,18 +3208,8 @@ ${ev.preview}
         <tr><td style="padding:0 0 28px">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0">
             <tr>
-              <td width="44" style="padding-right:14px;vertical-align:middle">
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                  <tr><td width="44" height="44" bgcolor="#B25048" style="background:#B25048;border-radius:22px" align="center">
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                      <tr><td width="32" height="32" bgcolor="#C99633" style="background:#C99633;border-radius:16px" align="center">
-                        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                          <tr><td width="16" height="16" bgcolor="#E9E5CE" style="background:#E9E5CE;border-radius:8px"></td></tr>
-                        </table>
-                      </td></tr>
-                    </table>
-                  </td></tr>
-                </table>
+              <td width="64" style="padding-right:14px;vertical-align:middle">
+                <img src="https://parents4mopublicschools.org/brand/logo-circle-512.png" width="64" height="64" alt="Parents for Missouri Public Schools" style="display:block;border:0;border-radius:50%">
               </td>
               <td style="vertical-align:middle;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:16px;line-height:1.15;text-transform:uppercase;letter-spacing:.01em;color:#1A2418">
                 Parents for Missouri<br/>Public Schools
