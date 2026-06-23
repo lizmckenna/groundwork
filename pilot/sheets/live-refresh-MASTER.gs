@@ -94,9 +94,25 @@ function refreshMaster(){
   for (let i=0;i<out.length;i++){
     const r = FIRST+i;
     sh.getRange(r,4).setFormula(`=IF(N(C${r})=0,"",B${r}/C${r})`).setNumberFormat('0%');
-    // Bar color tracks progress: red < 34%, amber 34–66%, green ≥ 67% (live).
-    sh.getRange(r,5).setFormula(`=IF(N(C${r})=0,"",SPARKLINE(B${r},{"charttype","bar";"max",C${r};"empty","zero";"color1",IF(B${r}/C${r}>=0.67,"#188038",IF(B${r}/C${r}>=0.34,"#F9AB00","#D93025"))}))`);
+    // Bar color tracks progress (live): <10% red, 10–50% orange, 50–80% gold, >80% green.
+    sh.getRange(r,5).setFormula(`=IF(N(C${r})=0,"",SPARKLINE(B${r},{"charttype","bar";"max",C${r};"empty","zero";"color1",IF(B${r}/C${r}<0.1,"#D93025",IF(B${r}/C${r}<0.5,"#E8710A",IF(B${r}/C${r}<0.8,"#F4B400","#188038")))}))`);
   }
+  // Definitions as cell notes — hover the metric name to see exactly what it counts.
+  const NOTES = {
+    outreach_attempts: 'Total call / text / email attempts logged across the organizer dashboards.',
+    onboarding_attended: 'Distinct people marked Attended or Walk-in at any No on 5 onboarding call.',
+    launch_attended: 'Distinct people marked Attended / Walk-in at a regional launch or in-person event (includes door check-ins).',
+    hm_trained: 'Distinct people who attended a House Meeting training.',
+    amp_trained: 'Distinct people who attended an Amplifier training.',
+    amp_convos: 'Total amplifier-to-voter conversations logged (all rounds).',
+    a5_commitments: 'Distinct people who made at least one Amendment 5 commitment.',
+    hm_commitments: 'Distinct people who made a house-meeting commitment or signed in at a house meeting.',
+    one_on_ones: 'Distinct people with a 1-1 booked.',
+    a5_followed_up: 'A5 committers who took a REAL next step: a 1-1 booked, a logged conversation, or a training signup. Does NOT count a mere attempted call or text.',
+    hm_followed_up: 'House-meeting committers who booked a 1-1 or had a logged conversation. Does NOT count a mere attempt.',
+    vote_reminders: 'Distinct people flagged "Wants vote reminder" from the remind-to-vote signup form.',
+  };
+  for (let i=0;i<out.length;i++){ const nt = NOTES[out[i].key]; if (nt) sh.getRange(FIRST+i,1).setNote(nt); }
   sh.hideColumns(6);
   sh.getRange(2,1,1,5).setValue('Live from Airtable · refreshes every 30 minutes · edit only the Goal column · updated '+new Date().toLocaleString());
   try { sh.getRange(FIRST,1,out.length,5).setVerticalAlignment('middle'); for (let i=0;i<out.length;i++) sh.setRowHeight(FIRST+i,28); } catch(e){}
