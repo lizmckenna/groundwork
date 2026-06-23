@@ -2048,7 +2048,6 @@ async function remindSignup(request, env) {
     phone: cPhone,
     source: source || 'remind me to vote',
     last_attempt_date: today,
-    wants_vote_reminders: true,
   };
   if (cEmail) baseFields.email = cEmail;
   if (cZip) baseFields.zip = cZip;
@@ -4148,21 +4147,23 @@ async function rollupExportCsv(env, urlObj) {
     }
     off = d.offset;
   } while (off);
-  let ampConvos = 0; const launchSet = new Set();
+  let ampConvos = 0; const launchSet = new Set(); const voteSet = new Set();
   off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`OR({method}='Amplifier conversation',{method}='Event attendance')`)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=contact`;
+    let q = `?filterByFormula=${encodeURIComponent(`OR({method}='Amplifier conversation',{method}='Event attendance',FIND('vote reminder',LOWER({Summary}&'')))`)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=contact&fields%5B%5D=Summary`;
     if (off) q += `&offset=${off}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
     for (const r of d.records) {
+      const summ = String(r.fields.Summary || '');
       if (r.fields.method === 'Amplifier conversation') ampConvos++;
+      else if (/vote reminder/i.test(summ)) (r.fields.contact || []).forEach(id => voteSet.add(id));
       else if (att(r.fields.result)) (r.fields.contact || []).forEach(id => launchSet.add(id));
     }
     off = d.offset;
   } while (off);
-  // "Reminded to vote" — count the remind-to-vote signups by contact source
+  // "Reminded to vote" — distinct contacts with a vote-reminder signup log row
   // (the wants_vote_reminders field was never created in Airtable).
-  m.remind = await countMatching(env, `FIND('remind me to vote',LOWER({source}&''))>0`);
+  m.remind = voteSet.size;
   const rows = [
     ['outreach_attempts', 'Outreach attempts logged (calls + texts)', m.attempts],
     ['onboarding_attended', 'Attended an onboarding call', m.onb],
