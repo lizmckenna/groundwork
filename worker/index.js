@@ -4120,7 +4120,7 @@ async function rollupExportCsv(env, urlObj) {
   const hmAttend = Object.values(EVENT_META).filter(m => m.type === 'hm').map(m => m.attendField);
   const ampAttend = Object.values(EVENT_META).filter(m => m.type === 'amp').map(m => m.attendField);
   const trainSignup = Object.values(EVENT_META).filter(m => ['hm', 'amp', 'kyn'].includes(m.type) && m.signupField).map(m => m.signupField);
-  const scalar = ['amendment5_commitments', 'house_meeting_commitments', 'house_meeting_date', 'one_on_one_booked', 'attempt_count', 'wants_vote_reminders', 'last_attempt_result'];
+  const scalar = ['amendment5_commitments', 'house_meeting_commitments', 'house_meeting_date', 'one_on_one_booked', 'attempt_count', 'last_attempt_result'];
   const fields = [...new Set([...onbAttend, ...hmAttend, ...ampAttend, ...trainSignup, ...scalar])];
   const m = { attempts: 0, onb: 0, hm: 0, amp: 0, a5: 0, hmc: 0, oo: 0, remind: 0, a5fu: 0, hmfu: 0 };
   let off = null;
@@ -4138,7 +4138,6 @@ async function rollupExportCsv(env, urlObj) {
       if (a5) m.a5++;
       if (hmc) m.hmc++;
       if (f.one_on_one_booked) m.oo++;
-      if (f.wants_vote_reminders) m.remind++;
       m.attempts += Number(f.attempt_count) || 0;
       // "Followed up on" = a real next step, NOT just an attempt: 1-1 booked,
       // a logged conversation, or signed up for a training.
@@ -4161,6 +4160,9 @@ async function rollupExportCsv(env, urlObj) {
     }
     off = d.offset;
   } while (off);
+  // "Reminded to vote" — count the remind-to-vote signups by contact source
+  // (the wants_vote_reminders field was never created in Airtable).
+  m.remind = await countMatching(env, `FIND('remind me to vote',LOWER({source}&''))>0`);
   const rows = [
     ['outreach_attempts', 'Outreach attempts logged (calls + texts)', m.attempts],
     ['onboarding_attended', 'Attended an onboarding call', m.onb],
