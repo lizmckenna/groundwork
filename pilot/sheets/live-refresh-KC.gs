@@ -33,7 +33,9 @@ function onOpen(){
 }
 
 function setUp(){
-  const sh=SpreadsheetApp.getActive().getSheetByName(TAB);
+  const ss=SpreadsheetApp.getActive();
+  const sh=ss.getSheetByName(TAB);
+  if(!sh){ ss.toast('No tab named "'+TAB+'". Rename your RSVP tab to exactly: '+TAB,'Groundwork',12); return; }
   sh.getRange(1,1,1,TOTAL_COLS).breakApart();
   sh.getRange(1,3,1,TOTAL_COLS-2).merge().setValue(BANNER)
     .setFontFamily(FONT).setFontWeight('bold').setFontColor(INK).setBackground(ALERT)
@@ -52,10 +54,11 @@ function setUp(){
   ScriptApp.getProjectTriggers().forEach(t=>{const f=t.getHandlerFunction(); if(f==='refreshRSVPs'||f==='onAttendanceEdit')ScriptApp.deleteTrigger(t);});
   ScriptApp.newTrigger('refreshRSVPs').timeBased().everyMinutes(1).create();
   ScriptApp.newTrigger('onAttendanceEdit').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
-  refreshRSVPs();
-  installHelp();
   brandSheet();
-  SpreadsheetApp.getActive().toast('All set — branded, live, wipe-proof. Plum = yours, red = do not touch.','Groundwork',6);
+  try{ refreshRSVPs(); }catch(e){}
+  try{ installHelp(); }catch(e){}
+  brandSheet();
+  ss.toast('All set — branded, live, wipe-proof. Plum = yours, red = do not touch.','Groundwork',6);
 }
 
 function refreshRSVPs(){
@@ -122,13 +125,12 @@ function onAttendanceEdit(e){
 function brandSheet(){
   const sh=SpreadsheetApp.getActive().getSheetByName(TAB); if(!sh) return;
   const last=Math.max(sh.getLastRow(),FIRST);
-  sh.getRange(1,1,sh.getMaxRows(),TOTAL_COLS).setFontFamily(FONT);
-  sh.getRange(HDR,1,1,DATA_COLS).setFontWeight('bold').setBackground(ROSE).setFontColor(PAPER);          // Airtable cols: rose + beige
-  sh.getRange(HDR,M_START,1,MANUAL.length).setFontWeight('bold').setBackground(PLUM).setFontColor(YELLOW); // editable: plum + marigold
-  const ex=sh.getFilter(); if(ex) ex.remove();
-  sh.getRange(HDR,1,Math.max(last-HDR+1,2),TOTAL_COLS).createFilter();
-  brandRows(sh, Math.max(last-FIRST+1,0));
-  styleStatuses(sh);
+  try{ sh.getRange(1,1,sh.getMaxRows(),TOTAL_COLS).setFontFamily(FONT); }catch(e){}
+  try{ sh.getRange(HDR,1,1,DATA_COLS).setFontWeight('bold').setBackground(ROSE).setFontColor(PAPER); }catch(e){}            // Airtable cols: rose + beige
+  try{ sh.getRange(HDR,M_START,1,MANUAL.length).setFontWeight('bold').setBackground(PLUM).setFontColor(YELLOW); }catch(e){} // editable: plum + marigold
+  try{ const ex=sh.getFilter(); if(ex) ex.remove(); sh.getRange(HDR,1,Math.max(last-HDR+1,2),TOTAL_COLS).createFilter(); }catch(e){}
+  try{ brandRows(sh, Math.max(last-FIRST+1,0)); }catch(e){}
+  try{ styleStatuses(sh); }catch(e){}
 }
 function brandRows(sh, n){
   if(n<=0) return;
