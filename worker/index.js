@@ -267,6 +267,8 @@ export default {
       if (url.pathname === '/export/amplifier-commits.csv' && request.method === 'GET') return await amplifierCommitsExportCsv(env, url);
       // Master rollup of every headline metric for Molly + Ellen's dashboard.
       if (url.pathname === '/export/rollup.csv' && request.method === 'GET') return await rollupExportCsv(env, url);
+      if (url.pathname === '/export/region.csv' && request.method === 'GET') return await regionExportCsv(env, url);
+      if (url.pathname === '/sheet-region-update' && request.method === 'POST') return await sheetRegionUpdate(request, env);
       // Sheet → Airtable write-back for HM follow-up columns (status, 1-1, notes), by contact id.
       if (url.pathname === '/sheet-hm-followup' && request.method === 'POST') return await sheetHmFollowup(request, env);
       // Sheet → Airtable attendance write-back for launches (gated by EXPORT_KEY,
@@ -4201,6 +4203,112 @@ async function rollupExportCsv(env, urlObj) {
   const out = [['key', 'Metric', 'Count'].join(',')];
   for (const r of rows) out.push(r.map(e).join(','));
   return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// =========================================================================
+// Regional team trackers. region.csv shapes Airtable into Ellen's ideal
+// columns for one region (geo-filtered), seeding commitment statuses from
+// the commitment text. sheet-region-update writes contact data-quality
+// edits (the cleanup tier) back to Airtable. Add a region by adding a
+// REGIONS entry; the Apps Script and column shape stay identical.
+// =========================================================================
+const REGIONS = {
+  northland: {
+    label: 'Northland',
+    launchEvent: 'Northland Emergency Meeting 6/18',
+    match: {
+      county:   ['clay', 'platte'],
+      city:     ['north kansas city', 'gladstone', 'excelsior springs', 'kearney', 'parkville', 'liberty'],
+      district: ['nkc', 'north kansas city', 'liberty', 'park hill', 'smithville', 'kearney', 'excelsior', 'platte city'],
+    },
+  },
+};
+
+async function regionExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const region = REGIONS[(urlObj.searchParams.get('region') || 'northland').toLowerCase()];
+  if (!region) return new Response('unknown region', { status: 404 });
+  const isAtt = v => { v = String(v || '').toLowerCase(); return v === 'attended' || v === 'walk-in' || v === 'walk in'; };
+  const clauses = [];
+  for (const c of region.match.county)   clauses.push(`FIND('${c}',LOWER({county}&''))`);
+  for (const c of region.match.city)     clauses.push(`FIND('${c}',LOWER({city}&''))`);
+  for (const c of region.match.district) clauses.push(`FIND('${c}',LOWER({district}&''))`);
+  const formula = `AND({dnc_flag_date}='',OR(${clauses.join(',')}))`;
+  const ampFields = Object.values(EVENT_META).filter(e => e.type === 'amp').map(e => e.attendField);
+  const hmFields  = Object.values(EVENT_META).filter(e => e.type === 'hm').map(e => e.attendField);
+  const baseFields = ['first', 'last', 'role', 'email', 'phone', 'street_address', 'city', 'zip', 'school', 'district', 'county',
+    'assigned_organizer', 'amendment5_commitments', 'house_meeting_commitments', 'commitments_added'];
+  const allFields = baseFields.concat(ampFields, hmFields);
+  // launch attendance set
+  const launchSet = new Set();
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{rsvp_launch}='${region.launchEvent.replace(/'/g, "\\'")}')`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=result`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) if (isAtt(r.fields.result)) (r.fields.contact || []).forEach(id => launchSet.add(id));
+    off = d.offset;
+  } while (off);
+  // contacts in the region
+  const rows = [];
+  off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
+    for (const f of allFields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) {
+      const f = r.fields;
+      const fn = String(f.first || ''), ln = String(f.last || '');
+      if (/^(test|smoke|sample|audit|final|demo)\b/i.test(fn) || /^(test|smoke|sample|audit|final|demo)\b/i.test(ln)) continue;
+      if (/test|smoke|example/i.test(String(f.email || ''))) continue;
+      if (/kcps|kansas city public|kansas city 33/i.test(String(f.district || ''))) continue;  // KCPS is its own region
+      const txt = `${f.amendment5_commitments || ''} ${f.house_meeting_commitments || ''} ${f.commitments_added || ''}`.toLowerCase();
+      const seed = re => re.test(txt) ? 'Committed' : '';
+      rows.push({
+        id: r.id,
+        first: f.first || '', last: f.last || '',
+        organized_by: (f.assigned_organizer || []).map(id => ORGANIZER_NAME_BY_ID[id] || '').filter(Boolean).join('; '),
+        role: Array.isArray(f.role) ? f.role.join(', ') : (f.role || ''),
+        email: f.email || '', phone: f.phone || '', address: f.street_address || '', city: f.city || '', zip: f.zip || '',
+        school: f.school || '', district: f.district || '', county: f.county || '',
+        amplifier: seed(/amplif/), house_mtg: seed(/house meeting|host/), school_board: seed(/school board/),
+        canvass: seed(/canvass/), regional_team: seed(/regional team/),
+        attended_launch: launchSet.has(r.id) ? 'Yes' : '',
+        amp_training: ampFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
+        hm_training: hmFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
+        gotv_rsvp: '',
+      });
+    }
+    off = d.offset;
+  } while (off);
+  rows.sort((a, b) => (a.last + a.first).toLowerCase().localeCompare((b.last + b.first).toLowerCase()));
+  const cols = [['contact_id', 'id'], ['First', 'first'], ['Last', 'last'], ['Organized By', 'organized_by'], ['Role', 'role'],
+    ['Email', 'email'], ['Phone', 'phone'], ['Address', 'address'], ['City', 'city'], ['Zip', 'zip'], ['School', 'school'],
+    ['District', 'district'], ['County', 'county'], ['Amplifier', 'amplifier'], ['House Mtg', 'house_mtg'],
+    ['School Board', 'school_board'], ['Canvass', 'canvass'], ['Regional Team', 'regional_team'],
+    ['Attended Launch', 'attended_launch'], ['Amp Training', 'amp_training'], ['HM Training', 'hm_training'], ['GOTV RSVP', 'gotv_rsvp']];
+  const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const out = [cols.map(c => c[0]).join(',')];
+  for (const r of rows) out.push(cols.map(c => esc(r[c[1]])).join(','));
+  return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Write the data-quality (cleanup) tier back to Airtable. Only existing text
+// fields are whitelisted; role and the organizing-work columns are not pushed
+// (role is a select, and commitment-status / Team / Flag have no Airtable field).
+async function sheetRegionUpdate(request, env) {
+  let body; try { body = await request.json(); } catch (e) { return new Response('bad json', { status: 400 }); }
+  if (!env.EXPORT_KEY || body.key !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const ALLOWED = { first: 'first', last: 'last', email: 'email', phone: 'phone', school: 'school',
+    district: 'district', city: 'city', zip: 'zip', address: 'street_address' };
+  let n = 0;
+  for (const u of (body.updates || [])) {
+    if (!u.contact_id || !ALLOWED[u.field]) continue;
+    const fields = {}; fields[ALLOWED[u.field]] = u.value == null ? '' : String(u.value);
+    try { await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`, { method: 'PATCH', body: JSON.stringify({ fields }) }); n++; } catch (e) {}
+  }
+  return new Response(JSON.stringify({ updated: n }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
 }
 
 async function rsvpExportCsv(env, urlObj) {
