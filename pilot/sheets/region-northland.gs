@@ -66,6 +66,8 @@ const PUSH_BY_COL = {}; COLS.forEach((c,i)=>{ if(c.push) PUSH_BY_COL[i+1]=c.push
 function colL(n){ let s=''; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=(n-m-1)/26; } return s; }
 const MT = "'"+TAB+"'!";
 const BANNER='⚠️ LIVE from the database. RED columns are system records (do not edit). PLUM columns are yours: edits to contact info (school, district, phone, etc.) save back to the database, and commitments, Team, and Flag live here. GOLD is Organized By. Sort with Data → Filter views so you never reorder the shared list.';
+const NEEDS_TAB='Needs data (live)';
+const NEEDS_BANNER='⚠️ NEEDS DATA — these people attended a launch but have no school, district, or county, so they cannot be routed to a region. Fill in their School and District (it saves to the database) and they move to the right region automatically on the next refresh.';
 
 function onOpen(){
   SpreadsheetApp.getUi().createMenu('🔄 Groundwork')
@@ -77,22 +79,8 @@ function onOpen(){
 
 function setUp(){
   const ss=SpreadsheetApp.getActive();
-  let sh=ss.getSheetByName(TAB); if(!sh) sh=ss.insertSheet(TAB);
-  sh.getRange(1,1,1,N).breakApart();
-  sh.getRange(1,2,1,N-1).merge().setValue(BANNER)
-    .setFontFamily(FONT).setFontWeight('bold').setFontColor(INK).setBackground(ALERT)
-    .setWrap(true).setVerticalAlignment('middle').setHorizontalAlignment('left');
-  sh.setRowHeight(1,58);
-  sh.getRange(HDR,1,1,N).setValues([COLS.map(c=>c.h)]);
-  // dropdowns
-  const dv=list=>SpreadsheetApp.newDataValidation().requireValueInList(list,true).setAllowInvalid(true).build();
-  COLS.forEach((c,i)=>{ if(c.dd) sh.getRange(FIRST,i+1,MAXR,1).setDataValidation(dv(DD[c.dd])); });
-  sh.setFrozenRows(2); sh.setFrozenColumns(3);
-  sh.hideColumns(1);
-  // protect read-only cols (warning only)
-  sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(p=>{if(p.getDescription()==='GW ro')p.remove();});
-  COLS.forEach((c,i)=>{ if(c.tier==='ro') sh.getRange(1,i+1,sh.getMaxRows(),1).protect().setDescription('GW ro').setWarningOnly(true); });
-  // triggers
+  buildShell(TAB, BANNER);
+  buildShell(NEEDS_TAB, NEEDS_BANNER);
   ScriptApp.getProjectTriggers().forEach(t=>{const f=t.getHandlerFunction(); if(f==='refresh'||f==='onEditRegion')ScriptApp.deleteTrigger(t);});
   ScriptApp.newTrigger('refresh').timeBased().everyMinutes(5).create();
   ScriptApp.newTrigger('onEditRegion').forSpreadsheet(ss).onEdit().create();
@@ -103,8 +91,26 @@ function setUp(){
   ss.toast('Northland tracker built. Red = system, plum = yours, gold = owner. Refreshes every 5 min.','Groundwork',7);
 }
 
-function refresh(){
-  const sh=SpreadsheetApp.getActive().getSheetByName(TAB); if(!sh) return;
+function buildShell(name, banner){
+  const ss=SpreadsheetApp.getActive();
+  let sh=ss.getSheetByName(name); if(!sh) sh=ss.insertSheet(name);
+  sh.getRange(1,1,1,N).breakApart();
+  sh.getRange(1,2,1,N-1).merge().setValue(banner)
+    .setFontFamily(FONT).setFontWeight('bold').setFontColor(INK).setBackground(ALERT)
+    .setWrap(true).setVerticalAlignment('middle').setHorizontalAlignment('left');
+  sh.setRowHeight(1,58);
+  sh.getRange(HDR,1,1,N).setValues([COLS.map(c=>c.h)]);
+  const dv=list=>SpreadsheetApp.newDataValidation().requireValueInList(list,true).setAllowInvalid(true).build();
+  COLS.forEach((c,i)=>{ if(c.dd) sh.getRange(FIRST,i+1,MAXR,1).setDataValidation(dv(DD[c.dd])); });
+  sh.setFrozenRows(2); sh.setFrozenColumns(3); sh.hideColumns(1);
+  sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(p=>{if(p.getDescription()==='GW ro')p.remove();});
+  COLS.forEach((c,i)=>{ if(c.tier==='ro') sh.getRange(1,i+1,sh.getMaxRows(),1).protect().setDescription('GW ro').setWarningOnly(true); });
+}
+
+function refresh(){ refreshTab(TAB,''); refreshTab(NEEDS_TAB,'needs-data'); }
+
+function refreshTab(name, bucket){
+  const sh=SpreadsheetApp.getActive().getSheetByName(name); if(!sh) return;
   const last=sh.getLastRow(), saved={};
   if(last>=FIRST){
     const all=sh.getRange(FIRST,1,last-FIRST+1,N).getValues();
@@ -115,13 +121,16 @@ function refresh(){
       if(any) saved[id]=keep;
     }
   }
-  const resp=UrlFetchApp.fetch(FEED+'?key='+encodeURIComponent(KEY)+'&region='+encodeURIComponent(REGION)+'&t='+Date.now(),{muteHttpExceptions:true});
+  let url=FEED+'?key='+encodeURIComponent(KEY)+'&region='+encodeURIComponent(REGION)+'&t='+Date.now();
+  if(bucket) url+='&bucket='+encodeURIComponent(bucket);
+  const resp=UrlFetchApp.fetch(url,{muteHttpExceptions:true});
   if(resp.getResponseCode()!==200) return;                       // abort-safe: never wipe on error
   const rows=Utilities.parseCsv(resp.getContentText());
-  if(rows.length<2) return;
-  if(String(rows[0][1]||'').toLowerCase()!=='first') return;     // not our CSV
-  const body=rows.slice(1); if(!body.length) return;
-  if(last>=FIRST) sh.getRange(FIRST,1,last-FIRST+1,N).clearContent();
+  if(rows.length<1 || String(rows[0][1]||'').toLowerCase()!=='first') return;   // not our CSV -> never touch
+  const body=rows.slice(1);
+  if(!bucket && body.length<1) return;                                          // master must never wipe to empty
+  if(last>=FIRST) sh.getRange(FIRST,1,last-FIRST+1,N).clearContent();           // needs-data may legitimately be 0
+  if(!body.length) return;
   const out=body.map(r=>{
     const row=new Array(N).fill('');
     for(let i=0;i<FEED_COLS;i++) row[i]=r[i]||'';
@@ -136,7 +145,7 @@ function refresh(){
 // Write data-quality edits back to Airtable (the cleanup tier).
 function onEditRegion(e){
   if(!e||!e.range) return;
-  const sh=e.range.getSheet(); if(sh.getName()!==TAB) return;
+  const sh=e.range.getSheet(); if(sh.getName()!==TAB && sh.getName()!==NEEDS_TAB) return;
   const r0=Math.max(e.range.getRow(),FIRST), r1=e.range.getLastRow();
   const c0=e.range.getColumn(), c1=e.range.getLastColumn();
   const updates=[];
@@ -152,8 +161,9 @@ function onEditRegion(e){
 }
 
 // ---- branding ----
-function brandSheet(){
-  const sh=SpreadsheetApp.getActive().getSheetByName(TAB); if(!sh) return;
+function brandSheet(){ brandOne(TAB); brandOne(NEEDS_TAB); }
+function brandOne(name){
+  const sh=SpreadsheetApp.getActive().getSheetByName(name); if(!sh) return;
   const last=Math.max(sh.getLastRow(),FIRST);
   try{ sh.getRange(1,1,sh.getMaxRows(),N).setFontFamily(FONT); }catch(e){}
   COLS.forEach((c,i)=>{

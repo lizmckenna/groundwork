@@ -4249,39 +4249,56 @@ async function regionExportCsv(env, urlObj) {
     for (const r of d.records) if (isAtt(r.fields.result)) (r.fields.contact || []).forEach(id => launchSet.add(id));
     off = d.offset;
   } while (off);
-  // contacts in the region
+  // bucket=needs-data → launch attendees who can't be routed (no usable county/city/district)
+  const bucket = (urlObj.searchParams.get('bucket') || '').toLowerCase();
+  const junkDist = d => { const s = String(d || '').toLowerCase().replace(/[’']/g, '').trim(); return !s || /^(i\s*dont\s*know|dont\s*know|unknown|n\/?a|none|tbd|\?+)$/.test(s); };
+  const isUnrouted = f => !String(f.county || '').trim() && !String(f.city || '').trim() && junkDist(f.district);
+  const buildRow = r => {
+    const f = r.fields;
+    const fn = String(f.first || ''), ln = String(f.last || '');
+    if (/^(test|smoke|sample|audit|final|demo)\b/i.test(fn) || /^(test|smoke|sample|audit|final|demo)\b/i.test(ln)) return null;
+    if (/test|smoke|example/i.test(String(f.email || ''))) return null;
+    const txt = `${f.amendment5_commitments || ''} ${f.house_meeting_commitments || ''} ${f.commitments_added || ''}`.toLowerCase();
+    const seed = re => re.test(txt) ? 'Committed' : '';
+    return {
+      id: r.id,
+      first: f.first || '', last: f.last || '',
+      organized_by: (f.assigned_organizer || []).map(id => ORGANIZER_NAME_BY_ID[id] || '').filter(Boolean).join('; '),
+      role: Array.isArray(f.role) ? f.role.join(', ') : (f.role || ''),
+      email: f.email || '', phone: f.phone || '', address: f.street_address || '', city: f.city || '', zip: f.zip || '',
+      school: f.school || '', district: f.district || '', county: f.county || '',
+      amplifier: seed(/amplif/), house_mtg: seed(/house meeting|host/), school_board: seed(/school board/),
+      canvass: seed(/canvass/), regional_team: seed(/regional team/),
+      attended_launch: launchSet.has(r.id) ? 'Yes' : '',
+      amp_training: ampFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
+      hm_training: hmFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
+      gotv_rsvp: '',
+    };
+  };
   const rows = [];
-  off = null;
-  do {
-    let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
-    for (const f of allFields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
-    if (off) q += `&offset=${encodeURIComponent(off)}`;
-    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
-    for (const r of d.records) {
-      const f = r.fields;
-      const fn = String(f.first || ''), ln = String(f.last || '');
-      if (/^(test|smoke|sample|audit|final|demo)\b/i.test(fn) || /^(test|smoke|sample|audit|final|demo)\b/i.test(ln)) continue;
-      if (/test|smoke|example/i.test(String(f.email || ''))) continue;
-      if (/kcps|kansas city public|kansas city 33/i.test(String(f.district || ''))) continue;  // KCPS is its own region
-      const txt = `${f.amendment5_commitments || ''} ${f.house_meeting_commitments || ''} ${f.commitments_added || ''}`.toLowerCase();
-      const seed = re => re.test(txt) ? 'Committed' : '';
-      rows.push({
-        id: r.id,
-        first: f.first || '', last: f.last || '',
-        organized_by: (f.assigned_organizer || []).map(id => ORGANIZER_NAME_BY_ID[id] || '').filter(Boolean).join('; '),
-        role: Array.isArray(f.role) ? f.role.join(', ') : (f.role || ''),
-        email: f.email || '', phone: f.phone || '', address: f.street_address || '', city: f.city || '', zip: f.zip || '',
-        school: f.school || '', district: f.district || '', county: f.county || '',
-        amplifier: seed(/amplif/), house_mtg: seed(/house meeting|host/), school_board: seed(/school board/),
-        canvass: seed(/canvass/), regional_team: seed(/regional team/),
-        attended_launch: launchSet.has(r.id) ? 'Yes' : '',
-        amp_training: ampFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
-        hm_training: hmFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
-        gotv_rsvp: '',
-      });
+  if (bucket === 'needs-data') {
+    const ids = [...launchSet];
+    for (let i = 0; i < ids.length; i += 12) {
+      const f2 = 'OR(' + ids.slice(i, i + 12).map(id => `RECORD_ID()='${id}'`).join(',') + ')';
+      let q = `?filterByFormula=${encodeURIComponent(f2)}&pageSize=100`;
+      for (const fl of allFields) q += `&fields%5B%5D=${encodeURIComponent(fl)}`;
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      for (const r of d.records) { if (!isUnrouted(r.fields)) continue; const row = buildRow(r); if (row) rows.push(row); }
     }
-    off = d.offset;
-  } while (off);
+  } else {
+    off = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
+      for (const fl of allFields) q += `&fields%5B%5D=${encodeURIComponent(fl)}`;
+      if (off) q += `&offset=${encodeURIComponent(off)}`;
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      for (const r of d.records) {
+        if (/kcps|kansas city public|kansas city 33/i.test(String(r.fields.district || ''))) continue;  // KCPS is its own region
+        const row = buildRow(r); if (row) rows.push(row);
+      }
+      off = d.offset;
+    } while (off);
+  }
   rows.sort((a, b) => (a.last + a.first).toLowerCase().localeCompare((b.last + b.first).toLowerCase()));
   const cols = [['contact_id', 'id'], ['First', 'first'], ['Last', 'last'], ['Organized By', 'organized_by'], ['Role', 'role'],
     ['Email', 'email'], ['Phone', 'phone'], ['Address', 'address'], ['City', 'city'], ['Zip', 'zip'], ['School', 'school'],
