@@ -73,6 +73,7 @@ function setUp(){
   ScriptApp.newTrigger('onAttendanceEdit').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
   refreshRSVPs();
   installHelp();
+  rebuildHowTo();   // include the door sign-in link in the How-to (installHelp's version omits it)
   SpreadsheetApp.getUi().alert('All set: banner + frozen name columns, refreshes every minute, Claimed by / Reminder columns, a How-to tab, and pizza/childcare counts on the Goals tab.');
 }
 
