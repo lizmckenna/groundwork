@@ -2574,6 +2574,7 @@ function callableExclusions(organizerName_) {
     `NOT({last_attempt_result}='Removed from list')`,
     ...EXCLUDED_SCHOOL_PATTERNS.map(p => `FIND('${p}',LOWER({school}&''))=0`),
     ...EXCLUDED_ROLES.map(r => `FIND('${r}',{role}&'')=0`),
+    `FIND('county, ks',LOWER({county}&''))=0`,   // MO only — never call Kansas-side (KS) contacts (Liz 6/23)
   ];
   if (orgFullName) c.push(`FIND('${orgFullName}',{assigned_organizer}&'')>0`);
   return c;
@@ -2743,6 +2744,9 @@ async function getCallList(env, urlObj) {
     const countyOr = (cs) => `OR(${cs.map(c => `FIND('${c}',${C})>0`).join(',')})`;
     const hasCommit = `TRIM({amendment5_commitments}&'')!=''`;
     const attendedOnboarding = `OR(${attendClauses})`;
+    // KCPS / Kansas City by district or school, so KC folks route to LaNee even when
+    // the zip (and derived county) is missing (Liz 6/23).
+    const isKC = `OR(FIND('kcps',LOWER({district}&'')),FIND('kansas city',LOWER({district}&'')),FIND('kcps',LOWER({school}&'')),FIND('kansas city',LOWER({school}&'')))`;
     // "only amplifier and/or house meeting": has amp or hm, and no other commitment type.
     const ampHmOnly = `AND(OR(FIND('amplifier',${A5}),FIND('house meeting',${A5}),FIND('host a house',${A5})),`
       + `NOT(FIND('power camp',${A5})),NOT(FIND('regional',${A5})),NOT(FIND('school board',${A5})),`
@@ -2750,14 +2754,14 @@ async function getCallList(env, urlObj) {
       + `NOT(FIND('talk to 5',${A5})),NOT(FIND('other:',${A5})))`;
     let followupCore, orgScope = null;
     if (oid === LANEE_ID) {
-      followupCore = [ hasCommit, countyOr(LANEE_FOLLOWUP_COUNTIES) ];
+      followupCore = [ hasCommit, `OR(${countyOr(LANEE_FOLLOWUP_COUNTIES)},${isKC})` ];
     } else if (oid === ELLENG_ID) {
       followupCore = [ hasCommit, countyOr(ELLENG_COUNTIES) ];
     } else if (oid === STEPHANIE_ID) {
       // commitment anywhere except the 9, OR onboarding attendee in a no-team county
       followupCore = [
-        `OR(AND(${hasCommit},NOT(${countyOr(STEPHANIE_EXCLUDE_COUNTIES)})),`
-        + `AND(${attendedOnboarding},NOT(${countyOr(STEPHANIE_TEAM_COUNTIES)})))`,
+        `OR(AND(${hasCommit},NOT(${countyOr(STEPHANIE_EXCLUDE_COUNTIES)}),NOT(${isKC})),`
+        + `AND(${attendedOnboarding},NOT(${countyOr(STEPHANIE_TEAM_COUNTIES)}),NOT(${isKC})))`,
       ];
     } else if (oid === organizerId('kathryn')) {
       followupCore = [ ampHmOnly ];   // statewide, amp/hm-only commitments
