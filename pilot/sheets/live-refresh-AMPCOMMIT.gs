@@ -79,8 +79,12 @@ function refreshHM(){
     for (let i=0;i<ids.length;i++){ const id=String(ids[i][0]||'').trim(); if (id && man[i].some(v=>v!=='')) byId[id]=man[i]; }
   }
   const url = FEED + '?key='+encodeURIComponent(KEY)+'&t='+Date.now();
-  const rows = Utilities.parseCsv(UrlFetchApp.fetch(url,{muteHttpExceptions:true}).getContentText());
-  if (rows.length < 1) return;
+  const resp = UrlFetchApp.fetch(url,{muteHttpExceptions:true});
+  if (resp.getResponseCode() !== 200) return;                 // worker error -> leave the sheet untouched
+  const rows = Utilities.parseCsv(resp.getContentText());
+  if (rows.length < 2) return;                                // empty / header-only -> never wipe manual data
+  const _hdr = rows[0].map(h => String(h).toLowerCase());
+  if (_hdr.indexOf('first name') === -1) return;              // not our CSV -> never wipe
   if (last >= FIRST) sh.getRange(FIRST,1,last-FIRST+1,TOTAL_COLS).clearContent();
   sh.getRange(HDR,1,1,DATA_COLS).setValues([rows[0].slice(0,DATA_COLS)])
     .setFontWeight('bold').setBackground('#1F5C3D').setFontColor('#ffffff');
