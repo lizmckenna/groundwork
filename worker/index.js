@@ -265,6 +265,8 @@ export default {
       if (url.pathname === '/export/amplifiers.csv' && request.method === 'GET') return await amplifiersExportCsv(env, url);
       // Voters who committed during an amplifier conversation — follow-up feed (HM-shaped, reuses HM sheet + write-back).
       if (url.pathname === '/export/amplifier-commits.csv' && request.method === 'GET') return await amplifierCommitsExportCsv(env, url);
+      // Master rollup of every headline metric for Molly + Ellen's dashboard.
+      if (url.pathname === '/export/rollup.csv' && request.method === 'GET') return await rollupExportCsv(env, url);
       // Sheet → Airtable write-back for HM follow-up columns (status, 1-1, notes), by contact id.
       if (url.pathname === '/sheet-hm-followup' && request.method === 'POST') return await sheetHmFollowup(request, env);
       // Sheet → Airtable attendance write-back for launches (gated by EXPORT_KEY,
@@ -4106,6 +4108,77 @@ async function amplifierCommitsExportCsv(env, urlObj) {
   const lines = [['First Name', 'Last Name', 'Amplifier', 'Date', 'Phone', 'Email', 'Commitments', 'School', 'District', 'County', 'Contact ID', '1-1 booked'].join(',')];
   for (const r of out) lines.push([r.first, r.last, r.amp, r.date, r.phone, r.email, r.commit, r.school, r.district, r.county, r.id, r.oo ? 'Yes' : ''].map(e).join(','));
   return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Master rollup for Molly + Ellen's dashboard: every headline metric, computed
+// server-side from Airtable (one contacts pass + one contact_log pass). Returns
+// key,Metric,Count; the Sheet holds the editable Goal column and draws the bars.
+async function rollupExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const att = v => v === 'Attended' || v === 'Walk-in';
+  const onbAttend = Object.values(EVENT_META).filter(m => m.type === 'onboarding' || m.type === 'legacy').map(m => m.attendField);
+  const hmAttend = Object.values(EVENT_META).filter(m => m.type === 'hm').map(m => m.attendField);
+  const ampAttend = Object.values(EVENT_META).filter(m => m.type === 'amp').map(m => m.attendField);
+  const trainSignup = Object.values(EVENT_META).filter(m => ['hm', 'amp', 'kyn'].includes(m.type) && m.signupField).map(m => m.signupField);
+  const scalar = ['amendment5_commitments', 'house_meeting_commitments', 'house_meeting_date', 'one_on_one_booked', 'attempt_count', 'wants_vote_reminders', 'last_attempt_result'];
+  const fields = [...new Set([...onbAttend, ...hmAttend, ...ampAttend, ...trainSignup, ...scalar])];
+  const m = { attempts: 0, onb: 0, hm: 0, amp: 0, a5: 0, hmc: 0, oo: 0, remind: 0, a5fu: 0, hmfu: 0 };
+  let off = null;
+  do {
+    let q = `?pageSize=100` + fields.map(f => `&fields%5B%5D=${encodeURIComponent(f)}`).join('');
+    if (off) q += `&offset=${off}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) {
+      const f = r.fields;
+      if (onbAttend.some(k => att(f[k]))) m.onb++;
+      if (hmAttend.some(k => att(f[k]))) m.hm++;
+      if (ampAttend.some(k => att(f[k]))) m.amp++;
+      const a5 = String(f.amendment5_commitments || '').trim() !== '';
+      const hmc = String(f.house_meeting_commitments || '').trim() !== '' || String(f.house_meeting_date || '').trim() !== '';
+      if (a5) m.a5++;
+      if (hmc) m.hmc++;
+      if (f.one_on_one_booked) m.oo++;
+      if (f.wants_vote_reminders) m.remind++;
+      m.attempts += Number(f.attempt_count) || 0;
+      // "Followed up on" = a real next step, NOT just an attempt: 1-1 booked,
+      // a logged conversation, or signed up for a training.
+      const trained = trainSignup.some(k => f[k] === 'Signed up');
+      const nextStep = !!f.one_on_one_booked || f.last_attempt_result === 'Conversation' || trained;
+      if (a5 && nextStep) m.a5fu++;
+      if (hmc && (!!f.one_on_one_booked || f.last_attempt_result === 'Conversation')) m.hmfu++;
+    }
+    off = d.offset;
+  } while (off);
+  let ampConvos = 0; const launchSet = new Set();
+  off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`OR({method}='Amplifier conversation',{method}='Event attendance')`)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=contact`;
+    if (off) q += `&offset=${off}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      if (r.fields.method === 'Amplifier conversation') ampConvos++;
+      else if (att(r.fields.result)) (r.fields.contact || []).forEach(id => launchSet.add(id));
+    }
+    off = d.offset;
+  } while (off);
+  const rows = [
+    ['outreach_attempts', 'Outreach attempts logged (calls + texts)', m.attempts],
+    ['onboarding_attended', 'Attended an onboarding call', m.onb],
+    ['launch_attended', 'Attended a regional launch / event', launchSet.size],
+    ['hm_trained', 'Attended a House Meeting training', m.hm],
+    ['amp_trained', 'Attended an Amplifier training', m.amp],
+    ['amp_convos', 'Amplifier conversations logged', ampConvos],
+    ['a5_commitments', 'Amendment 5 commitments made', m.a5],
+    ['hm_commitments', 'House meeting commitments made', m.hmc],
+    ['one_on_ones', '1-1s booked', m.oo],
+    ['a5_followed_up', 'A5 commitments followed up on', m.a5fu],
+    ['hm_followed_up', 'HM commitments followed up on', m.hmfu],
+    ['vote_reminders', 'Want to be reminded to vote', m.remind],
+  ];
+  const e = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const out = [['key', 'Metric', 'Count'].join(',')];
+  for (const r of rows) out.push(r.map(e).join(','));
+  return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
 }
 
 async function rsvpExportCsv(env, urlObj) {
