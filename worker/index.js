@@ -2056,6 +2056,17 @@ async function remindSignup(request, env) {
   if (cRecruiter) baseFields.recruited_by = cRecruiter;
   if (wants_updates) baseFields.wants_amendment5_updates = true;
   if (wants_help) baseFields.wants_to_volunteer = true;
+  // Flag vote-reminder intent durably + visibly (no dedicated field exists).
+  const VR_TAG = `${today} · Wants vote reminder`;
+  if (existingId) {
+    try {
+      const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${existingId}`);
+      const prev = String(cur.fields.commitments_added || '').trim();
+      if (!/wants vote reminder/i.test(prev)) baseFields.commitments_added = prev ? `${prev}\n${VR_TAG}` : VR_TAG;
+    } catch (e) { /* non-fatal */ }
+  } else {
+    baseFields.commitments_added = VR_TAG;
+  }
 
   let contactId;
   if (existingId) {
@@ -4147,23 +4158,21 @@ async function rollupExportCsv(env, urlObj) {
     }
     off = d.offset;
   } while (off);
-  let ampConvos = 0; const launchSet = new Set(); const voteSet = new Set();
+  let ampConvos = 0; const launchSet = new Set();
   off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`OR({method}='Amplifier conversation',{method}='Event attendance',FIND('vote reminder',LOWER({Summary}&'')))`)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=contact&fields%5B%5D=Summary`;
+    let q = `?filterByFormula=${encodeURIComponent(`OR({method}='Amplifier conversation',{method}='Event attendance')`)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=contact`;
     if (off) q += `&offset=${off}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
     for (const r of d.records) {
-      const summ = String(r.fields.Summary || '');
       if (r.fields.method === 'Amplifier conversation') ampConvos++;
-      else if (/vote reminder/i.test(summ)) (r.fields.contact || []).forEach(id => voteSet.add(id));
       else if (att(r.fields.result)) (r.fields.contact || []).forEach(id => launchSet.add(id));
     }
     off = d.offset;
   } while (off);
-  // "Reminded to vote" — distinct contacts with a vote-reminder signup log row
-  // (the wants_vote_reminders field was never created in Airtable).
-  m.remind = voteSet.size;
+  // "Reminded to vote" — contacts flagged "Wants vote reminder" in commitments_added
+  // (no dedicated field exists; remind-to-vote signups write this tag).
+  m.remind = await countMatching(env, `FIND('wants vote reminder',LOWER({commitments_added}&''))>0`);
   const rows = [
     ['outreach_attempts', 'Outreach attempts logged (calls + texts)', m.attempts],
     ['onboarding_attended', 'Attended an onboarding call', m.onb],
