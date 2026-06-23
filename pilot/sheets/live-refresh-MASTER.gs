@@ -94,8 +94,8 @@ function refreshMaster(){
   for (let i=0;i<out.length;i++){
     const r = FIRST+i;
     sh.getRange(r,4).setFormula(`=IF(N(C${r})=0,"",B${r}/C${r})`).setNumberFormat('0%');
-    const color = (META[out[i].key] && META[out[i].key].color) || '#1F5C3D';
-    sh.getRange(r,5).setFormula(`=IF(N(C${r})=0,"",SPARKLINE(B${r},{"charttype","bar";"max",C${r};"color1","${color}";"empty","zero"}))`);
+    // Bar color tracks progress: red < 34%, amber 34–66%, green ≥ 67% (live).
+    sh.getRange(r,5).setFormula(`=IF(N(C${r})=0,"",SPARKLINE(B${r},{"charttype","bar";"max",C${r};"empty","zero";"color1",IF(B${r}/C${r}>=0.67,"#188038",IF(B${r}/C${r}>=0.34,"#F9AB00","#D93025"))}))`);
   }
   sh.hideColumns(6);
   sh.getRange(2,1,1,5).setValue('Live from Airtable · refreshes every 30 minutes · edit only the Goal column · updated '+new Date().toLocaleString());
