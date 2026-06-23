@@ -95,7 +95,8 @@ function buildShell(name, banner){
   const ss=SpreadsheetApp.getActive();
   let sh=ss.getSheetByName(name); if(!sh) sh=ss.insertSheet(name);
   sh.getRange(1,1,1,N).breakApart();
-  sh.getRange(1,2,1,N-1).merge().setValue(banner)
+  // banner starts at col 4 so it never overlaps the 3 frozen columns (hidden id + First + Last)
+  sh.getRange(1,4,1,N-3).merge().setValue(banner)
     .setFontFamily(FONT).setFontWeight('bold').setFontColor(INK).setBackground(ALERT)
     .setWrap(true).setVerticalAlignment('middle').setHorizontalAlignment('left');
   sh.setRowHeight(1,58);
