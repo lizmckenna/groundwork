@@ -2753,14 +2753,17 @@ async function getCallList(env, urlObj) {
       + `NOT(FIND('parent team',${A5})),NOT(FIND('canvass',${A5})),NOT(FIND('testimony',${A5})),`
       + `NOT(FIND('talk to 5',${A5})),NOT(FIND('other:',${A5})))`;
     let followupCore, orgScope = null;
+    // Kathryn's amp/hm-only people are statewide — they shouldn't double-appear
+    // on LaNee, Ellen G, or Stephanie's geographic queues (Stephanie 6/23 bug report).
     if (oid === LANEE_ID) {
-      followupCore = [ hasCommit, `OR(${countyOr(LANEE_FOLLOWUP_COUNTIES)},${isKC})` ];
+      followupCore = [ hasCommit, `OR(${countyOr(LANEE_FOLLOWUP_COUNTIES)},${isKC})`, `NOT(${ampHmOnly})` ];
     } else if (oid === ELLENG_ID) {
-      followupCore = [ hasCommit, countyOr(ELLENG_COUNTIES) ];
+      followupCore = [ hasCommit, countyOr(ELLENG_COUNTIES), `NOT(${ampHmOnly})` ];
     } else if (oid === STEPHANIE_ID) {
-      // commitment anywhere except the 9, OR onboarding attendee in a no-team county
+      // commitment anywhere except the 9, OR onboarding attendee in a no-team county.
+      // Exclude amp/hm-only commits (those route to Kathryn statewide).
       followupCore = [
-        `OR(AND(${hasCommit},NOT(${countyOr(STEPHANIE_EXCLUDE_COUNTIES)}),NOT(${isKC})),`
+        `OR(AND(${hasCommit},NOT(${countyOr(STEPHANIE_EXCLUDE_COUNTIES)}),NOT(${isKC}),NOT(${ampHmOnly})),`
         + `AND(${attendedOnboarding},NOT(${countyOr(STEPHANIE_TEAM_COUNTIES)}),NOT(${isKC})))`,
       ];
     } else if (oid === organizerId('kathryn')) {
