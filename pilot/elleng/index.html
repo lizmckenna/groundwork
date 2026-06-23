@@ -568,7 +568,7 @@ main.container { padding-bottom: 340px; }
         <option value="10" selected>10 at a time</option>
         <option value="25">25 at a time</option>
       </select>
-      <span class="mono" title="Live count of the FRESH list: contacts assigned to you that nobody has ever attempted, minus onboarding signups, do-not-contact / wrong number / skipped, fellow organizers, and excluded schools. People with attempts live on the follow-up list (due again after 4 days, drop off at 5 attempts). The in_call_queue column in Airtable shows the same rules." style="cursor:help;border-bottom:1px dashed var(--border-hover);"><span id="queue-total">—</span> in queue ⓘ</span>
+      <span class="mono" title="Total people in the list you're viewing right now (updates when you switch lists in the dropdown above)." style="cursor:help;border-bottom:1px dashed var(--border-hover);"><span id="queue-total">—</span> in this list ⓘ</span>
     </div>
     <p class="mono" id="list-hint" style="font-size:11px;color:var(--text-tertiary);margin:-6px 0 12px;letter-spacing:0.04em;"></p>
     <div class="queue-wrap" id="queue"></div>
@@ -576,7 +576,7 @@ main.container { padding-bottom: 340px; }
     <div class="batch-nav">
       <button id="batch-prev" class="secondary" disabled>← Previous 5</button>
       <span class="batch-info" id="batch-info">Batch 1 · 0 of 5 done</span>
-      <button id="batch-next" disabled>Next 5 →</button>
+      <button id="batch-next" disabled>Next batch →</button>
     </div>
 
     <div class="pilot-banner">
@@ -1045,7 +1045,7 @@ function renderCachedCounters() {
 
 async function loadQueueCount() {
   try {
-    const r = await authFetch(`${WORKER}/queue-count?organizer=${ORGANIZER}`);
+    const r = await authFetch(`${WORKER}/call-list?list=${activeList}&count=1&organizer=${ORGANIZER}`);
     if (!r.ok) return;
     const d = await r.json();
     const el = document.getElementById('queue-total');
@@ -1303,6 +1303,7 @@ document.getElementById('list-picker')?.addEventListener('change', (e) => {
   applyListUI();
   resetBatches();
   fetchNextBatch();
+  loadQueueCount();   // update the "in this list" total for the newly-selected list
 });
 document.getElementById('page-size')?.addEventListener('change', (e) => {
   pageSize = parseInt(e.target.value);
@@ -1330,7 +1331,7 @@ function updateBatchNav() {
   const current = batches[currentBatchIdx];
   // Allow paging forward at any time, even if not all saved
   next.disabled = false;
-  next.textContent = (currentBatchIdx < batches.length - 1) ? 'Forward →' : 'Next 5 →';
+  next.textContent = (currentBatchIdx < batches.length - 1) ? 'Forward →' : 'Next batch →';
   const doneCount = current ? current.contacts.filter(c => savedIds.has(c.id)).length : 0;
   const total = current ? current.contacts.length : 0;
   info.textContent = `Batch ${currentBatchIdx + 1} · ${doneCount} of ${total} done`;

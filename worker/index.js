@@ -2655,12 +2655,25 @@ function rowFromRecord(r) {
   };
 }
 
+async function countMatching(env, filter) {
+  let count = 0, offset = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100&fields%5B%5D=Name`;
+    if (offset) q += `&offset=${offset}`;
+    const data = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    count += data.records.length;
+    offset = data.offset;
+  } while (offset);
+  return count;
+}
 async function getCallList(env, urlObj) {
   const list = urlObj.searchParams.get('list') || 'fresh';
   const organizer = urlObj.searchParams.get('organizer');
   const n = parseInt(urlObj.searchParams.get('n') || '25');
+  const countOnly = urlObj.searchParams.get('count');   // count=1 → return {count} for this list
 
   if (list === 'fresh') {
+    if (countOnly) return await getQueueCount(env, urlObj);
     // Same as /prospects
     return await getProspects(env, urlObj);
   }
@@ -2676,6 +2689,7 @@ async function getCallList(env, urlObj) {
       ...onboardingSignupExclusions(),
       ...callableExclusions(organizer),
     ].join(',')})`;
+    if (countOnly) return json({ count: await countMatching(env, filter) });
     let q = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=${n}`;
     q += `&sort%5B0%5D%5Bfield%5D=last_attempt_date&sort%5B0%5D%5Bdirection%5D=asc`;
     for (const f of PROSPECT_FIELDS) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
@@ -2746,6 +2760,7 @@ async function getCallList(env, urlObj) {
       `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4)`,
       ...callableExclusions(orgScope),
     ].join(',')})`;
+    if (countOnly) return json({ count: await countMatching(env, filter) });
     const fields = [...PROSPECT_FIELDS, ...Object.values(EVENT_META).map(m => m.attendField)];
     const candidates = [];
     let offset = null;
@@ -2792,6 +2807,7 @@ async function getCallList(env, urlObj) {
       `OR({last_attempt_date}=BLANK(),DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4)`,
       ...callableExclusions(organizer),
     ].join(',')})`;
+    if (countOnly) return json({ count: await countMatching(env, filter) });
     const fields = [...PROSPECT_FIELDS, ...Object.values(EVENT_META).filter(m => m.type === 'hm' || m.type === 'amp').map(m => m.attendField)];
     const candidates = [];
     let offset = null;
