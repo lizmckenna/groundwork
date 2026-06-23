@@ -6,19 +6,23 @@ const KEY     = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
 const EVENT   = 'Eastern Jackson County Emergency Meeting 7/1';
 const LEADS   = 'LaNee,David,Facebook,Other';
 const STATUS  = 'Not started,Texted,Called,Left message,Confirmed coming,No answer,Declined';
-const ATTEND  = 'Self check-in,Attended,No-show,Walk-in,Canceled';
+const ATTEND  = 'Scheduled,Self check-in,Attended,No-show,Walk-in,Canceled';
 const RSVP_URL    = 'https://parents4mopublicschools.org/launches/eastern-jackson-county/';
 const CHECKIN_URL = 'https://parents4mopublicschools.org/checkin/eastern-jackson-county/';
 
 // ---- Brand palette + font. Swap FONT if it does not render in your Sheet. ----
-const FONT='Archivo', PLUM='#3E4F6E', MARIGOLD='#C99633', YELLOW='#FFD54A';
-const PAPER='#E9E5CE', INK='#1A2418', BAND='#EDEFF4', EDIT_TINT='#E7EBF2', ALERT='#FBE48A';
+const FONT='Archivo';
+const PLUM='#3e4f6e', YELLOW='#d5b069', ROSE='#b35049', TANGERINE='#af5a2b';
+const PAPER='#E9E5CE', INK='#1A2418', BAND='#EDEFF4', ALERT='#FBE48A';
+const FILL_TINT='#F0E2C2';   // light gold = "please fill this in"
+// status colors
+const C_RED='#F2C9C4', C_GREEN='#CDE9D5', C_GREEN_STRONG='#1F7A43', C_GREY='#E0E0E0', C_BLUE='#D8E6F2', C_AMBER='#FBE8B0', C_NEUTRAL='#EDEFF4';
 
 const TAB='RSVPs (live)';
 const DATA_COLS=8;
 const MANUAL=['Claimed by','Reminder: assigned to','Reminder: status','Attendance'];  // I,J,K,L
 const M_START=DATA_COLS+1, TOTAL_COLS=DATA_COLS+MANUAL.length, EMAIL_COL=3, HDR=2, FIRST=3;
-const BANNER='⚠️ LIVE LIST — pulled from the database. Do NOT add, edit, or delete rows in the white columns; anything typed there is erased on the next refresh. The plum columns are YOURS: Claimed by, reminders, and Attendance. They survive every refresh.';
+const BANNER='⚠️ LIVE LIST — pulled from the database. Do NOT touch the RED columns (A–H); anything typed there is erased on the next refresh. The PLUM columns are YOURS: Claimed by, reminders, and Attendance. They survive every refresh.';
 
 function onOpen(){
   SpreadsheetApp.getUi().createMenu('🔄 Groundwork')
@@ -44,14 +48,14 @@ function setUp(){
   sh.setFrozenRows(2); sh.setFrozenColumns(2);
   sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(p=>{if(p.getDescription()==='GW live')p.remove();});
   sh.getRange(1,1,sh.getMaxRows(),DATA_COLS).protect().setDescription('GW live').setWarningOnly(true);
-  styleAttendance(sh);
+  styleStatuses(sh);
   ScriptApp.getProjectTriggers().forEach(t=>{const f=t.getHandlerFunction(); if(f==='refreshRSVPs'||f==='onAttendanceEdit')ScriptApp.deleteTrigger(t);});
   ScriptApp.newTrigger('refreshRSVPs').timeBased().everyMinutes(1).create();
   ScriptApp.newTrigger('onAttendanceEdit').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
   refreshRSVPs();
   installHelp();
   brandSheet();
-  SpreadsheetApp.getActive().toast('All set — branded, live, wipe-proof. The plum columns are yours.','Groundwork',6);
+  SpreadsheetApp.getActive().toast('All set — branded, live, wipe-proof. Plum = yours, red = do not touch.','Groundwork',6);
 }
 
 function refreshRSVPs(){
@@ -86,17 +90,16 @@ function refreshRSVPs(){
     const em=String(r[2]||'').trim().toLowerCase();
     const pm=byEmail[em]||byNP[npKey(r[0],r[1],r[3])];
     const m=pm?pm.slice():new Array(N).fill('');
-    let att=attMap[em]||'';
-    if(!att && /^(no.?show|canceled|cancelled)$/i.test(String(m[N-1]||''))) att=m[N-1];
-    m[N-1]=att;
+    if(!String(m[2]||'').trim()) m[2]='Not started';                       // Reminder status default
+    let att=attMap[em]||String(m[3]||'').trim()||'Scheduled';              // live check-in > kept mark > Scheduled
+    m[3]=att;
     return m;
   });
   sh.getRange(FIRST,M_START,reM.length,N).setValues(reM);
-  brandRows(sh, body.length);   // re-tint editable cols + re-band after the rewrite
+  brandRows(sh, body.length);
   writeStats();
 }
 
-// Push Attended / No-show to the database + dashboard when a lead edits Attendance.
 function onAttendanceEdit(e){
   if(!e||!e.range) return;
   const sh=e.range.getSheet(); if(sh.getName()!==TAB) return;
@@ -106,54 +109,63 @@ function onAttendanceEdit(e){
   const marks=[];
   for(let r=r0;r<=r1;r++){
     const email=String(sh.getRange(r,EMAIL_COL).getValue()||'').trim();
-    if(!email) continue;
-    marks.push({email:email, status:String(sh.getRange(r,ATT_COL).getValue()||'').trim()});
+    const status=String(sh.getRange(r,ATT_COL).getValue()||'').trim();
+    if(!email || status==='Scheduled') continue;
+    marks.push({email:email, status:status});
   }
   if(!marks.length) return;
   UrlFetchApp.fetch('https://groundwork-pilot.elizabethmck.workers.dev/sheet-attendance?key='+encodeURIComponent(KEY),
     {method:'post',contentType:'application/json',payload:JSON.stringify({event:EVENT,marks:marks}),muteHttpExceptions:true});
 }
 
-// ---- Branding: font, plum data header, plum/yellow editable headers, editable tint,
-// every-other-row banding, and ONE full-width filter (incl Attendance) so a sort can
-// never leave a column behind. ----
+// ---- Branding ----
 function brandSheet(){
   const sh=SpreadsheetApp.getActive().getSheetByName(TAB); if(!sh) return;
   const last=Math.max(sh.getLastRow(),FIRST);
   sh.getRange(1,1,sh.getMaxRows(),TOTAL_COLS).setFontFamily(FONT);
-  sh.getRange(HDR,1,1,DATA_COLS).setFontWeight('bold').setBackground(PLUM).setFontColor(PAPER);
-  sh.getRange(HDR,M_START,1,MANUAL.length).setFontWeight('bold').setBackground(PLUM).setFontColor(YELLOW);
-  // one clean filter across EVERY column (data + manual incl Attendance)
+  sh.getRange(HDR,1,1,DATA_COLS).setFontWeight('bold').setBackground(ROSE).setFontColor(PAPER);          // Airtable cols: rose + beige
+  sh.getRange(HDR,M_START,1,MANUAL.length).setFontWeight('bold').setBackground(PLUM).setFontColor(YELLOW); // editable: plum + marigold
   const ex=sh.getFilter(); if(ex) ex.remove();
   sh.getRange(HDR,1,Math.max(last-HDR+1,2),TOTAL_COLS).createFilter();
   brandRows(sh, Math.max(last-FIRST+1,0));
-  styleAttendance(sh);
+  styleStatuses(sh);
 }
 function brandRows(sh, n){
   if(n<=0) return;
-  // every-other-row band on the data columns (A..H)
   const bandRange=sh.getRange(FIRST,1,n,DATA_COLS);
   bandRange.getBandings().forEach(b=>b.remove());
   const bd=bandRange.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY,false,false);
   try{ bd.setHeaderRowColor(null).setFirstRowColor('#FFFFFF').setSecondRowColor(BAND); }catch(e){}
-  // editable columns get a light-plum tint so they read as "yours"
-  sh.getRange(FIRST,M_START,n,MANUAL.length).setBackground(EDIT_TINT);
 }
 
-function styleAttendance(sh){
-  const attCol=M_START+3;
-  const attRange=sh.getRange(FIRST,attCol,sh.getMaxRows()-FIRST+1,1);
-  let rules=sh.getConditionalFormatRules().filter(r=>!r.getRanges().some(rg=>rg.getColumn()===attCol));
-  const cf=(txt,bg,fc)=>{let b=SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(txt).setBackground(bg); if(fc)b=b.setFontColor(fc); return b.setRanges([attRange]).build();};
-  rules.push(cf('Self check-in','#1F7A43','#ffffff'));
-  rules.push(cf('Attended','#CFE8D6'));
-  rules.push(cf('Walk-in','#CFE8D6'));
-  rules.push(cf('No-show','#F0C9C5'));
-  rules.push(cf('Canceled','#E0E0E0'));
+// Color-code Reminder status + Attendance, and gold-highlight unfilled Claimed by / Reminder-assigned.
+function styleStatuses(sh){
+  const claimCol=M_START, assignCol=M_START+1, remCol=M_START+2, attCol=M_START+3;
+  const maxR=sh.getMaxRows()-FIRST+1;
+  const remR=sh.getRange(FIRST,remCol,maxR,1), attR=sh.getRange(FIRST,attCol,maxR,1), fillR=sh.getRange(FIRST,claimCol,maxR,2);
+  let rules=sh.getConditionalFormatRules().filter(r=>!r.getRanges().some(rg=>{const c=rg.getColumn(); return c>=claimCol && c<=attCol;}));
+  const eq=(rng,txt,bg,fc)=>{let b=SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(txt).setBackground(bg); if(fc)b=b.setFontColor(fc); return b.setRanges([rng]).build();};
+  // Reminder status
+  rules.push(eq(remR,'Not started',C_RED));
+  rules.push(eq(remR,'Texted',C_BLUE));
+  rules.push(eq(remR,'Called',C_BLUE));
+  rules.push(eq(remR,'Left message',C_AMBER));
+  rules.push(eq(remR,'No answer',C_AMBER));
+  rules.push(eq(remR,'Confirmed coming',C_GREEN));
+  rules.push(eq(remR,'Declined',C_GREY));
+  // Attendance
+  rules.push(eq(attR,'Scheduled',C_NEUTRAL));
+  rules.push(eq(attR,'Self check-in',C_GREEN_STRONG,'#ffffff'));
+  rules.push(eq(attR,'Attended',C_GREEN));
+  rules.push(eq(attR,'Walk-in',C_GREEN));
+  rules.push(eq(attR,'No-show',C_RED));
+  rules.push(eq(attR,'Canceled',C_GREY));
+  // Unfilled Claimed by / Reminder assigned -> gold "fill me in"
+  rules.push(SpreadsheetApp.newConditionalFormatRule().whenCellEmpty().setBackground(FILL_TINT).setRanges([fillR]).build());
   sh.setConditionalFormatRules(rules);
 }
 
-// Pizza + childcare counts onto the Goals tab, then style the Goals tab.
+// Pizza + childcare onto Goals; live-rsvp-total in tangerine; drop a "Came via FB" row; style the tab.
 function writeStats(){
   const g=SpreadsheetApp.getActive().getSheetByName('Goals'); if(!g) return;
   const url='https://groundwork-pilot.elizabethmck.workers.dev/export/rsvps.csv?stats=1&key='+encodeURIComponent(KEY)+'&event='+encodeURIComponent(EVENT)+'&t='+Date.now();
@@ -170,12 +182,16 @@ function writeStats(){
     let row=-1;
     for(let i=0;i<colA.length;i++){ if(colA[i].indexOf(it[2])>=0){ row=i+1; break; } }
     if(row<0){ row=g.getLastRow()+1; g.getRange(row,1).setValue(it[0]).setFontWeight('bold'); colA.push(it[0].toLowerCase()); }
-    g.getRange(row,3).setValue(it[1]);
+    const cell=g.getRange(row,3).setValue(it[1]);
+    if(it[2]==='live rsvp total') cell.setFontColor(TANGERINE).setFontWeight('bold');
   });
   styleGoals(g);
 }
 function styleGoals(g){
   try{
+    // remove a stray "Came via FB" row if present (bottom-up so indices stay valid)
+    const a=g.getRange(1,1,Math.max(g.getLastRow(),1),1).getValues();
+    for(let i=a.length-1;i>=0;i--){ if(/came via fb|via fb|facebook/i.test(String(a[i][0]))) g.deleteRow(i+1); }
     const lastR=Math.max(g.getLastRow(),1), lastC=Math.max(g.getLastColumn(),4);
     g.getRange(1,1,lastR,lastC).setFontFamily(FONT);
     const colA=g.getRange(1,1,lastR,1).getValues().map(r=>String(r[0]).trim());
@@ -194,7 +210,6 @@ function styleGoals(g){
   }catch(e){}
 }
 
-// Goals formulas (claimed count + %-to-goal, no formula editing to add a lead) + How-to.
 function installHelp(){
   const ss=SpreadsheetApp.getActive();
   const g=ss.getSheetByName('Goals');
@@ -216,17 +231,15 @@ function installHelp(){
   rebuildHowTo();
 }
 
-// Style a per-lead "Template (copy me)" tab (and any duplicated personal lists): same
-// font, plum header, every-other-row shading.
+// Per-lead "Template (copy me)" + personal tabs: same font, plum header, black body text, banding.
 function styleTemplate(){
   const ss=SpreadsheetApp.getActive();
   ss.getSheets().forEach(function(sh){
     const nm=sh.getName();
     if(nm===TAB || nm==='Goals' || nm.indexOf('How to')>=0) return;
-    if(!/template|copy me/i.test(nm) && sh.getLastRow()<1) return;
     try{
       const lr=Math.max(sh.getLastRow(),1), lc=Math.max(sh.getLastColumn(),1);
-      sh.getRange(1,1,Math.max(lr,2),lc).setFontFamily(FONT);
+      sh.getRange(1,1,Math.max(lr,2),lc).setFontFamily(FONT).setFontColor(INK);     // body text BLACK (was unreadable white)
       sh.getRange(1,1,1,lc).setFontWeight('bold').setBackground(PLUM).setFontColor(YELLOW);
       if(lr>1){
         const rng=sh.getRange(2,1,lr-1,lc);
@@ -248,46 +261,39 @@ function rebuildHowTo(){
   const rows=[
     ['📖 How to use this tracker','title'],
     ['','gap'],
-    ['⭐ Door sign-in link — share with registrants AND walk-ins','h'],
+    ['⭐ The two links you need','h'],
+    ['Walk-in / door sign-in — share with registrants AND walk-ins:','plabel'],
     [CHECKIN_URL,'linkhl'],
-    ['Put this on a tablet or a printed QR at the welcome table. Registrants start typing their name and tap it; walk-ins tap "I am new here" and add their info (incl. school + district). Self check-ins turn green in the Attendance column automatically.','p'],
+    ['RSVP recruiting link — text this to turn people out before the event:','plabel'],
+    [RSVP_URL,'linkhl'],
     ['','gap'],
     ['Claim someone who registered','h'],
-    ['On the RSVPs (live) tab, find the person and pick your name in the plum "Claimed by" column. It adds to your number on the Goals tab right away.','p'],
-    ['Never type a person into the white columns. They are the live list from the database, and anything typed there is erased on the next refresh.','note'],
+    ['Find the person and pick your name in the plum "Claimed by" column. It adds to your number on the Goals tab right away.','p'],
+    ['Do NOT type into the RED columns (A–H). They are the live database list and anything typed there is erased on the next refresh.','note'],
     ['','gap'],
-    ['Attendance fills itself in','h'],
-    ['When someone checks in at the door, their row turns green and shows "Self check-in" on its own. You can also hand-mark Attended / No-show / Canceled for anyone who did not scan.','p'],
-    ['','gap'],
-    ['Reminder calls and texts','h'],
-    ['Use the plum "Reminder: assigned to" and "Reminder: status" columns. They stay attached to each person through every refresh.','p'],
+    ['The colors tell you what is left','h'],
+    ['Reminder status starts at "Not started" (red) and Attendance starts at "Scheduled" — so at a glance you see who still needs a call or a check-in. Update them and the colors change (green = confirmed/attended, grey = declined/canceled). Empty gold cells mean "please fill this in."','p'],
     ['','gap'],
     ['Sorting + filtering safely','h'],
-    ['To sort or filter just for yourself, use Data → Filter views → Create new filter view (it is private and never reorders the shared list). The filter on the sheet covers every column, so a sort moves whole rows together.','p'],
+    ['To sort or filter just for yourself, use Data → Filter views → Create new filter view (private, never reorders the shared list). The filter on the sheet covers every column, so a sort moves whole rows together.','p'],
     ['','gap'],
-    ['Change a goal','h'],
-    ['On the Goals tab, type a new number in the "Goal" column. Everything recalculates on its own.','p'],
-    ['','gap'],
-    ['Add a new lead','h'],
-    ['Goals tab: type the new name above TOTAL and set their Goal, then copy the row above and paste into the new row. Duplicate the "Template (copy me)" tab for their personal list.','p'],
-    ['','gap'],
-    ['RSVP link (to recruit before the event)','h'],
-    [RSVP_URL,'link'],
+    ['Change a goal / add a lead','h'],
+    ['Goals tab: type a new Goal number, or add a name above TOTAL and copy the row above. Duplicate the "Template (copy me)" tab for a personal list.','p'],
   ];
   h.getRange(1,1,rows.length,1).setValues(rows.map(function(r){ return [r[0]]; }));
   rows.forEach(function(it,i){
     const c=h.getRange(i+1,1).setWrap(true).setVerticalAlignment('middle').setFontFamily(FONT);
-    if(it[1]==='title'){ c.setFontSize(18).setFontWeight('bold').setFontColor(MARIGOLD).setBackground(PLUM); h.setRowHeight(i+1,48); }
-    else if(it[1]==='h'){ c.setFontSize(13).setFontWeight('bold').setFontColor(PLUM); h.setRowHeight(i+1,28); }
-    else if(it[1]==='note'){ c.setFontSize(11).setFontColor('#9A3412').setFontStyle('italic'); h.setRowHeight(i+1,42); }
-    else if(it[1]==='link'){ c.setFontSize(11).setFontColor('#2563EB'); h.setRowHeight(i+1,24); }
+    if(it[1]==='title'){ c.setFontSize(15).setFontWeight('bold').setFontColor(YELLOW).setBackground(PLUM); h.setRowHeight(i+1,40); }
+    else if(it[1]==='h'){ c.setFontSize(11).setFontWeight('bold').setFontColor(PLUM).setBackground('#EDEDEA'); h.setRowHeight(i+1,24); }
+    else if(it[1]==='plabel'){ c.setFontSize(10).setFontWeight('bold').setFontColor(INK).setBackground('#EDEDEA'); h.setRowHeight(i+1,20); }
+    else if(it[1]==='note'){ c.setFontSize(10).setFontColor('#9A3412').setFontStyle('italic').setBackground('#EDEDEA'); h.setRowHeight(i+1,36); }
     else if(it[1]==='linkhl'){
       const rt=SpreadsheetApp.newRichTextValue().setText(it[0]).setLinkUrl(it[0])
-        .setTextStyle(SpreadsheetApp.newTextStyle().setBold(true).setFontSize(13).build()).build();
-      c.setRichTextValue(rt).setBackground('#FFF4CC'); h.setRowHeight(i+1,36);
+        .setTextStyle(SpreadsheetApp.newTextStyle().setBold(true).setFontSize(11).build()).build();
+      c.setRichTextValue(rt).setBackground('#FFF4CC'); h.setRowHeight(i+1,30);
     }
-    else if(it[1]==='gap'){ c.setBackground(MARIGOLD); h.setRowHeight(i+1,8); }   // marigold spacer rows
-    else { c.setFontSize(11).setFontColor(INK); h.setRowHeight(i+1,38); }
+    else if(it[1]==='gap'){ c.setBackground(YELLOW); h.setRowHeight(i+1,8); }
+    else { c.setFontSize(10).setFontColor(INK).setBackground('#EDEDEA'); h.setRowHeight(i+1,34); }
   });
   h.activate();
   SpreadsheetApp.flush();
