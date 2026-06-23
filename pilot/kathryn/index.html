@@ -582,8 +582,8 @@ main.container { padding-bottom: 340px; }
     <div class="pilot-banner">
       <b>Pilot v1.</b> Need to edit a contact's info (missing school, etc.)? Open the
       <a href="https://airtable.com/appQdixHbuttPldx6/tblJeHqz13AOvq71A/viwdd81VXSPZZurt9?blocks=hide" target="_blank" rel="noopener" style="color:var(--gw-purple);text-decoration:underline;">Airtable base</a>
-      directly. See something off, missing, or backwards? Drop it in the
-      <a href="https://docs.google.com/spreadsheets/d/1ZIqUs4n9uSsi3bAnFA6AXTsCFQ0RN932WWUPal0ez0k/edit?gid=1003117938#gid=1003117938" target="_blank" rel="noopener" style="color:var(--gw-purple);text-decoration:underline;">feedback doc</a>.
+      directly. See something off, missing, or backwards?
+      <a href="#" id="feedback-open-footer" style="color:var(--gw-purple);text-decoration:underline;">Report it here</a> and Liz gets an email with the details.
     </div>
   </div>
 
@@ -2521,10 +2521,10 @@ window.addEventListener('error', (e) => captureError(e.message || 'unknown error
 window.addEventListener('unhandledrejection', (e) => captureError(e.reason?.message || String(e.reason || 'unhandled rejection')));
 
 const fbOverlay = document.getElementById('feedback-overlay');
-document.getElementById('feedback-open')?.addEventListener('click', (e) => {
+['feedback-open','feedback-open-footer'].forEach(id => document.getElementById(id)?.addEventListener('click', (e) => {
   e.preventDefault();
   fbOverlay.style.display = 'flex';
-});
+}));
 document.getElementById('feedback-close')?.addEventListener('click', () => { fbOverlay.style.display = 'none'; });
 document.getElementById('feedback-send')?.addEventListener('click', async () => {
   const cat = document.getElementById('feedback-category').value;
