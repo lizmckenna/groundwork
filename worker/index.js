@@ -4161,12 +4161,15 @@ async function rollupExportCsv(env, urlObj) {
   let ampConvos = 0; const launchSet = new Set();
   off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`OR({method}='Amplifier conversation',{method}='Event attendance')`)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=contact`;
+    let q = `?filterByFormula=${encodeURIComponent(`OR({method}='Amplifier conversation',{method}='Event attendance')`)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=contact&fields%5B%5D=rsvp_launch`;
     if (off) q += `&offset=${off}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
     for (const r of d.records) {
-      if (r.fields.method === 'Amplifier conversation') ampConvos++;
-      else if (att(r.fields.result)) (r.fields.contact || []).forEach(id => launchSet.add(id));
+      if (r.fields.method === 'Amplifier conversation') { ampConvos++; continue; }
+      // Regional launches only: an in-person launch RSVP/check-in carries rsvp_launch
+      // (onboardings + trainings do not). Exclude Parent Power Camps, which also use it.
+      const rl = String(r.fields.rsvp_launch || '');
+      if (att(r.fields.result) && rl && !/parent power camp/i.test(rl)) (r.fields.contact || []).forEach(id => launchSet.add(id));
     }
     off = d.offset;
   } while (off);
@@ -4176,7 +4179,7 @@ async function rollupExportCsv(env, urlObj) {
   const rows = [
     ['outreach_attempts', 'Outreach attempts logged (calls + texts)', m.attempts],
     ['onboarding_attended', 'Attended an onboarding call', m.onb],
-    ['launch_attended', 'Attended a regional launch / event', launchSet.size],
+    ['launch_attended', 'Attended a regional launch', launchSet.size],
     ['hm_trained', 'Attended a House Meeting training', m.hm],
     ['amp_trained', 'Attended an Amplifier training', m.amp],
     ['amp_convos', 'Amplifier conversations logged', ampConvos],

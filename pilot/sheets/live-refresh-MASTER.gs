@@ -101,7 +101,7 @@ function refreshMaster(){
   const NOTES = {
     outreach_attempts: 'Total call / text / email attempts logged across the organizer dashboards.',
     onboarding_attended: 'Distinct people marked Attended or Walk-in at any No on 5 onboarding call.',
-    launch_attended: 'Distinct people marked Attended / Walk-in at a regional launch or in-person event (includes door check-ins).',
+    launch_attended: 'Distinct people who attended a regional launch (e.g., Northland 6/18, via RSVP or door check-in). Excludes onboardings, trainings, and Parent Power Camps, which have their own rows.',
     hm_trained: 'Distinct people who attended a House Meeting training.',
     amp_trained: 'Distinct people who attended an Amplifier training.',
     amp_convos: 'Total amplifier-to-voter conversations logged (all rounds).',
