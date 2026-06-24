@@ -61,8 +61,8 @@ const EVENT_META = {
   'amp_7_6':  { type: 'amp', date: '2026-07-06', time: '6:30pm CT', label: 'Amplifier 7/6',  confirmEvent: 'Confirm Amp 7/6',  attendEvent: 'Amplifier Training 7/6',  confirmField: 'confirm_amp_7_6_status',  attendField: 'attendance_amp_7_6_status',  signupField: 'signup_amp_7_6_status',  confirmTag: 'amp 7/6 confirm',  attendTag: 'amplifier 7/6' },
   'amp_7_21': { type: 'amp', date: '2026-07-21', time: '6:30pm CT', label: 'Amplifier 7/21', confirmEvent: 'Confirm Amp 7/21', attendEvent: 'Amplifier Training 7/21', confirmField: 'confirm_amp_7_21_status', attendField: 'attendance_amp_7_21_status', signupField: 'signup_amp_7_21_status', confirmTag: 'amp 7/21 confirm', attendTag: 'amplifier 7/21' },
   // Know Your Neighbor (KC) — Kathryn owns reminders per the PMOPS flow (6/11 email)
-  'kyn_6_23': { type: 'kyn', date: '2026-06-23', time: '3:00pm CT',  label: 'Know Your Neighbor 6/23', confirmEvent: 'Confirm KYN 6/23', attendEvent: 'Know Your Neighbor 6/23', confirmField: 'confirm_kyn_6_23_status', attendField: 'attendance_kyn_6_23_status', signupField: 'signup_kyn_6_23_status', confirmTag: 'kyn 6/23 confirm', attendTag: 'kyn 6/23' },
-  'kyn_7_25': { type: 'kyn', date: '2026-07-25', time: '10:00am CT', label: 'Know Your Neighbor 7/25', confirmEvent: 'Confirm KYN 7/25', attendEvent: 'Know Your Neighbor 7/25', confirmField: 'confirm_kyn_7_25_status', attendField: 'attendance_kyn_7_25_status', signupField: 'signup_kyn_7_25_status', confirmTag: 'kyn 7/25 confirm', attendTag: 'kyn 7/25' },
+  'kyn_6_23': { type: 'kyn', inPerson: true, date: '2026-06-23', time: '3:00pm CT',  label: 'Know Your Neighbor 6/23', confirmEvent: 'Confirm KYN 6/23', attendEvent: 'Know Your Neighbor 6/23', confirmField: 'confirm_kyn_6_23_status', attendField: 'attendance_kyn_6_23_status', signupField: 'signup_kyn_6_23_status', confirmTag: 'kyn 6/23 confirm', attendTag: 'kyn 6/23' },
+  'kyn_7_25': { type: 'kyn', inPerson: true, date: '2026-07-25', time: '10:00am CT', label: 'Know Your Neighbor 7/25', confirmEvent: 'Confirm KYN 7/25', attendEvent: 'Know Your Neighbor 7/25', confirmField: 'confirm_kyn_7_25_status', attendField: 'attendance_kyn_7_25_status', signupField: 'signup_kyn_7_25_status', confirmTag: 'kyn 7/25 confirm', attendTag: 'kyn 7/25' },
 };
 function eventMeta(key){ return EVENT_META[key] || EVENT_META['5_26']; }
 // The soonest upcoming onboarding key (so nothing is ever hardcoded to a past date).
@@ -3098,9 +3098,11 @@ async function runSignupCanary(env, opts = {}) {
     const hrs = isNaN(evTime) ? null : (evTime - now) / 3.6e6;
     if (!force && !(hrs !== null && hrs > 12 && hrs < 48)) continue;  // ~36h window
     const failures = [];
-    let link = null;
-    try { link = await env.KV_BINDING.get(`zoomlink:${key}`); } catch (e) {}
-    if (!link) failures.push('No Zoom link is set for this event, so confirmation emails would go out without a join link.');
+    if (!meta.inPerson) {   // in-person events (KYN) have no Zoom link by design
+      let link = null;
+      try { link = await env.KV_BINDING.get(`zoomlink:${key}`); } catch (e) {}
+      if (!link) failures.push('No Zoom link is set for this event, so confirmation emails would go out without a join link.');
+    }
     if (!dry) {
       let body = null, httpok = false;
       try {
@@ -5354,7 +5356,7 @@ async function eventRsvp(request, env) {
   if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
   const { event_id, first, last, phone, email, school, district, city, zip, notes } = body;
   if (!event_id || !event_id.startsWith('rec')) return json({ error: 'event_id required' }, 400);
-  if (!first || !last || !email) return json({ error: 'first, last, and email are required' }, 400);
+  if (!first || !last || (!email && !phone)) return json({ error: 'first and last name, plus an email or phone, are required' }, 400);
 
   // Get event to know what we're RSVPing to (used in log entry + email)
   let eventName = '';
@@ -5370,13 +5372,15 @@ async function eventRsvp(request, env) {
   const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
   const cFirst = clean(first);
   const cLast = clean(last);
-  const cEmail = String(email).toLowerCase().trim();
+  const cEmail = email ? String(email).toLowerCase().trim() : '';
   const cPhone = phone ? String(phone).trim() : '';
 
   // Dedupe by email then phone
   let existingId = null;
-  const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
-  if (r.records.length > 0) existingId = r.records[0].id;
+  if (cEmail) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+    if (r.records.length > 0) existingId = r.records[0].id;
+  }
   if (!existingId && cPhone) {
     const digits = cPhone.replace(/\D/g, '').slice(-10);
     if (digits.length === 10) {
