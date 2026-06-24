@@ -30,6 +30,8 @@ const DD = {
   COMMIT: ['Committed','Planned','Completed','Cancelled'],
   TEAM:   ['Prospect','Regional Team','Core Team','Co-lead'],
   FLAG:   ['Duplicate','Merge','Wrong person','Bad contact'],
+  // controlled vocab for cleanup — canonical Northland districts (allow-invalid, so messy incoming values still display)
+  DISTRICT: ['North Kansas City Schools','Park Hill School District','Liberty Public Schools','Smithville School District','Kearney School District','Excelsior Springs School District','Platte County R-3','Gladstone','Other / outside Northland'],
 };
 
 // column model — Ellen's order (+ County, + Team/Notes/Flag at the end).
@@ -47,7 +49,7 @@ const COLS = [
   {h:'City',           tier:'data', push:'city'},
   {h:'Zip',            tier:'data', push:'zip'},
   {h:'School',         tier:'data', push:'school'},
-  {h:'District',       tier:'data', push:'district'},
+  {h:'District',       tier:'data', push:'district', dd:'DISTRICT'},
   {h:'County',         tier:'soft'},
   {h:'Amplifier',      tier:'commit', dd:'COMMIT', preserve:true},
   {h:'House Mtg',      tier:'commit', dd:'COMMIT', preserve:true},
@@ -205,12 +207,16 @@ function brandRows(sh,n){
 function ci(h){ return COLS.findIndex(c=>c.h===h)+1; }
 function styleStatuses(sh){
   const maxR=sh.getMaxRows()-FIRST+1;
-  const orgCol=ci('Organized By'), teamCol=ci('Team'), flagCol=ci('Flag (dupe / merge)');
+  const orgCol=ci('Organized By'), teamCol=ci('Team'), flagCol=ci('Flag (dupe / merge)'), flagL=colL(flagCol);
   const commit=COLS.map((c,i)=>c.tier==='commit'?i+1:0).filter(Boolean);
   const ro=COLS.map((c,i)=>c.tier==='ro'?i+1:0).filter(Boolean);
-  const touched={}; [orgCol,teamCol,flagCol].concat(commit,ro).forEach(c=>touched[c]=1);
-  let rules=sh.getConditionalFormatRules().filter(r=>!r.getRanges().some(rg=>touched[rg.getColumn()]));
   const eq=(col,txt,bg,fc)=>{ let b=SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(txt).setBackground(bg); if(fc)b=b.setFontColor(fc); return b.setRanges([sh.getRange(FIRST,col,maxR,1)]).build(); };
+  const rules=[];
+  // FLAGGED rows (any flag value) -> whole row grey + strikethrough. First, so it wins over the color rules.
+  rules.push(SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied('=$'+flagL+FIRST+'<>""')
+    .setBackground('#D9D9D9').setFontColor('#7A7A7A').setStrikethrough(true)
+    .setRanges([sh.getRange(FIRST,1,maxR,N)]).build());
   // organizer multicolor
   Object.keys(ORG_COLORS).forEach(name=> rules.push(eq(orgCol,name,ORG_COLORS[name])));
   // commitment statuses
@@ -220,8 +226,6 @@ function styleStatuses(sh){
   // team
   rules.push(eq(teamCol,'Co-lead',C_GREEN_STRONG,'#ffffff')); rules.push(eq(teamCol,'Core Team',C_GREEN));
   rules.push(eq(teamCol,'Regional Team',C_BLUE)); rules.push(eq(teamCol,'Prospect',C_AMBER));
-  // flag (any value = red)
-  rules.push(SpreadsheetApp.newConditionalFormatRule().whenCellNotEmpty().setBackground(C_RED).setRanges([sh.getRange(FIRST,flagCol,maxR,1)]).build());
   sh.setConditionalFormatRules(rules);
 }
 
