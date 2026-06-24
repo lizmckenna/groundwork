@@ -35,6 +35,10 @@ const ORGANIZER_NAME_BY_ID = {
   'recppnwsWdkGUCgLb': 'Molly Fleming',
   'recpy9zfRkhpdFyG2': 'Liz McKenna',
   'recvahGj81QwlcFSL': 'Amber Frazier',
+  'recsiDVfHvo66ua4r': 'Holly Kaden',
+  'rectxzflcDQxU7EBn': 'Bess Bailey',
+  'recvI8X54I8btvVn4': 'Synthia Larson',
+  'recqENZKSbItbonLw': 'Emma Fortner',
 };
 const METHOD_MAP = { called: 'Call', texted: 'Text', emailed: 'Email' };
 const METHOD_REVERSE = { Call: 'called', Text: 'texted', Email: 'emailed' };
@@ -4436,7 +4440,13 @@ async function sheetRegionUpdate(request, env) {
     district: 'district', city: 'city', zip: 'zip', address: 'street_address' };
   let n = 0;
   for (const u of (body.updates || [])) {
-    if (!u.contact_id || !ALLOWED[u.field]) continue;
+    if (!u.contact_id) continue;
+    if (u.field === 'organized_by') {   // Organized By -> assigned_organizer (linked; typecast matches an existing organizer by name)
+      const fields = { assigned_organizer: u.value ? [String(u.value)] : [] };
+      try { await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`, { method: 'PATCH', body: JSON.stringify({ fields, typecast: true }) }); n++; } catch (e) {}
+      continue;
+    }
+    if (!ALLOWED[u.field]) continue;
     const fields = {}; fields[ALLOWED[u.field]] = u.value == null ? '' : String(u.value);
     try { await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`, { method: 'PATCH', body: JSON.stringify({ fields }) }); n++; } catch (e) {}
   }
