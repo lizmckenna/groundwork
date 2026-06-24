@@ -40,6 +40,8 @@ const ORGANIZER_NAME_BY_ID = {
   'recvI8X54I8btvVn4': 'Synthia Larson',
   'recqENZKSbItbonLw': 'Emma Fortner',
 };
+// name -> organizer id (lowercased), for match-only Organized By write-back (no auto-create on typos)
+const ORGANIZER_ID_BY_NAME = Object.fromEntries(Object.entries(ORGANIZER_NAME_BY_ID).map(([id, nm]) => [nm.toLowerCase().trim(), id]));
 const METHOD_MAP = { called: 'Call', texted: 'Text', emailed: 'Email' };
 const METHOD_REVERSE = { Call: 'called', Text: 'texted', Email: 'emailed' };
 const CONFIRM_EVENT = 'Confirm 5/26';
@@ -4441,9 +4443,11 @@ async function sheetRegionUpdate(request, env) {
   let n = 0;
   for (const u of (body.updates || [])) {
     if (!u.contact_id) continue;
-    if (u.field === 'organized_by') {   // Organized By -> assigned_organizer (linked; typecast matches an existing organizer by name)
-      const fields = { assigned_organizer: u.value ? [String(u.value)] : [] };
-      try { await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`, { method: 'PATCH', body: JSON.stringify({ fields, typecast: true }) }); n++; } catch (e) {}
+    if (u.field === 'organized_by') {   // Organized By -> assigned_organizer. Match-only: a known organizer writes; an unknown/typo name stays sheet-only (no junk organizer created).
+      const v = String(u.value || '').trim();
+      if (!v) { try { await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`, { method: 'PATCH', body: JSON.stringify({ fields: { assigned_organizer: [] } }) }); n++; } catch (e) {} continue; }
+      const oid = ORGANIZER_ID_BY_NAME[v.toLowerCase()];
+      if (oid) { try { await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`, { method: 'PATCH', body: JSON.stringify({ fields: { assigned_organizer: [oid] } }) }); n++; } catch (e) {} }
       continue;
     }
     if (!ALLOWED[u.field]) continue;
