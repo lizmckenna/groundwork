@@ -22,11 +22,12 @@ const C_BLUE='#D8E6F2', C_AMBER='#FBE8B0', C_GREEN='#CDE9D5', C_GREEN_STRONG='#1
 
 // organizer dropdown — hard-coded distinct colors so leaders spot their name fast
 const ORG_COLORS = {
-  'Latrice Barnett':'#F4C7C3', 'Sierra Kilpatrick':'#CDE9D5', 'Ellen Glover':'#D8E6F2',
+  'LaNeé Bridewell':'#D7C9F0', 'Ellen Glover':'#D8E6F2', 'Latrice Barnett':'#F4C7C3', 'Sierra Kilpatrick':'#CDE9D5',
   'Holly Kaden':'#FBE8B0', 'Bess Bailey':'#E6D5F2', 'Synthia Larson':'#F2DFC9', 'Emma Fortner':'#CCEEF2',
+  'Stephanie Rittgers':'#F0D0E0', 'David Tremaine':'#DCE8BE',
 };
 const DD = {
-  ORG:    Object.keys(ORG_COLORS),
+  ORG:    ['LaNeé Bridewell','Ellen Glover','Latrice Barnett','Sierra Kilpatrick','Holly Kaden','Bess Bailey','Synthia Larson','Emma Fortner'],
   COMMIT: ['Committed','Planned','Completed','Cancelled'],
   TEAM:   ['Prospect','Regional Team','Core Team','Co-lead'],
   FLAG:   ['Duplicate','Merge','Wrong person','Bad contact'],
