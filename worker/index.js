@@ -61,7 +61,7 @@ const EVENT_META = {
   // call-list/dashboard formulas. As 'makeup' it stays out of that machinery and flows through
   // the generic signup path (events_signed_up + log + Zoom/ICS email) + the live-signups feed.
   // It is excluded from nextOnboardingKey() so the commitment form still defaults to 7/7.
-  '6_30': { type: 'makeup', date: '2026-06-30', time: '7:30pm CT', label: '6/30 No on 5 Makeup Onboarding', confirmEvent: 'Confirm 6/30', attendEvent: '6/30 No on 5 Makeup Onboarding', confirmField: null, attendField: null, signupField: null, confirmTag: '6/30 confirm', attendTag: '6/30 onboarding' },
+  '6_30': { type: 'makeup', date: '2026-06-30', time: '6:30pm CT', label: '6/30 No on 5 Makeup Onboarding', confirmEvent: 'Confirm 6/30', attendEvent: '6/30 No on 5 Makeup Onboarding', confirmField: null, attendField: null, signupField: null, confirmTag: '6/30 confirm', attendTag: '6/30 onboarding' },
   // House Meeting trainings — dates from parents4mopublicschools.org/trainings (canonical)
   'hm_6_3':  { type: 'hm', date: '2026-06-03', time: '5:30pm CT', label: 'HM Training 6/3',  confirmEvent: 'Confirm HM 6/3',  attendEvent: 'House Meeting Training 6/3',  confirmField: 'confirm_hm_6_3_status',  attendField: 'attendance_hm_6_3_status',  signupField: 'signup_hm_6_3_status',  confirmTag: 'hm 6/3 confirm',  attendTag: 'hm training 6/3' },
   'hm_6_16': { type: 'hm', date: '2026-06-16', time: '6:00pm CT', label: 'HM Training 6/16', confirmEvent: 'Confirm HM 6/16', attendEvent: 'House Meeting Training 6/16', confirmField: 'confirm_hm_6_16_status', attendField: 'attendance_hm_6_16_status', signupField: 'signup_hm_6_16_status', confirmTag: 'hm 6/16 confirm', attendTag: 'hm training 6/16' },
@@ -3373,13 +3373,13 @@ const EMAIL_EVENTS = {
     zoom_link: null, // same
   },
   '6_30': {
-    subject: `You're in — No on 5 Makeup Onboarding · Mon 6/30 7:30 PM CT`,
-    preview: 'No on 5 Makeup Onboarding · Mon June 30 · 7:30 PM CT · Zoom',
-    eyebrow: 'No on 5 Onboarding (Makeup) · Public School Funding',
-    intro_event: '<strong>No on 5 Onboarding (makeup session) — protecting Missouri public school funding</strong>',
-    big_date_html: 'Mon, June 30<br/>7:30 PM CT',
+    subject: `You're in — No on 5 Onboarding · Mon 6/30 6:30 PM CT`,
+    preview: 'No on 5 Onboarding · Mon June 30 · 6:30 PM CT · Zoom',
+    eyebrow: 'No on 5 Onboarding · Public School Funding',
+    intro_event: '<strong>No on 5 Onboarding — protecting Missouri public school funding</strong>',
+    big_date_html: 'Mon, June 30<br/>6:30 PM CT',
     sign_off_date: 'June 30th',
-    zoom_link: null, // set via KV zoomlink:6_30 when Liz provides the link
+    zoom_link: null, // live link is in KV (zoomlink:6_30); this stays null so KV is the single source
   },
 };
 
