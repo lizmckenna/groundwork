@@ -3377,7 +3377,7 @@ const EMAIL_EVENTS = {
     preview: 'No on 5 Onboarding · Mon June 30 · 6:30 PM CT · Zoom',
     eyebrow: 'No on 5 Onboarding · Public School Funding',
     intro_event: '<strong>No on 5 Onboarding — protecting Missouri public school funding</strong>',
-    big_date_html: 'Mon, June 30<br/>6:30 PM CT',
+    big_date_html: 'Mon, June 30<br/>6:30-7:30 PM CT',
     sign_off_date: 'June 30th',
     zoom_link: null, // live link is in KV (zoomlink:6_30); this stays null so KV is the single source
   },
