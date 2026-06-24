@@ -55,6 +55,13 @@ const EVENT_META = {
   '6_23': { type: 'onboarding', date: '2026-06-23', label: '6/23 No on 5 Onboarding',   confirmEvent: 'Confirm 6/23', attendEvent: '6/23 No on 5 Onboarding', confirmField: 'confirm_6_23_status', attendField: 'attendance_6_23_status', signupField: 'signup_6_23_status', confirmTag: '6/23 confirm', attendTag: '6/23 onboarding' },
   '7_7':  { type: 'onboarding', date: '2026-07-07', label: '7/7 No on 5 Onboarding',    confirmEvent: 'Confirm 7/7',  attendEvent: '7/7 No on 5 Onboarding',  confirmField: 'confirm_7_7_status',  attendField: 'attendance_7_7_status',  signupField: 'signup_7_7_status',  confirmTag: '7/7 confirm',  attendTag: '7/7 onboarding' },
   '7_21': { type: 'onboarding', date: '2026-07-21', label: '7/21 No on 5 Onboarding',   confirmEvent: 'Confirm 7/21', attendEvent: '7/21 No on 5 Onboarding', confirmField: 'confirm_7_21_status', attendField: 'attendance_7_21_status', signupField: 'signup_7_21_status', confirmTag: '7/21 confirm', attendTag: '7/21 onboarding' },
+  // 6/30 makeup onboarding (for anyone who missed 6/23). type 'makeup' (NOT 'onboarding')
+  // on purpose: Airtable has no signup_6_30_status/attendance_6_30_status fields and the PAT
+  // can't create them, so a null-field 'onboarding' would inject undefined into the type-based
+  // call-list/dashboard formulas. As 'makeup' it stays out of that machinery and flows through
+  // the generic signup path (events_signed_up + log + Zoom/ICS email) + the live-signups feed.
+  // It is excluded from nextOnboardingKey() so the commitment form still defaults to 7/7.
+  '6_30': { type: 'makeup', date: '2026-06-30', time: '7:30pm CT', label: '6/30 No on 5 Makeup Onboarding', confirmEvent: 'Confirm 6/30', attendEvent: '6/30 No on 5 Makeup Onboarding', confirmField: null, attendField: null, signupField: null, confirmTag: '6/30 confirm', attendTag: '6/30 onboarding' },
   // House Meeting trainings — dates from parents4mopublicschools.org/trainings (canonical)
   'hm_6_3':  { type: 'hm', date: '2026-06-03', time: '5:30pm CT', label: 'HM Training 6/3',  confirmEvent: 'Confirm HM 6/3',  attendEvent: 'House Meeting Training 6/3',  confirmField: 'confirm_hm_6_3_status',  attendField: 'attendance_hm_6_3_status',  signupField: 'signup_hm_6_3_status',  confirmTag: 'hm 6/3 confirm',  attendTag: 'hm training 6/3' },
   'hm_6_16': { type: 'hm', date: '2026-06-16', time: '6:00pm CT', label: 'HM Training 6/16', confirmEvent: 'Confirm HM 6/16', attendEvent: 'House Meeting Training 6/16', confirmField: 'confirm_hm_6_16_status', attendField: 'attendance_hm_6_16_status', signupField: 'signup_hm_6_16_status', confirmTag: 'hm 6/16 confirm', attendTag: 'hm training 6/16' },
@@ -3365,6 +3372,15 @@ const EMAIL_EVENTS = {
     sign_off_date: 'July 21st',
     zoom_link: null, // same
   },
+  '6_30': {
+    subject: `You're in — No on 5 Makeup Onboarding · Mon 6/30 7:30 PM CT`,
+    preview: 'No on 5 Makeup Onboarding · Mon June 30 · 7:30 PM CT · Zoom',
+    eyebrow: 'No on 5 Onboarding (Makeup) · Public School Funding',
+    intro_event: '<strong>No on 5 Onboarding (makeup session) — protecting Missouri public school funding</strong>',
+    big_date_html: 'Mon, June 30<br/>7:30 PM CT',
+    sign_off_date: 'June 30th',
+    zoom_link: null, // set via KV zoomlink:6_30 when Liz provides the link
+  },
 };
 
 // Generated confirmation-email copy for events (trainings) without a
@@ -3390,6 +3406,57 @@ function autoEmailEvent(key) {
     sign_off_date: `${monthName} ${d.getDate()}`,
     zoom_link: null, // trainings: link set via /admin/set-zoom-link per event
   };
+}
+
+// --- Calendar invite (.ics) attached to confirmation emails. The signup pages
+// promise "the Zoom link and a calendar invite," so every confirmation carries a
+// VEVENT (America/Chicago, with the Zoom link as location/URL once it is set).
+const ICS_TZ = [
+  'BEGIN:VTIMEZONE', 'TZID:America/Chicago',
+  'BEGIN:DAYLIGHT', 'TZOFFSETFROM:-0600', 'TZOFFSETTO:-0500', 'TZNAME:CDT', 'DTSTART:19700308T020000', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU', 'END:DAYLIGHT',
+  'BEGIN:STANDARD', 'TZOFFSETFROM:-0500', 'TZOFFSETTO:-0600', 'TZNAME:CST', 'DTSTART:19701101T020000', 'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU', 'END:STANDARD',
+  'END:VTIMEZONE',
+].join('\r\n');
+const ICS_TYPE_DURATION = { makeup: 60, onboarding: 60, legacy: 60, hm: 75, amp: 90, kyn: 180 };
+function parseEventTime(t) {
+  const m = String(t || '').match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+  if (!m) return { h: 19, m: 0 };
+  let h = parseInt(m[1], 10); const mi = m[2] ? parseInt(m[2], 10) : 0; const ap = m[3].toLowerCase();
+  if (ap === 'pm' && h < 12) h += 12;
+  if (ap === 'am' && h === 12) h = 0;
+  return { h, m: mi };
+}
+function icsEscape(s) { return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); }
+function buildEventIcs(eventKey, ev) {
+  const meta = EVENT_META[eventKey];
+  if (!meta || !meta.date) return null;
+  const [Y, Mo, D] = meta.date.split('-').map(n => parseInt(n, 10));
+  if (!Y || !Mo || !D) return null;
+  const { h, m } = parseEventTime(meta.time);
+  const dur = ICS_TYPE_DURATION[meta.type] || 60;
+  const pad = n => String(n).padStart(2, '0');
+  let eh = h, em = m + dur; eh += Math.floor(em / 60); em = em % 60;
+  const start = `${Y}${pad(Mo)}${pad(D)}T${pad(h)}${pad(m)}00`;
+  const end = `${Y}${pad(Mo)}${pad(D)}T${pad(eh)}${pad(em)}00`;
+  const link = (ev && ev.zoom_link) || '';
+  const summary = ['onboarding', 'legacy', 'makeup'].includes(meta.type)
+    ? 'No on 5 Onboarding (Parents for Missouri Public Schools)'
+    : `${meta.label} (Parents for Missouri Public Schools)`;
+  const loc = meta.inPerson ? (link || 'In person (details by email)') : (link ? 'Zoom' : 'Zoom (link by email)');
+  const desc = (meta.inPerson ? '' : (link ? `Join on Zoom: ${link}\n\n` : 'Your Zoom link arrives by email before the event.\n\n'))
+    + 'Parents for Missouri Public Schools. Vote NO on Amendment 5 to protect Missouri public school funding. Aug 4.';
+  let stamp = '20260101T000000Z';
+  try { stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z'); } catch (e) {}
+  const uid = `${eventKey}-${stamp}-p4mps@parents4mopublicschools.org`;
+  return [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//P4MPS//Groundwork//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', ICS_TZ,
+    'BEGIN:VEVENT', `UID:${uid}`, `DTSTAMP:${stamp}`,
+    `DTSTART;TZID=America/Chicago:${start}`, `DTEND;TZID=America/Chicago:${end}`,
+    `SUMMARY:${icsEscape(summary)}`, `LOCATION:${icsEscape(loc)}`, `DESCRIPTION:${icsEscape(desc)}`,
+    (link && !meta.inPerson) ? `URL:${icsEscape(link)}` : '',
+    'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:Reminder', 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR',
+  ].filter(Boolean).join('\r\n');
 }
 
 async function sendConfirmationEmail(env, toEmail, firstName, contactId, organizer, eventKey) {
@@ -3506,10 +3573,22 @@ ${ev.preview}
 
 </body>
 </html>`;
+  const payload = { from: FROM_CONFIRM, to: [toEmail], reply_to: replyTo, subject, html };
+  // Attach the calendar invite (.ics) the signup pages promise.
+  try {
+    const ics = buildEventIcs(String(eventKey || '5_26'), ev);
+    if (ics) {
+      payload.attachments = [{
+        filename: 'no-on-5-onboarding.ics',
+        content: btoa(unescape(encodeURIComponent(ics))),
+        content_type: 'text/calendar; charset=utf-8; method=PUBLISH',
+      }];
+    }
+  } catch (e) { /* invite is best-effort; never block the confirmation email */ }
   const emailRes = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${env.RESEND_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: FROM_CONFIRM, to: [toEmail], reply_to: replyTo, subject, html }),
+    body: JSON.stringify(payload),
   });
   if (!emailRes.ok) throw new Error(`email send failed: ${await emailRes.text()}`);
 
@@ -4470,8 +4549,14 @@ async function signupsExportCsv(env, urlObj) {
   if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
   const metas = Object.entries(EVENT_META).filter(([k, m]) => m.signupField);
   const sigFields = metas.map(([k, m]) => m.signupField);
-  const orClause = 'OR(' + sigFields.map(f => `{${f}}='Signed up'`).join(',') + ')';
-  const fields = ['first', 'last', 'email', 'phone', 'zip', 'source', 'assigned_organizer', 'last_attempt_date'].concat(sigFields);
+  // Public events with no dedicated signup_*_status field (e.g. the 6/30 makeup,
+  // type 'makeup') are tracked only in events_signed_up — surface them too, so the
+  // live feed never silently drops a signup just because it lacks a status column.
+  const extraMetas = Object.entries(EVENT_META).filter(([k, m]) => !m.signupField && m.type === 'makeup' && m.attendEvent);
+  const sigClause = sigFields.map(f => `{${f}}='Signed up'`);
+  const extraClause = extraMetas.map(([k, m]) => `FIND('${m.attendEvent.replace(/'/g, "\\'")}',{events_signed_up}&'')`);
+  const orClause = 'OR(' + sigClause.concat(extraClause).join(',') + ')';
+  const fields = ['first', 'last', 'email', 'phone', 'zip', 'source', 'assigned_organizer', 'last_attempt_date', 'events_signed_up'].concat(sigFields);
   const rows = [];
   let off = null;
   do {
@@ -4490,6 +4575,14 @@ async function signupsExportCsv(env, urlObj) {
       const source = src ? src : (orgFirst ? `${orgFirst} call` : 'Unknown');
       for (const [k, m] of metas) {
         if (String(f[m.signupField] || '') === 'Signed up') {
+          rows.push({ first: f.first || '', last: f.last || '', email: f.email || '', phone: f.phone || '', zip: f.zip || '', event: m.label, source, date: f.last_attempt_date || '' });
+        }
+      }
+      // field-less events (makeup) — detect via events_signed_up
+      const esu = Array.isArray(f.events_signed_up) ? f.events_signed_up
+        : (typeof f.events_signed_up === 'string' && f.events_signed_up ? f.events_signed_up.split(',').map(s => s.trim()) : []);
+      for (const [k, m] of extraMetas) {
+        if (esu.some(x => String(x).toLowerCase() === m.attendEvent.toLowerCase())) {
           rows.push({ first: f.first || '', last: f.last || '', email: f.email || '', phone: f.phone || '', zip: f.zip || '', event: m.label, source, date: f.last_attempt_date || '' });
         }
       }
