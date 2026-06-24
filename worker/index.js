@@ -65,6 +65,12 @@ const EVENT_META = {
   'kyn_7_25': { type: 'kyn', date: '2026-07-25', time: '10:00am CT', label: 'Know Your Neighbor 7/25', confirmEvent: 'Confirm KYN 7/25', attendEvent: 'Know Your Neighbor 7/25', confirmField: 'confirm_kyn_7_25_status', attendField: 'attendance_kyn_7_25_status', signupField: 'signup_kyn_7_25_status', confirmTag: 'kyn 7/25 confirm', attendTag: 'kyn 7/25' },
 };
 function eventMeta(key){ return EVENT_META[key] || EVENT_META['5_26']; }
+// The soonest upcoming onboarding key (so nothing is ever hardcoded to a past date).
+function nextOnboardingKey(today){
+  const obs = Object.entries(EVENT_META).filter(([k,m]) => m.type === 'onboarding').sort((a,b) => a[1].date.localeCompare(b[1].date));
+  const up = obs.find(([k,m]) => m.date > today);   // strictly future: today's event has already happened
+  return (up || obs[obs.length-1] || ['6_9'])[0];
+}
 // Outcome key (dashboard) → event meta key, generated for every event with a
 // signup field ('signed-up-hm-6-16' → 'hm_6_16').
 const SIGNUP_OUTCOME_EVENTS = Object.fromEntries(
@@ -1297,20 +1303,22 @@ async function houseMeetingSignup(request, env) {
   const body = await request.json();
   if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
   const { date, host_name, first, last, phone, email, street_address, city, state, zip, district, school, commitments = [], other_text, source } = body;
-  if (!first || !last || !phone || !email || !date || !host_name) {
-    return json({ error: 'first, last, phone, email, date, and host name are required' }, 400);
+  if (!first || !last || (!email && !phone) || !date || !host_name) {
+    return json({ error: 'first and last name, an email or phone, plus the meeting date and host are required' }, 400);
   }
 
   const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
   const cFirst = clean(first);
   const cLast = clean(last);
-  const cEmail = String(email).toLowerCase().trim();
-  const cPhone = String(phone).trim();
+  const cEmail = email ? String(email).toLowerCase().trim() : '';
+  const cPhone = phone ? String(phone).trim() : '';
 
   let existingId = null;
-  const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
-  if (r.records.length > 0) existingId = r.records[0].id;
-  if (!existingId) {
+  if (cEmail) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+    if (r.records.length > 0) existingId = r.records[0].id;
+  }
+  if (!existingId && cPhone) {
     const digits = cPhone.replace(/\D/g, '').slice(-10);
     if (digits.length === 10) {
       const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
@@ -1325,10 +1333,10 @@ async function houseMeetingSignup(request, env) {
   const baseFields = {
     first: cFirst,
     last: cLast,
-    email: cEmail,
-    phone: cPhone,
     source: source || 'house meeting sign-in',
   };
+  if (cEmail) baseFields.email = cEmail;
+  if (cPhone) baseFields.phone = cPhone;
   if (street_address) baseFields.street_address = String(street_address).trim();
   if (city) baseFields.city = String(city).trim();
   if (zip) baseFields.zip = String(zip).trim();
@@ -1427,22 +1435,24 @@ async function amendment5Signup(request, env) {
   const body = await request.json();
   if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
   const { first, last, phone, email, street_address, city, state, zip, district, school, commitments = [], other_text, recruited_by, source } = body;
-  if (!first || !last || !phone || !email || !zip) {
-    return json({ error: 'first, last, phone, email, and zip are required' }, 400);
+  if (!first || !last || (!email && !phone)) {
+    return json({ error: 'first and last name, plus an email or phone, are required' }, 400);   // never drop a commit-form signup
   }
   const cRecruiter = recruited_by ? String(recruited_by).trim() : '';
 
   const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
   const cFirst = clean(first);
   const cLast = clean(last);
-  const cEmail = String(email).toLowerCase().trim();
-  const cPhone = String(phone).trim();
+  const cEmail = email ? String(email).toLowerCase().trim() : '';
+  const cPhone = phone ? String(phone).trim() : '';
 
   // Dedupe by email then phone
   let existingId = null;
-  const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
-  if (r.records.length > 0) existingId = r.records[0].id;
-  if (!existingId) {
+  if (cEmail) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+    if (r.records.length > 0) existingId = r.records[0].id;
+  }
+  if (!existingId && cPhone) {
     const digits = cPhone.replace(/\D/g, '').slice(-10);
     if (digits.length === 10) {
       const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
@@ -1458,20 +1468,19 @@ async function amendment5Signup(request, env) {
   const isElleng = !!cmtCounty && ELLENG_COUNTIES.some(x => cmtCounty.includes(x));
   const organizerId = isElleng ? ELLENG_ID : deriveOrganizerId({ city, zip });
 
-  // Determine which event this commitment belongs to based on today's date
+  // Attribute to the NEXT upcoming onboarding (was hardcoded to the now-past 6/9).
   const today = todayCT();
-  const isAfter526 = today > '2026-05-26';
-  const eventName = isAfter526 ? '6/9 Emergency Meeting' : 'Orientation 5/26';
-  const eventKey = isAfter526 ? '6_9' : '5_26';
+  const eventKey = nextOnboardingKey(today);
+  const eventName = EVENT_META[eventKey].attendEvent;
 
   // Build contact field updates
   const baseFields = {
     first: cFirst,
     last: cLast,
-    email: cEmail,
-    phone: cPhone,
     source: source || 'amendment 5 commitment form',
   };
+  if (cEmail) baseFields.email = cEmail;
+  if (cPhone) baseFields.phone = cPhone;
   if (street_address) baseFields.street_address = String(street_address).trim();
   if (city) baseFields.city = String(city).trim();
   if (zip) baseFields.zip = String(zip).trim();
@@ -1481,11 +1490,7 @@ async function amendment5Signup(request, env) {
   if (cRecruiter) baseFields.recruited_by = cRecruiter;
   // Mark as signed-up for the appropriate event
   baseFields.last_attempt_date = today;
-  if (isAfter526) {
-    baseFields.signup_6_9_status = 'Signed up';
-  } else {
-    baseFields.last_attempt_result = 'Signed up';
-  }
+  if (EVENT_META[eventKey].signupField) baseFields[EVENT_META[eventKey].signupField] = 'Signed up';
   // Denormalize commitments onto the contact so Ellen's call-through view is self-contained
   const commitmentList = (commitments || []).filter(c => c && c !== 'Other');
   if (commitmentList.length > 0 || (other_text && commitments.includes('Other'))) {
@@ -1552,8 +1557,14 @@ async function amendment5Signup(request, env) {
     });
   }
 
+  // Commit-form completers are marked signed up for the onboarding, so they must
+  // get the Zoom-link confirmation too (audit fix 6/23 — was sending nothing).
+  let confirmation_email_sent = false;
+  if (cEmail && AUTO_CONFIRM_EMAIL) {
+    try { await sendConfirmationEmail(env, cEmail, cFirst, contactId, isElleng ? 'ellen glover' : null, eventKey); confirmation_email_sent = true; } catch (e) {}
+  }
   await invalidateReadCaches(env);
-  return json({ ok: true, contact_id: contactId, commitments_logged: commitments.length, event: eventName });
+  return json({ ok: true, contact_id: contactId, commitments_logged: commitments.length, event: eventName, confirmation_email_sent });
 }
 
 // =========================================================================
