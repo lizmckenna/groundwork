@@ -2756,7 +2756,7 @@ const PROSPECT_FIELDS = ['Name','first','last','phone','email','school','distric
   'last_attempt_date','last_attempt_method','last_attempt_result','next_step','last_attempt_by','last_attempt_note',
   'attempt_count','one_on_one_booked','amendment5_commitments','house_meeting_commitments','commitments_added','house_meeting_date','dnc_flag_date',
   ...Object.values(EVENT_META).filter(m => m.signupField).map(m => m.signupField),
-  ...Object.values(EVENT_META).map(m => m.attendField)];
+  ...Object.values(EVENT_META).filter(m => m.attendField).map(m => m.attendField)];
 
 function rowFromRecord(r) {
   return {
@@ -2907,7 +2907,7 @@ async function getCallList(env, urlObj) {
       ...callableExclusions(orgScope),
     ].join(',')})`;
     if (countOnly) return json({ count: await countMatching(env, filter) });
-    const fields = [...PROSPECT_FIELDS, ...Object.values(EVENT_META).map(m => m.attendField)];
+    const fields = [...PROSPECT_FIELDS, ...Object.values(EVENT_META).filter(m => m.attendField).map(m => m.attendField)];
     const candidates = [];
     let offset = null;
     do {
