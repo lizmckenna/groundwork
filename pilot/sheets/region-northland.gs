@@ -17,14 +17,15 @@ const PUSH   = 'https://groundwork-pilot.elizabethmck.workers.dev/sheet-region-u
 // ---- brand ----
 const FONT='Archivo';
 const PLUM='#3e4f6e', ROSE='#b35049', PAPER='#E9E5CE', INK='#1A2418', GOLD='#d5b069', ALERT='#FBE48A';
-const BAND1='#EEF1F6', BAND2='#DFE5EF';   // two shades — no white rows
+const BAND1='#FFFFFF', BAND2='#F3F4F6';   // white + light grey
+const GREEN_HEADER='#38761D', C_COMMITTED='#6FA8DC';   // commitments header green; "Committed" stands-out blue
 const C_BLUE='#D8E6F2', C_AMBER='#FBE8B0', C_GREEN='#CDE9D5', C_GREEN_STRONG='#1F7A43', C_GREY='#E0E0E0', C_RED='#F2C9C4';
 
 // organizer dropdown — hard-coded distinct colors so leaders spot their name fast
-const ORG_COLORS = {
-  'LaNeé Bridewell':'#D7C9F0', 'Ellen Glover':'#D8E6F2', 'Latrice Barnett':'#F4C7C3', 'Sierra Kilpatrick':'#CDE9D5',
-  'Holly Kaden':'#FBE8B0', 'Bess Bailey':'#E6D5F2', 'Synthia Larson':'#F2DFC9', 'Emma Fortner':'#CCEEF2',
-  'Stephanie Rittgers':'#F0D0E0', 'David Tremaine':'#DCE8BE',
+const ORG_COLORS = {   // matched to the dropdown chip colors
+  'Latrice Barnett':'#FFCFC9', 'Sierra Kilpatrick':'#FFE5A0', 'Ellen Glover':'#FFF8B8', 'Holly Kaden':'#D4EDBC',
+  'Bess Bailey':'#BFE1F6', 'Synthia Larson':'#C6DBE1', 'Emma Fortner':'#E6CFF2',
+  'LaNeé Bridewell':'#FFC8AA', 'Stephanie Rittgers':'#F2C0D5', 'David Tremaine':'#D9D2E9',
 };
 const DD = {
   ORG:    ['LaNeé Bridewell','Ellen Glover','Latrice Barnett','Sierra Kilpatrick','Holly Kaden','Bess Bailey','Synthia Larson','Emma Fortner'],
@@ -42,7 +43,7 @@ const COLS = [
   {h:'contact_id',     tier:'hide'},
   {h:'First',          tier:'data', push:'first'},
   {h:'Last',           tier:'data', push:'last'},
-  {h:'Organized By',   tier:'soft', dd:'ORG',    preserve:true},
+  {h:'Organized By',   tier:'soft', dd:'ORG',    preserve:true, push:'organized_by'},
   {h:'Role',           tier:'soft'},
   {h:'Email',          tier:'data', push:'email'},
   {h:'Phone',          tier:'data', push:'phone'},
@@ -61,9 +62,9 @@ const COLS = [
   {h:'Attended/RSVPed Amp Training?',         tier:'ro'},
   {h:'Attended/RSVPed House Mtg Training?',   tier:'ro'},
   {h:'RSVPed for GOTV Launch?',               tier:'ro'},
-  {h:'Team',           tier:'team', dd:'TEAM', preserve:true},
-  {h:'Notes',          tier:'soft', preserve:true},
+  {h:'Team Role',      tier:'team', dd:'TEAM', preserve:true},
   {h:'Flag (dupe / merge)', tier:'flag', dd:'FLAG', preserve:true},
+  {h:'Notes',          tier:'soft', preserve:true},
 ];
 const N=COLS.length, FEED_COLS=22, HDR=2, FIRST=3, MAXR=500;
 const PRESERVE = COLS.map((c,i)=>c.preserve?i+1:0).filter(Boolean);
@@ -77,7 +78,7 @@ const DISTRICTS = [
   {tab:'Liberty SD',         re:/liberty/i},
   {tab:'Other Northland',    re:null},   // catch-all: Smithville/Kearney/Excelsior/Platte City/blank district
 ];
-const BANNER_EDIT   = '✏️ YOUR WORKING LIST — edit freely. Fixes to contact info (school, district, phone…) save to the database. The 4 RED Attendance columns are system records, do not edit. Organized By is color-coded so you can find your name.';
+const BANNER_EDIT   = '✏️ YOUR WORKING LIST — edit freely, everything here cleans the data. ONLY RULE: do not touch the RED Attendance columns (those are hard-coded system records). Organized By is color-coded per person and saves back to the database.';
 const BANNER_MASTER = '👁️ OVERVIEW of the whole region (every district stacked here). READ-ONLY — do your work in your district tab. This updates on its own.';
 
 function onOpen(){
@@ -88,11 +89,23 @@ function onOpen(){
     .addToUi();
 }
 
+function deleteStaleTabs(){
+  const ss=SpreadsheetApp.getActive();
+  const keep=[MASTER, ...DISTRICTS.map(d=>d.tab), TEAM_TAB, DASH, HOWTO];
+  ss.getSheets().forEach(sh=>{ const n=sh.getName();
+    if(keep.indexOf(n)>=0) return;
+    if(/\(view\)\s*$/i.test(n) || n==='Contacts (live)' || n==='Cleanup queue' || n==='Signups (live)' || /^Sheet\d+$/.test(n)){
+      try{ ss.deleteSheet(sh); }catch(e){}
+    }
+  });
+}
+
 function setUp(){
   const ss=SpreadsheetApp.getActive();
   buildShell(MASTER, false);
   DISTRICTS.forEach(d=> buildShell(d.tab, true));
   buildTeamRoster();
+  deleteStaleTabs();
   ScriptApp.getProjectTriggers().forEach(t=>{const f=t.getHandlerFunction(); if(f==='refreshAll'||f==='onEditRegion')ScriptApp.deleteTrigger(t);});
   ScriptApp.newTrigger('refreshAll').timeBased().everyMinutes(5).create();
   ScriptApp.newTrigger('onEditRegion').forSpreadsheet(ss).onEdit().create();
@@ -190,9 +203,11 @@ function onEditRegion(e){
 function brandAll(){ [MASTER, ...DISTRICTS.map(d=>d.tab)].forEach(n=>brandTab(n)); }
 function brandTab(name){
   const sh=SpreadsheetApp.getActive().getSheetByName(name); if(!sh) return;
-  try{ sh.getRange(1,1,sh.getMaxRows(),N).setFontFamily(FONT); }catch(e){}
-  COLS.forEach((c,i)=>{ if(c.tier==='hide') return; const red=c.tier==='ro';
-    try{ sh.getRange(HDR,i+1).setFontWeight('bold').setBackground(red?ROSE:PLUM).setFontColor(PAPER).setWrap(true); }catch(e){} });
+  try{ sh.getRange(1,1,sh.getMaxRows(),N).setFontFamily(FONT).setVerticalAlignment('middle'); }catch(e){}   // vertical-center all
+  COLS.forEach((c,i)=>{ if(c.tier==='hide') return;
+    let bg=PLUM; if(c.tier==='ro') bg=ROSE; else if(c.tier==='commit') bg=GREEN_HEADER;                    // commitments N–R green
+    try{ sh.getRange(HDR,i+1).setFontWeight('bold').setBackground(bg).setFontColor(PAPER).setWrap(true).setHorizontalAlignment('center'); }catch(e){} });
+  COLS.forEach((c,i)=>{ if(['commit','team','flag','ro'].indexOf(c.tier)>=0){ try{ sh.getRange(FIRST,i+1,MAXR,1).setHorizontalAlignment('center'); }catch(e){} } });
   const last=Math.max(sh.getLastRow(),HDR);
   try{ const ex=sh.getFilter(); if(ex) ex.remove(); sh.getRange(HDR,1,Math.max(last-HDR+1,1),N).createFilter(); }catch(e){}
   try{ brandRows(sh, Math.max(sh.getLastRow()-FIRST+1,0)); }catch(e){}
@@ -208,7 +223,7 @@ function brandRows(sh,n){
 function ci(h){ return COLS.findIndex(c=>c.h===h)+1; }
 function styleStatuses(sh){
   const maxR=sh.getMaxRows()-FIRST+1;
-  const orgCol=ci('Organized By'), teamCol=ci('Team'), flagCol=ci('Flag (dupe / merge)'), flagL=colL(flagCol);
+  const orgCol=ci('Organized By'), teamCol=ci('Team Role'), flagCol=ci('Flag (dupe / merge)'), flagL=colL(flagCol);
   const commit=COLS.map((c,i)=>c.tier==='commit'?i+1:0).filter(Boolean);
   const ro=COLS.map((c,i)=>c.tier==='ro'?i+1:0).filter(Boolean);
   const eq=(col,txt,bg,fc)=>{ let b=SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(txt).setBackground(bg); if(fc)b=b.setFontColor(fc); return b.setRanges([sh.getRange(FIRST,col,maxR,1)]).build(); };
@@ -221,7 +236,7 @@ function styleStatuses(sh){
   // organizer multicolor
   Object.keys(ORG_COLORS).forEach(name=> rules.push(eq(orgCol,name,ORG_COLORS[name])));
   // commitment statuses
-  commit.forEach(col=>{ rules.push(eq(col,'Committed',C_BLUE)); rules.push(eq(col,'Planned',C_AMBER)); rules.push(eq(col,'Completed',C_GREEN)); rules.push(eq(col,'Cancelled',C_GREY)); });
+  commit.forEach(col=>{ rules.push(eq(col,'Committed',C_COMMITTED,'#ffffff')); rules.push(eq(col,'Planned',C_AMBER)); rules.push(eq(col,'Completed',C_GREEN)); rules.push(eq(col,'Cancelled',C_GREY)); });
   // attendance Yes
   ro.forEach(col=> rules.push(eq(col,'Yes',C_GREEN)));
   // team
@@ -285,7 +300,7 @@ function buildDashboard(){
     g.push(pad([t,`=COUNTIF(${M}${c}3:${c},"Committed")`,`=COUNTIF(${M}${c}3:${c},"Planned")`,`=COUNTIF(${M}${c}3:${c},"Completed")`,`=COUNTIF(${M}${c}3:${c},"Cancelled")`,`=B${r}+C${r}+D${r}`])); r++; });
   g.push(pad(['']));
   g.push(pad(['TEAM (tagged on contacts)']));
-  const W=L('Team');
+  const W=L('Team Role');
   g.push(pad(['Co-leads',`=COUNTIF(${M}${W}3:${W},"Co-lead")`]));
   g.push(pad(['Core Team',`=COUNTIF(${M}${W}3:${W},"Core Team")`]));
   g.push(pad(['Regional Team',`=COUNTIF(${M}${W}3:${W},"Regional Team")`]));
