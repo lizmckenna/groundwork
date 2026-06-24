@@ -97,6 +97,9 @@ const STEPHANIE_EXCLUDE_COUNTIES = ['jackson', 'cass', 'johnson', 'lafayette', '
 // Counties with an established regional team — Stephanie's onboarding catch skips
 // these and only fires for new/no-team counties (where we're trying to launch).
 const STEPHANIE_TEAM_COUNTIES = ['jackson', 'cass', 'johnson', 'lafayette', 'ray', 'clay', 'platte', 'buchanan', 'clinton', 'st. charles', 'st. louis', 'jefferson', 'franklin'];
+// Stephanie's Francis Howell hold — she keeps these specific people on her queue
+// even when they are amplifier-only (which would otherwise route to Kathryn). Stephanie 6/23.
+const STEPHANIE_HOLD = ['rec19EnUk3Ouw4GZt', 'recbXuhCSBkFoKZry', 'recmnOvMpsc2f6pyV', 'recms3hkAPZoGt2ij', 'reco9FfmiHiyafUyq', 'recohvz2zqlk9YCog'];
 // KC-metro cities — fallback when no county is supplied
 const LANEE_KC_CITIES = ['kansas city','independence','liberty','gladstone','raytown','grandview',"lee's summit",'lees summit','blue springs','belton','overland park','shawnee','olathe','lenexa','leawood','mission','merriam'];
 // ZIP → county lookup for MO + KS (generated from pgeocode/GeoNames data — 1905 entries).
@@ -2798,6 +2801,7 @@ async function getCallList(env, urlObj) {
       + `NOT(FIND('power camp',${A5})),NOT(FIND('regional',${A5})),NOT(FIND('school board',${A5})),`
       + `NOT(FIND('parent team',${A5})),NOT(FIND('canvass',${A5})),NOT(FIND('testimony',${A5})),`
       + `NOT(FIND('talk to 5',${A5})),NOT(FIND('other:',${A5})))`;
+    const holdOr = STEPHANIE_HOLD.length ? `OR(${STEPHANIE_HOLD.map(id => `RECORD_ID()='${id}'`).join(',')})` : `FALSE()`;
     let followupCore, orgScope = null;
     // Kathryn's amp/hm-only people are statewide — they shouldn't double-appear
     // on LaNee, Ellen G, or Stephanie's geographic queues (Stephanie 6/23 bug report).
@@ -2810,10 +2814,11 @@ async function getCallList(env, urlObj) {
       // Exclude amp/hm-only commits (those route to Kathryn statewide).
       followupCore = [
         `OR(AND(${hasCommit},NOT(${countyOr(STEPHANIE_EXCLUDE_COUNTIES)}),NOT(${isKC}),NOT(${ampHmOnly})),`
-        + `AND(${attendedOnboarding},NOT(${countyOr(STEPHANIE_TEAM_COUNTIES)}),NOT(${isKC})))`,
+        + `AND(${attendedOnboarding},NOT(${countyOr(STEPHANIE_TEAM_COUNTIES)}),NOT(${isKC})),`
+        + `${holdOr})`,   // + her Francis Howell hold, kept even when amp-only (Stephanie 6/23)
       ];
     } else if (oid === organizerId('kathryn')) {
-      followupCore = [ ampHmOnly ];   // statewide, amp/hm-only commitments
+      followupCore = [ `AND(${ampHmOnly},NOT(${holdOr}))` ];   // amp/hm-only statewide, minus Stephanie's held Francis Howell folks
     } else {
       followupCore = [ `OR(${attendClauses},${hasCommit})` ];
       orgScope = organizer;   // any other caller stays on the assigned_organizer split
