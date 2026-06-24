@@ -50,11 +50,11 @@ const CONFIRM_EVENT = 'Confirm 5/26';
 const EVENT_META = {
   // type: 'onboarding' | 'hm' | 'amp' | 'legacy' — drives which lists offer
   // which signups and whose stats pages show which events.
-  '5_26': { type: 'legacy',     date: '2026-05-26', label: '5/26 Orientation',          confirmEvent: 'Confirm 5/26', attendEvent: 'Orientation 5/26',      confirmField: 'confirm_5_26_status', attendField: 'attendance_5_26_status', signupField: null,                  confirmTag: '5/26 confirm', attendTag: '5/26 orientation' },
-  '6_9':  { type: 'onboarding', date: '2026-06-09', label: '6/9 No on 5 Onboarding',    confirmEvent: 'Confirm 6/9',  attendEvent: '6/9 Emergency Meeting',  confirmField: 'confirm_6_9_status',  attendField: 'attendance_6_9_status',  signupField: 'signup_6_9_status',   confirmTag: '6/9 confirm',  attendTag: '6/9 emergency meeting' },
-  '6_23': { type: 'onboarding', date: '2026-06-23', label: '6/23 No on 5 Onboarding',   confirmEvent: 'Confirm 6/23', attendEvent: '6/23 No on 5 Onboarding', confirmField: 'confirm_6_23_status', attendField: 'attendance_6_23_status', signupField: 'signup_6_23_status', confirmTag: '6/23 confirm', attendTag: '6/23 onboarding' },
-  '7_7':  { type: 'onboarding', date: '2026-07-07', label: '7/7 No on 5 Onboarding',    confirmEvent: 'Confirm 7/7',  attendEvent: '7/7 No on 5 Onboarding',  confirmField: 'confirm_7_7_status',  attendField: 'attendance_7_7_status',  signupField: 'signup_7_7_status',  confirmTag: '7/7 confirm',  attendTag: '7/7 onboarding' },
-  '7_21': { type: 'onboarding', date: '2026-07-21', label: '7/21 No on 5 Onboarding',   confirmEvent: 'Confirm 7/21', attendEvent: '7/21 No on 5 Onboarding', confirmField: 'confirm_7_21_status', attendField: 'attendance_7_21_status', signupField: 'signup_7_21_status', confirmTag: '7/21 confirm', attendTag: '7/21 onboarding' },
+  '5_26': { type: 'legacy',     date: '2026-05-26', time: '7:30pm CT', label: '5/26 Orientation',          confirmEvent: 'Confirm 5/26', attendEvent: 'Orientation 5/26',      confirmField: 'confirm_5_26_status', attendField: 'attendance_5_26_status', signupField: null,                  confirmTag: '5/26 confirm', attendTag: '5/26 orientation' },
+  '6_9':  { type: 'onboarding', date: '2026-06-09', time: '7:30pm CT', label: '6/9 No on 5 Onboarding',    confirmEvent: 'Confirm 6/9',  attendEvent: '6/9 Emergency Meeting',  confirmField: 'confirm_6_9_status',  attendField: 'attendance_6_9_status',  signupField: 'signup_6_9_status',   confirmTag: '6/9 confirm',  attendTag: '6/9 emergency meeting' },
+  '6_23': { type: 'onboarding', date: '2026-06-23', time: '7:30pm CT', label: '6/23 No on 5 Onboarding',   confirmEvent: 'Confirm 6/23', attendEvent: '6/23 No on 5 Onboarding', confirmField: 'confirm_6_23_status', attendField: 'attendance_6_23_status', signupField: 'signup_6_23_status', confirmTag: '6/23 confirm', attendTag: '6/23 onboarding' },
+  '7_7':  { type: 'onboarding', date: '2026-07-07', time: '7:30pm CT', label: '7/7 No on 5 Onboarding',    confirmEvent: 'Confirm 7/7',  attendEvent: '7/7 No on 5 Onboarding',  confirmField: 'confirm_7_7_status',  attendField: 'attendance_7_7_status',  signupField: 'signup_7_7_status',  confirmTag: '7/7 confirm',  attendTag: '7/7 onboarding' },
+  '7_21': { type: 'onboarding', date: '2026-07-21', time: '7:30pm CT', label: '7/21 No on 5 Onboarding',   confirmEvent: 'Confirm 7/21', attendEvent: '7/21 No on 5 Onboarding', confirmField: 'confirm_7_21_status', attendField: 'attendance_7_21_status', signupField: 'signup_7_21_status', confirmTag: '7/21 confirm', attendTag: '7/21 onboarding' },
   // 6/30 makeup onboarding (for anyone who missed 6/23). type 'makeup' (NOT 'onboarding')
   // on purpose: Airtable has no signup_6_30_status/attendance_6_30_status fields and the PAT
   // can't create them, so a null-field 'onboarding' would inject undefined into the type-based
@@ -335,6 +335,39 @@ export default {
         await env.KV_BINDING.put(`zoomlink:${ev}`, link);     // write through the binding the worker reads
         const readback = await env.KV_BINDING.get(`zoomlink:${ev}`);
         return json({ set: ev, readback });
+      }
+      if (url.pathname === '/admin/auto-register' && request.method === 'POST') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const body = await request.json();
+        const eventKey = body.event || '6_30';
+        const meta = EVENT_META[eventKey];
+        if (!meta) return json({ error: 'unknown event' }, 400);
+        const emails = (body.emails || []).map(e => String(e || '').toLowerCase().trim()).filter(Boolean);
+        const dry = !!body.dry;
+        const results = [];
+        for (const email of emails) {
+          try {
+            const q = `LOWER({email})='${email.replace(/'/g, "\\'")}'`;
+            const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(q)}&maxRecords=1`);
+            if (!r.records.length) { results.push({ email, status: 'not_found' }); continue; }
+            const rec = r.records[0], f = rec.fields;
+            const existing = Array.isArray(f.events_signed_up) ? f.events_signed_up
+              : (typeof f.events_signed_up === 'string' && f.events_signed_up ? f.events_signed_up.split(',').map(s => s.trim()) : []);
+            const already = existing.some(e => String(e).toLowerCase() === meta.attendEvent.toLowerCase());
+            if (dry) { results.push({ email, status: already ? 'already_on_6_30' : 'will_register', name: `${f.first || ''} ${f.last || ''}`.trim(), county: f.county || null, has_email: !!f.email }); continue; }
+            if (!already) {
+              const fields = { events_signed_up: [...existing, meta.attendEvent] };   // ONLY add the event; geo/source/zip untouched
+              if (meta.signupField) fields[meta.signupField] = 'Signed up';
+              await at(env, `/${BASE}/${CONTACTS_TBL}/${rec.id}`, { method: 'PATCH', body: JSON.stringify({ fields, typecast: true }) });
+            }
+            let emailed = false;
+            try { await sendConfirmationEmail(env, email, f.first || '', rec.id, null, eventKey); emailed = true; } catch (e) { results.push({ email, status: 'registered_email_FAILED', error: String(e) }); continue; }
+            results.push({ email, status: already ? 'reconfirmed' : 'registered', emailed });
+          } catch (e) { results.push({ email, status: 'error', error: String(e) }); }
+        }
+        if (!dry) await invalidateReadCaches(env);
+        const summary = results.reduce((a, r) => { a[r.status] = (a[r.status] || 0) + 1; return a; }, {});
+        return json({ event: eventKey, requested: emails.length, summary, results });
       }
       if (url.pathname === '/event.ics' && request.method === 'GET') {
         const evKey = url.searchParams.get('event') || '6_30';
