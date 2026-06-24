@@ -325,6 +325,7 @@ export default {
           ics_method: L.find(l => l.startsWith('METHOD')) || '',
           ics_has_organizer: L.some(l => l.startsWith('ORGANIZER')),
           ics_has_attendee: L.some(l => l.startsWith('ATTENDEE')),
+          calendar_links: calendarLinks(evKey, evObj),
           kv_error: err });
       }
       if (url.pathname === '/admin/kv-set-zoomlink' && request.method === 'GET') {
@@ -334,6 +335,15 @@ export default {
         await env.KV_BINDING.put(`zoomlink:${ev}`, link);     // write through the binding the worker reads
         const readback = await env.KV_BINDING.get(`zoomlink:${ev}`);
         return json({ set: ev, readback });
+      }
+      if (url.pathname === '/event.ics' && request.method === 'GET') {
+        const evKey = url.searchParams.get('event') || '6_30';
+        if (!EVENT_META[evKey]) return new Response('not found', { status: 404 });
+        const evObj = { ...(EMAIL_EVENTS[evKey] || autoEmailEvent(evKey) || {}) };
+        try { const l = await env.KV_BINDING.get(`zoomlink:${evKey}`); if (l) evObj.zoom_link = l; } catch (e) {}
+        const ics = buildEventIcs(evKey, evObj, null, null, 'PUBLISH');
+        if (!ics) return new Response('no event', { status: 404 });
+        return new Response(ics, { headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': 'attachment; filename="no-on-5-onboarding.ics"', 'Access-Control-Allow-Origin': '*' } });
       }
       if (url.pathname === '/admin/log-debug' && request.method === 'GET') return await adminLogDebug(request, env, url);
       if (url.pathname === '/admin/recent-debug' && request.method === 'GET') return await adminRecentDebug(request, env, url);
@@ -3453,7 +3463,8 @@ function parseEventTime(t) {
   return { h, m: mi };
 }
 function icsEscape(s) { return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); }
-function buildEventIcs(eventKey, ev, attendeeEmail, attendeeName) {
+function buildEventIcs(eventKey, ev, attendeeEmail, attendeeName, method) {
+  method = method === 'PUBLISH' ? 'PUBLISH' : 'REQUEST';
   const meta = EVENT_META[eventKey];
   if (!meta || !meta.date) return null;
   const [Y, Mo, D] = meta.date.split('-').map(n => parseInt(n, 10));
@@ -3478,17 +3489,60 @@ function buildEventIcs(eventKey, ev, attendeeEmail, attendeeName) {
   // METHOD:REQUEST + ORGANIZER + ATTENDEE is what makes Gmail/Outlook render the inline
   // RSVP card and auto-add to the calendar, instead of showing a plain .ics attachment.
   const lines = [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//P4MPS//Groundwork//EN', 'CALSCALE:GREGORIAN', 'METHOD:REQUEST', ICS_TZ,
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//P4MPS//Groundwork//EN', 'CALSCALE:GREGORIAN', `METHOD:${method}`, ICS_TZ,
     'BEGIN:VEVENT', `UID:${uid}`, `DTSTAMP:${stamp}`, 'SEQUENCE:0', 'STATUS:CONFIRMED', 'TRANSP:OPAQUE',
     `DTSTART;TZID=America/Chicago:${start}`, `DTEND;TZID=America/Chicago:${end}`,
     `SUMMARY:${icsEscape(summary)}`, `LOCATION:${icsEscape(loc)}`, `DESCRIPTION:${icsEscape(desc)}`,
     (link && !meta.inPerson) ? `URL:${icsEscape(link)}` : '',
     'ORGANIZER;CN=Parents for Missouri Public Schools:mailto:groundwork@civicpowerlab.us',
-    attendeeEmail ? `ATTENDEE;CN=${icsEscape(attendeeName || attendeeEmail)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${attendeeEmail}` : '',
+    (method === 'REQUEST' && attendeeEmail) ? `ATTENDEE;CN=${icsEscape(attendeeName || attendeeEmail)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${attendeeEmail}` : '',
     'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:Reminder', 'END:VALARM',
     'END:VEVENT', 'END:VCALENDAR',
   ].filter(Boolean);
   return lines.join('\r\n');
+}
+
+// nth Sunday (1-indexed) of a month, as a day-of-month. Used for US DST bounds.
+function nthSundayOfMonth(year, month1, n) {
+  const firstDow = new Date(Date.UTC(year, month1 - 1, 1)).getUTCDay(); // 0=Sun
+  const firstSun = 1 + ((7 - firstDow) % 7);
+  return firstSun + (n - 1) * 7;
+}
+// Is this date inside US Central daylight time (CDT)? DST = 2nd Sun March .. 1st Sun Nov.
+function chicagoIsDST(Y, Mo, D) {
+  if (Mo < 3 || Mo > 11) return false;
+  if (Mo > 3 && Mo < 11) return true;
+  if (Mo === 3) return D >= nthSundayOfMonth(Y, 3, 2);
+  return D < nthSundayOfMonth(Y, 11, 1); // November
+}
+// "Add to calendar" deep links for Google + Outlook web, generated from EVENT_META so
+// they always match the displayed time. Apple/Outlook-desktop use the /event.ics download.
+function calendarLinks(eventKey, ev) {
+  const meta = EVENT_META[eventKey];
+  if (!meta || !meta.date) return null;
+  const [Y, Mo, D] = meta.date.split('-').map(n => parseInt(n, 10));
+  if (!Y || !Mo || !D) return null;
+  const { h, m } = parseEventTime(meta.time);
+  const dur = ICS_TYPE_DURATION[meta.type] || 60;
+  const pad = n => String(n).padStart(2, '0');
+  let eh = h, em = m + dur; eh += Math.floor(em / 60); em = em % 60;
+  const localStart = `${Y}${pad(Mo)}${pad(D)}T${pad(h)}${pad(m)}00`;
+  const localEnd = `${Y}${pad(Mo)}${pad(D)}T${pad(eh)}${pad(em)}00`;
+  const off = chicagoIsDST(Y, Mo, D) ? 5 : 6;            // hours to add to CT to get UTC
+  const su = new Date(Date.UTC(Y, Mo - 1, D, h + off, m));
+  const eu = new Date(Date.UTC(Y, Mo - 1, D, h + off, m + dur));
+  const isoZ = d => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00Z`;
+  const title = ['onboarding', 'legacy', 'makeup'].includes(meta.type)
+    ? 'No on 5 Onboarding (Parents for Missouri Public Schools)'
+    : `${meta.label} (Parents for Missouri Public Schools)`;
+  const link = (ev && ev.zoom_link) || '';
+  const loc = meta.inPerson ? 'In person (details by email)' : 'Zoom';
+  const details = (link ? `Join on Zoom: ${link}\n\n` : '') + 'Parents for Missouri Public Schools.';
+  const enc = encodeURIComponent;
+  return {
+    google: `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${enc(title)}&dates=${localStart}/${localEnd}&ctz=America/Chicago&details=${enc(details)}&location=${enc(loc)}`,
+    outlook: `https://outlook.office.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent&subject=${enc(title)}&startdt=${enc(isoZ(su))}&enddt=${enc(isoZ(eu))}&body=${enc(details)}&location=${enc(loc)}`,
+  };
 }
 
 async function sendConfirmationEmail(env, toEmail, firstName, contactId, organizer, eventKey) {
@@ -3505,6 +3559,21 @@ async function sendConfirmationEmail(env, toEmail, firstName, contactId, organiz
     const kvLink = await env.KV_BINDING.get(`zoomlink:${String(eventKey || '5_26')}`);
     if (kvLink) ev.zoom_link = kvLink;
   } catch (e) {}
+  // "Add to calendar" buttons — reliable one-click across clients, unlike the inline
+  // rendering of the attached invite. Generated from EVENT_META so they track the time.
+  let calButtonsHtml = '';
+  const cal = calendarLinks(String(eventKey || '5_26'), ev);
+  if (cal) {
+    const icsUrl = `https://groundwork-pilot.elizabethmck.workers.dev/event.ics?event=${encodeURIComponent(String(eventKey || '5_26'))}`;
+    const btn = 'display:inline-block;border:1.5px solid #1A2418;color:#1A2418;text-decoration:none;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:12px;letter-spacing:.03em;padding:9px 14px;border-radius:7px;margin:0 6px 6px 0';
+    calButtonsHtml = `
+        <tr><td style="padding:0 0 20px">
+          <div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#1A2418;opacity:.55;margin:0 0 9px">Add to your calendar</div>
+          <a href="${cal.google}" style="${btn}">Google Calendar</a>
+          <a href="${cal.outlook}" style="${btn}">Outlook</a>
+          <a href="${icsUrl}" style="${btn}">Apple / .ics</a>
+        </td></tr>`;
+  }
   const subject = ev.subject;
   const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -3565,7 +3634,7 @@ ${ev.preview}
             </td></tr>
           </table>
         </td></tr>
-
+${calButtonsHtml}
         <tr><td style="padding:0 0 18px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1A2418">
           Your presence matters. The decisions being made right now could have long-term consequences for Missouri families and public education. We need informed, connected, and prepared people ready to take action together.
         </td></tr>
