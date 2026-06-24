@@ -309,6 +309,25 @@ export default {
       if (url.pathname === '/admin/role-append' && request.method === 'POST') return await adminRoleAppend(request, env);
       if (url.pathname === '/admin/queue-check' && request.method === 'GET') return await adminQueueCheck(request, env, url);
       if (url.pathname === '/admin/run-canary' && request.method === 'GET') return await adminRunCanary(env, url);
+      if (url.pathname === '/admin/preview-email' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+        const evKey = url.searchParams.get('event') || '6_30';
+        let link = null, err = null;
+        try { link = await env.KV_BINDING.get(`zoomlink:${evKey}`); } catch (e) { err = String(e); }
+        const evObj = { ...(EMAIL_EVENTS[evKey] || autoEmailEvent(evKey) || {}) };
+        if (link) evObj.zoom_link = link;
+        const ics = buildEventIcs(evKey, evObj);
+        const locLine = (ics || '').split('\r\n').find(l => l.startsWith('LOCATION')) || '(no ics)';
+        return json({ event: evKey, zoomlink_resolved: link, button_would_render: !!link, ics_location: locLine, kv_error: err });
+      }
+      if (url.pathname === '/admin/kv-set-zoomlink' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+        const ev = url.searchParams.get('event'); const link = url.searchParams.get('link');
+        if (!ev || !link) return json({ error: 'event+link required' }, 400);
+        await env.KV_BINDING.put(`zoomlink:${ev}`, link);     // write through the binding the worker reads
+        const readback = await env.KV_BINDING.get(`zoomlink:${ev}`);
+        return json({ set: ev, readback });
+      }
       if (url.pathname === '/admin/log-debug' && request.method === 'GET') return await adminLogDebug(request, env, url);
       if (url.pathname === '/admin/recent-debug' && request.method === 'GET') return await adminRecentDebug(request, env, url);
       if (url.pathname === '/admin/bulk-reassign' && request.method === 'POST') return await adminBulkReassign(request, env);
@@ -3524,11 +3543,11 @@ ${ev.preview}
               </div>
               <div style="margin:18px 0 0">
                 ${ev.zoom_link
-                  ? `<a href="${ev.zoom_link}" style="display:inline-block;background:#1A2418;color:#E9E5CE;text-decoration:none;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.06em;padding:13px 20px;border-radius:8px">Open the Zoom link →</a>`
-                  : `<div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#1A2418">You're confirmed — the Zoom link arrives by email the day before.</div>`}
+                  ? `<a href="${ev.zoom_link}" style="display:inline-block;background:#1A2418;color:#E9E5CE;text-decoration:none;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.06em;padding:14px 26px;border-radius:8px">Join the Zoom →</a>`
+                  : `<div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#1A2418">You're confirmed. The Zoom link arrives by email before the event.</div>`}
               </div>
-              <div style="margin:10px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#1A2418;opacity:.65;word-break:break-all">
-                ${ev.zoom_link || ''}
+              <div style="margin:12px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;word-break:break-all">
+                ${ev.zoom_link ? `<a href="${ev.zoom_link}" style="color:#3e4f6e;text-decoration:underline">${ev.zoom_link}</a>` : ''}
               </div>
             </td></tr>
           </table>
