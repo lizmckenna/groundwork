@@ -138,6 +138,11 @@ const ZOOM_LINK_5_26 = 'https://us02web.zoom.us/j/6284644152?pwd=kweXnAjyLKIcGqx
 const EVENT_NAME = 'Emergency Meeting on Public School Funding in Missouri';
 const EVENT_DATE_LABEL = 'Tuesday, May 26 · 7:30 PM CST';
 const FROM_CONFIRM = 'Parents for Missouri Public Schools <groundwork@civicpowerlab.us>';
+// Signup-pipeline canary: a synthetic user the cron signs up ~36h before each event,
+// to prove the confirmation email + Airtable record land. Change these to a dedicated
+// monitor inbox / the people who should get failure alerts.
+const CANARY_MONITOR_EMAIL = 'emckenna+gwcanary@hks.harvard.edu';
+const CANARY_ALERT_TO = ['emckenna@hks.harvard.edu'];
 const REPLY_TO_CONFIRM = 'lanee4kckids@gmail.com';
 // Per-organizer profile used by sendConfirmationEmail.
 // Key is the lowercase organizer slug the dashboard sends (e.g. 'lanee', 'stephanie').
@@ -280,6 +285,7 @@ export default {
       if (url.pathname === '/admin/contacts-dump' && request.method === 'GET') return await adminContactsDump(request, env, url);
       if (url.pathname === '/admin/role-append' && request.method === 'POST') return await adminRoleAppend(request, env);
       if (url.pathname === '/admin/queue-check' && request.method === 'GET') return await adminQueueCheck(request, env, url);
+      if (url.pathname === '/admin/run-canary' && request.method === 'GET') return await adminRunCanary(env, url);
       if (url.pathname === '/admin/log-debug' && request.method === 'GET') return await adminLogDebug(request, env, url);
       if (url.pathname === '/admin/recent-debug' && request.method === 'GET') return await adminRecentDebug(request, env, url);
       if (url.pathname === '/admin/bulk-reassign' && request.method === 'POST') return await adminBulkReassign(request, env);
@@ -1038,6 +1044,11 @@ export default {
     } catch (e) {
       return json({ error: e.message }, 500);
     }
+  },
+  // Cron: pre-event signup-pipeline self-test. Signs up a synthetic user ~36h before
+  // each event and emails an alert if the confirmation or the record fails to land.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runSignupCanary(env).catch(() => {}));
   }
 };
 
@@ -3051,6 +3062,81 @@ async function sendZoomEmailNow(request, env) {
   if (!cEmail) return json({ error: 'contact has no email on file' }, 400);
   await sendConfirmationEmail(env, cEmail, cFirst, contact_id, organizer, event);
   return json({ ok: true, sent_to: cEmail, event: event || '5_26' });
+}
+
+// =========================================================================
+// Signup-pipeline canary. The cron runs this daily; for any event ~36h out it
+// signs a synthetic user up through the REAL public endpoint and checks that
+// (1) a Zoom link is set, (2) the signup created a record, and (3) the
+// confirmation email actually sent. Any failure emails CANARY_ALERT_TO. The
+// synthetic contact is deleted immediately so it never pollutes the data.
+//   GET /admin/run-canary?key=...        -> test events in the next ~36h
+//   GET /admin/run-canary?key=...&force=1 -> test EVERY signup event now
+//   GET /admin/run-canary?key=...&dry=1   -> link checks only, sends nothing
+// =========================================================================
+async function runSignupCanary(env, opts = {}) {
+  const force = !!opts.force, dry = !!opts.dry;
+  const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
+  const monitor = CANARY_MONITOR_EMAIL.toLowerCase();
+  const now = Date.now();
+  const results = [];
+  for (const [key, meta] of Object.entries(EVENT_META)) {
+    if (!meta.signupField) continue;                                  // only events people can sign up for
+    const evTime = Date.parse(`${meta.date}T19:30:00-05:00`);
+    const hrs = isNaN(evTime) ? null : (evTime - now) / 3.6e6;
+    if (!force && !(hrs !== null && hrs > 12 && hrs < 48)) continue;  // ~36h window
+    const failures = [];
+    let link = null;
+    try { link = await env.KV_BINDING.get(`zoomlink:${key}`); } catch (e) {}
+    if (!link) failures.push('No Zoom link is set for this event, so confirmation emails would go out without a join link.');
+    if (!dry) {
+      let body = null, httpok = false;
+      try {
+        const resp = await fetch(`${WORKER}/training-signup`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ first: 'Pipeline', last: 'Canary', email: CANARY_MONITOR_EMAIL, events: [meta.attendEvent], source: 'pipeline canary' }),
+        });
+        httpok = resp.ok; body = await resp.json().catch(() => null);
+      } catch (e) { failures.push('The signup request failed outright: ' + e.message); }
+      if (!httpok || !body || !body.ok) {
+        failures.push('The signup did not succeed — no contact was created.');
+      } else {
+        if (!body.confirmation_email_sent) failures.push('The signup succeeded but NO confirmation email was sent.');
+        try {
+          const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${monitor}'`)}&maxRecords=1`);
+          if (!r.records.length) failures.push('The signup succeeded but the contact did NOT land in Airtable.');
+          else { try { await at(env, `/${BASE}/${CONTACTS_TBL}/${r.records[0].id}`, { method: 'DELETE' }); } catch (e) {} }
+        } catch (e) { failures.push('Could not verify the Airtable record landed.'); }
+      }
+    }
+    const result = { key, label: meta.label, date: meta.date, hours_out: hrs === null ? null : Math.round(hrs), status: failures.length ? 'FAIL' : 'PASS', failures };
+    results.push(result);
+    if (failures.length && !dry) await sendCanaryAlert(env, meta, failures);
+  }
+  return results;
+}
+
+async function sendCanaryAlert(env, meta, failures) {
+  if (!env.RESEND_KEY) return;
+  const html = `<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#1A2418">
+    <h2 style="color:#B25048;margin:0 0 10px">Signup pipeline check FAILED</h2>
+    <p><strong>Event:</strong> ${escapeHtml(meta.label)} &middot; ${escapeHtml(meta.date)}</p>
+    <p>The automated pre-event self-test found problems. People signing up may not be recorded, or may not get their Zoom link:</p>
+    <ul>${failures.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>
+    <p>Please fix before the event. This alert comes from the canary that signs itself up about 36 hours out.</p></div>`;
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: FROM_CONFIRM, to: CANARY_ALERT_TO, subject: `ALERT: signup pipeline failed for ${meta.label}`, html }),
+    });
+  } catch (e) {}
+}
+
+async function adminRunCanary(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const results = await runSignupCanary(env, { force: urlObj.searchParams.get('force') === '1', dry: urlObj.searchParams.get('dry') === '1' });
+  return json({ ran: true, results });
 }
 
 function resolveOutcome(outcome, methodCount) {
