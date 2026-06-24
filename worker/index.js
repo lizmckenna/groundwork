@@ -316,9 +316,14 @@ export default {
         try { link = await env.KV_BINDING.get(`zoomlink:${evKey}`); } catch (e) { err = String(e); }
         const evObj = { ...(EMAIL_EVENTS[evKey] || autoEmailEvent(evKey) || {}) };
         if (link) evObj.zoom_link = link;
-        const ics = buildEventIcs(evKey, evObj);
-        const locLine = (ics || '').split('\r\n').find(l => l.startsWith('LOCATION')) || '(no ics)';
-        return json({ event: evKey, zoomlink_resolved: link, button_would_render: !!link, ics_location: locLine, kv_error: err });
+        const ics = buildEventIcs(evKey, evObj, url.searchParams.get('to') || 'preview@example.com', 'Preview');
+        const L = (ics || '').split('\r\n');
+        return json({ event: evKey, zoomlink_resolved: link, button_would_render: !!link,
+          ics_location: L.find(l => l.startsWith('LOCATION')) || '(no ics)',
+          ics_method: L.find(l => l.startsWith('METHOD')) || '',
+          ics_has_organizer: L.some(l => l.startsWith('ORGANIZER')),
+          ics_has_attendee: L.some(l => l.startsWith('ATTENDEE')),
+          kv_error: err });
       }
       if (url.pathname === '/admin/kv-set-zoomlink' && request.method === 'GET') {
         if (url.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
@@ -3446,7 +3451,7 @@ function parseEventTime(t) {
   return { h, m: mi };
 }
 function icsEscape(s) { return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); }
-function buildEventIcs(eventKey, ev) {
+function buildEventIcs(eventKey, ev, attendeeEmail, attendeeName) {
   const meta = EVENT_META[eventKey];
   if (!meta || !meta.date) return null;
   const [Y, Mo, D] = meta.date.split('-').map(n => parseInt(n, 10));
@@ -3466,16 +3471,22 @@ function buildEventIcs(eventKey, ev) {
     + 'Parents for Missouri Public Schools. Vote NO on Amendment 5 to protect Missouri public school funding. Aug 4.';
   let stamp = '20260101T000000Z';
   try { stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z'); } catch (e) {}
-  const uid = `${eventKey}-${stamp}-p4mps@parents4mopublicschools.org`;
-  return [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//P4MPS//Groundwork//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', ICS_TZ,
-    'BEGIN:VEVENT', `UID:${uid}`, `DTSTAMP:${stamp}`,
+  // Stable UID per person+event so a re-send UPDATES the same calendar entry (no duplicates).
+  const uid = `${eventKey}-${String(attendeeEmail || 'invite').toLowerCase().replace(/[^a-z0-9]/g, '')}@parents4mopublicschools.org`;
+  // METHOD:REQUEST + ORGANIZER + ATTENDEE is what makes Gmail/Outlook render the inline
+  // RSVP card and auto-add to the calendar, instead of showing a plain .ics attachment.
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//P4MPS//Groundwork//EN', 'CALSCALE:GREGORIAN', 'METHOD:REQUEST', ICS_TZ,
+    'BEGIN:VEVENT', `UID:${uid}`, `DTSTAMP:${stamp}`, 'SEQUENCE:0', 'STATUS:CONFIRMED', 'TRANSP:OPAQUE',
     `DTSTART;TZID=America/Chicago:${start}`, `DTEND;TZID=America/Chicago:${end}`,
     `SUMMARY:${icsEscape(summary)}`, `LOCATION:${icsEscape(loc)}`, `DESCRIPTION:${icsEscape(desc)}`,
     (link && !meta.inPerson) ? `URL:${icsEscape(link)}` : '',
+    'ORGANIZER;CN=Parents for Missouri Public Schools:mailto:groundwork@civicpowerlab.us',
+    attendeeEmail ? `ATTENDEE;CN=${icsEscape(attendeeName || attendeeEmail)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${attendeeEmail}` : '',
     'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:Reminder', 'END:VALARM',
     'END:VEVENT', 'END:VCALENDAR',
-  ].filter(Boolean).join('\r\n');
+  ].filter(Boolean);
+  return lines.join('\r\n');
 }
 
 async function sendConfirmationEmail(env, toEmail, firstName, contactId, organizer, eventKey) {
@@ -3595,12 +3606,12 @@ ${ev.preview}
   const payload = { from: FROM_CONFIRM, to: [toEmail], reply_to: replyTo, subject, html };
   // Attach the calendar invite (.ics) the signup pages promise.
   try {
-    const ics = buildEventIcs(String(eventKey || '5_26'), ev);
+    const ics = buildEventIcs(String(eventKey || '5_26'), ev, toEmail, firstName);
     if (ics) {
       payload.attachments = [{
-        filename: 'no-on-5-onboarding.ics',
+        filename: 'invite.ics',
         content: btoa(unescape(encodeURIComponent(ics))),
-        content_type: 'text/calendar; charset=utf-8; method=PUBLISH',
+        content_type: 'text/calendar; charset=utf-8; method=REQUEST',
       }];
     }
   } catch (e) { /* invite is best-effort; never block the confirmation email */ }
