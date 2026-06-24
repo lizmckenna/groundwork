@@ -1646,7 +1646,7 @@ async function trainingSignup(request, env) {
   // Event tracking + stats (the log row alone is invisible to those).
   for (const evName of events) {
     const metaKey = Object.keys(EVENT_META).find(k =>
-      EVENT_META[k].attendEvent === evName ||
+      EVENT_META[k].attendEvent.toLowerCase() === String(evName).toLowerCase() ||   // case-insensitive: form sends "...onboarding", meta has "...Onboarding"
       (k === 'kyn_7_25' && /neighbor.*7\/25/i.test(evName)));
     if (metaKey && EVENT_META[metaKey].signupField) {
       baseFields[EVENT_META[metaKey].signupField] = 'Signed up';
@@ -1701,7 +1701,7 @@ async function trainingSignup(request, env) {
   if (cEmail && AUTO_CONFIRM_EMAIL) {
     const keys = new Set();
     for (const evName of events) {
-      const k = Object.keys(EVENT_META).find(kk => EVENT_META[kk].attendEvent === evName || (kk === 'kyn_7_25' && /neighbor.*7\/25/i.test(evName)));
+      const k = Object.keys(EVENT_META).find(kk => EVENT_META[kk].attendEvent.toLowerCase() === String(evName).toLowerCase() || (kk === 'kyn_7_25' && /neighbor.*7\/25/i.test(evName)));
       if (k) keys.add(k);
     }
     for (const k of keys) { try { await sendConfirmationEmail(env, cEmail, cFirst, contactId, null, k); confirmation_email_sent = true; } catch (e) {} }
