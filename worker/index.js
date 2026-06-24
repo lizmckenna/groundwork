@@ -141,7 +141,7 @@ const FROM_CONFIRM = 'Parents for Missouri Public Schools <groundwork@civicpower
 // Signup-pipeline canary: a synthetic user the cron signs up ~36h before each event,
 // to prove the confirmation email + Airtable record land. Change these to a dedicated
 // monitor inbox / the people who should get failure alerts.
-const CANARY_MONITOR_EMAIL = 'emckenna+gwcanary@hks.harvard.edu';
+const CANARY_MONITOR_EMAIL = 'elizabethmck+gwcanary@gmail.com';   // lands in Liz's gmail; +alias never collides with a real record
 const CANARY_ALERT_TO = ['emckenna@hks.harvard.edu'];
 const REPLY_TO_CONFIRM = 'lanee4kckids@gmail.com';
 // Per-organizer profile used by sendConfirmationEmail.
@@ -274,6 +274,7 @@ export default {
       if (url.pathname === '/export/rollup.csv' && request.method === 'GET') return await rollupExportCsv(env, url);
       if (url.pathname === '/export/region.csv' && request.method === 'GET') return await regionExportCsv(env, url);
       if (url.pathname === '/sheet-region-update' && request.method === 'POST') return await sheetRegionUpdate(request, env);
+      if (url.pathname === '/export/signups.csv' && request.method === 'GET') return await signupsExportCsv(env, url);
       // Sheet → Airtable write-back for HM follow-up columns (status, 1-1, notes), by contact id.
       if (url.pathname === '/sheet-hm-followup' && request.method === 'POST') return await sheetHmFollowup(request, env);
       // Sheet → Airtable attendance write-back for launches (gated by EXPORT_KEY,
@@ -3103,9 +3104,9 @@ async function runSignupCanary(env, opts = {}) {
       } else {
         if (!body.confirmation_email_sent) failures.push('The signup succeeded but NO confirmation email was sent.');
         try {
-          const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${monitor}'`)}&maxRecords=1`);
+          const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${monitor}'`)}&maxRecords=1&fields%5B%5D=source`);
           if (!r.records.length) failures.push('The signup succeeded but the contact did NOT land in Airtable.');
-          else { try { await at(env, `/${BASE}/${CONTACTS_TBL}/${r.records[0].id}`, { method: 'DELETE' }); } catch (e) {} }
+          else if (r.records[0].fields.source === 'pipeline canary') { try { await at(env, `/${BASE}/${CONTACTS_TBL}/${r.records[0].id}`, { method: 'DELETE' }); } catch (e) {} }  // only ever delete our own synthetic row
         } catch (e) { failures.push('Could not verify the Airtable record landed.'); }
       }
     }
@@ -4427,6 +4428,48 @@ async function sheetRegionUpdate(request, env) {
     try { await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`, { method: 'PATCH', body: JSON.stringify({ fields }) }); n++; } catch (e) {}
   }
   return new Response(JSON.stringify({ updated: n }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Live signups across every training/onboarding, one row per person per event,
+// with the channel in Source: a website source (homepage, facebook) if we have
+// one, otherwise the organizer who signed them up ("LaNeé call", etc.). Launches
+// are excluded (they have their own turnout trackers).
+async function signupsExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const metas = Object.entries(EVENT_META).filter(([k, m]) => m.signupField);
+  const sigFields = metas.map(([k, m]) => m.signupField);
+  const orClause = 'OR(' + sigFields.map(f => `{${f}}='Signed up'`).join(',') + ')';
+  const fields = ['first', 'last', 'email', 'phone', 'zip', 'source', 'assigned_organizer', 'last_attempt_date'].concat(sigFields);
+  const rows = [];
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(orClause)}&pageSize=100`;
+    for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) {
+      const f = r.fields;
+      const fn = String(f.first || ''), ln = String(f.last || '');
+      if (/^(test|smoke|sample|audit|final|demo|pipeline|canary)\b/i.test(fn) || /^(test|smoke|sample|audit|final|demo)\b/i.test(ln)) continue;
+      if (/test|smoke|example|gwcanary/i.test(String(f.email || ''))) continue;
+      const src = String(f.source || '').trim();
+      const orgFull = (f.assigned_organizer || []).map(id => ORGANIZER_NAME_BY_ID[id] || '').filter(Boolean)[0] || '';
+      const orgFirst = orgFull.split(' ')[0];
+      const source = src ? src : (orgFirst ? `${orgFirst} call` : 'Unknown');
+      for (const [k, m] of metas) {
+        if (String(f[m.signupField] || '') === 'Signed up') {
+          rows.push({ first: f.first || '', last: f.last || '', email: f.email || '', phone: f.phone || '', zip: f.zip || '', event: m.label, source, date: f.last_attempt_date || '' });
+        }
+      }
+    }
+    off = d.offset;
+  } while (off);
+  rows.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const cols = ['First', 'Last', 'Email', 'Phone', 'Zip', 'Event', 'Source', 'Date'];
+  const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const out = [cols.join(',')];
+  for (const r of rows) out.push([r.first, r.last, r.email, r.phone, r.zip, r.event, r.source, r.date].map(esc).join(','));
+  return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
 }
 
 async function rsvpExportCsv(env, urlObj) {
