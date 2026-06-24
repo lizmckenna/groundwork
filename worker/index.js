@@ -1564,8 +1564,10 @@ async function trainingSignup(request, env) {
   const body = await request.json();
   if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
   const { first, last, phone, email, zip, events = [], recruited_by, source } = body;
-  if (!first || !last || !phone || !email || !zip) {
-    return json({ error: 'first, last, phone, email, and zip are required' }, 400);
+  // Never drop a signup over a missing zip or phone (incident 6/23): require only a
+  // name and one way to reach them. zip just sharpens organizer routing.
+  if (!first || !last || (!email && !phone)) {
+    return json({ error: 'first and last name, plus an email or phone, are required' }, 400);
   }
   const cRecruiter = recruited_by ? String(recruited_by).trim() : '';
   if (!Array.isArray(events) || events.length === 0) {
@@ -1575,15 +1577,17 @@ async function trainingSignup(request, env) {
   const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
   const cFirst = clean(first);
   const cLast = clean(last);
-  const cEmail = String(email).toLowerCase().trim();
-  const cPhone = String(phone).trim();
-  const cZip = String(zip).trim();
+  const cEmail = email ? String(email).toLowerCase().trim() : '';
+  const cPhone = phone ? String(phone).trim() : '';
+  const cZip = zip ? String(zip).trim() : '';
 
   // Dedupe by email then phone
   let existingId = null;
-  const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
-  if (r.records.length > 0) existingId = r.records[0].id;
-  if (!existingId) {
+  if (cEmail) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+    if (r.records.length > 0) existingId = r.records[0].id;
+  }
+  if (!existingId && cPhone) {
     const digits = cPhone.replace(/\D/g, '').slice(-10);
     if (digits.length === 10) {
       const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
@@ -1612,13 +1616,13 @@ async function trainingSignup(request, env) {
   const baseFields = {
     first: cFirst,
     last: cLast,
-    email: cEmail,
-    phone: cPhone,
-    zip: cZip,
     source: source || 'training signup',
     last_attempt_date: today,
     events_signed_up: mergedEvents,
   };
+  if (cEmail) baseFields.email = cEmail;
+  if (cPhone) baseFields.phone = cPhone;
+  if (cZip) baseFields.zip = cZip;
   if (cRecruiter) baseFields.recruited_by = cRecruiter;
   // If the user signed up for the 6/9 Emergency Meeting through this form,
   // also flip signup_6_9_status so they appear in the 6/9 Event Tracking tab
@@ -1679,8 +1683,19 @@ async function trainingSignup(request, env) {
     } catch (e) { /* non-fatal — contact is still created */ }
   }
 
+  // Send the Zoom-link confirmation for each event signed up for. This was missing
+  // entirely, so onboarding RSVPs were created but never got a link (incident 6/23).
+  let confirmation_email_sent = false;
+  if (cEmail && AUTO_CONFIRM_EMAIL) {
+    const keys = new Set();
+    for (const evName of events) {
+      const k = Object.keys(EVENT_META).find(kk => EVENT_META[kk].attendEvent === evName || (kk === 'kyn_7_25' && /neighbor.*7\/25/i.test(evName)));
+      if (k) keys.add(k);
+    }
+    for (const k of keys) { try { await sendConfirmationEmail(env, cEmail, cFirst, contactId, null, k); confirmation_email_sent = true; } catch (e) {} }
+  }
   await invalidateReadCaches(env);
-  return json({ ok: true, contact_id: contactId, events_logged: events.length, events });
+  return json({ ok: true, contact_id: contactId, events_logged: events.length, events, confirmation_email_sent });
 }
 
 // =========================================================================
