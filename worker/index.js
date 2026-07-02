@@ -12,6 +12,16 @@
 const BASE = 'appQdixHbuttPldx6';
 const CONTACTS_TBL = 'tblJeHqz13AOvq71A';
 const CONTACT_LOG_TBL = 'tblXQXzxf8z1oht7z';
+const ORGANIZERS_TBL = 'tblxknZQg2W4JdTny';
+const DONATIONS_TBL = 'tblLgvPvwamyy1ljD';   // ActBlue import: one row per gift (amount, date, contact)
+const ATTENDANCE_MIRROR_TBL = 'tblIuEyimGqxkNFrG';   // new linked attendance table (contact<->events); nightly-synced mirror of campaign signups/attendance
+// School -> region fallback: a known school routes a contact who has no usable county/city/district.
+// Conservative, evidence-based (these schools appear in the data and point to one region). District/city/county win first.
+const SCHOOL_REGION = [
+  [/border star|hale cook|lincoln prep|foreign language|academ\w* lafayette|\blcpa\b|paseo|holliday|hogan prep|hogan preparatory|crossroads prep|primitivo|wendell phillips|hartman|melcher|wheatley|\bcarver\b|silver city|garfield|\bgarcia\b|woodland|faxon|trailwoods|troost|banneker|longfellow|pitcher|whittier|della lamb|guadalupe center|gordon parks|allen village|frontier school|genesis school|university academy|scuola vita nuova|brookside charter|ewing\w* kauffman/i, 'Kansas City'],
+  [/greenway|davidson elem|briarcliff|winnetonka|northview|liberty oaks/i, 'Northland'],
+  [/francis howell|south high/i, 'St. Charles / St. Louis'],
+];
 const EVENTS_TBL = 'tblHJG5AJagnOr33U';
 const EVENT_ATTENDANCE_TBL = 'tbl4tvGVOqIPTylrr';
 const ORGANIZER_NAME_BY_ID = {
@@ -39,6 +49,8 @@ const ORGANIZER_NAME_BY_ID = {
   'rectxzflcDQxU7EBn': 'Bess Bailey',
   'recvI8X54I8btvVn4': 'Synthia Larson',
   'recqENZKSbItbonLw': 'Emma Fortner',
+  'rec6MIYi1KjuF7XxB': 'Valorie Montgomery',
+  'rec7dIyOigEFsAVbf': 'Christy Cox',
 };
 // name -> organizer id (lowercased), for match-only Organized By write-back (no auto-create on typos)
 const ORGANIZER_ID_BY_NAME = Object.fromEntries(Object.entries(ORGANIZER_NAME_BY_ID).map(([id, nm]) => [nm.toLowerCase().trim(), id]));
@@ -61,7 +73,7 @@ const EVENT_META = {
   // call-list/dashboard formulas. As 'makeup' it stays out of that machinery and flows through
   // the generic signup path (events_signed_up + log + Zoom/ICS email) + the live-signups feed.
   // It is excluded from nextOnboardingKey() so the commitment form still defaults to 7/7.
-  '6_30': { type: 'makeup', date: '2026-06-30', time: '7:30pm CT', label: '6/30 No on 5 Makeup Onboarding', confirmEvent: 'Confirm 6/30', attendEvent: '6/30 No on 5 Makeup Onboarding', confirmField: null, attendField: null, signupField: null, confirmTag: '6/30 confirm', attendTag: '6/30 onboarding' },
+  '6_30': { type: 'makeup', date: '2026-06-30', time: '7:30pm CT', label: '6/30 No on 5 Makeup Onboarding', confirmEvent: 'Confirm 6/30', attendEvent: '6/30 No on 5 Makeup Onboarding', confirmField: null, attendField: 'attendance_6_30_status', signupField: 'signup_6_30_status', confirmTag: '6/30 confirm', attendTag: '6/30 onboarding' },
   // House Meeting trainings — dates from parents4mopublicschools.org/trainings (canonical)
   'hm_6_3':  { type: 'hm', date: '2026-06-03', time: '5:30pm CT', label: 'HM Training 6/3',  confirmEvent: 'Confirm HM 6/3',  attendEvent: 'House Meeting Training 6/3',  confirmField: 'confirm_hm_6_3_status',  attendField: 'attendance_hm_6_3_status',  signupField: 'signup_hm_6_3_status',  confirmTag: 'hm 6/3 confirm',  attendTag: 'hm training 6/3' },
   'hm_6_16': { type: 'hm', date: '2026-06-16', time: '6:00pm CT', label: 'HM Training 6/16', confirmEvent: 'Confirm HM 6/16', attendEvent: 'House Meeting Training 6/16', confirmField: 'confirm_hm_6_16_status', attendField: 'attendance_hm_6_16_status', signupField: 'signup_hm_6_16_status', confirmTag: 'hm 6/16 confirm', attendTag: 'hm training 6/16' },
@@ -118,6 +130,13 @@ const ZIP_LATLON = {"66732":[37.8035,-95.1546,"Elsmore"],"66742":[37.9232,-95.34
 function zipToCounty(zip) {
   const z = String(zip || '').trim();
   return MO_KS_ZIP_COUNTY[z] || null;
+}
+// ZIP → school district for the KC metro (Northland, Eastern Jackson, KC core). Auto-fills
+// district on a signup so suburban folks route without the team having to touch them.
+const ZIP_DISTRICT = {"64013":"Blue Springs School District", "64014":"Blue Springs School District", "64015":"Blue Springs School District", "64016":"Fort Osage R-1", "64024":"Excelsior Springs School District", "64029":"Grain Valley R-5", "64030":"Grandview C-4", "64048":"Fort Osage R-1", "64050":"Independence School District", "64051":"Independence School District", "64052":"Independence School District", "64053":"Independence School District", "64054":"Independence School District", "64055":"Independence School District", "64056":"Independence School District", "64057":"Independence School District", "64058":"Independence School District", "64060":"Kearney School District", "64062":"Kearney School District", "64063":"Lee's Summit R-7", "64064":"Lee's Summit R-7", "64068":"Liberty Public Schools", "64069":"Liberty Public Schools", "64072":"Fort Osage R-1", "64074":"Fort Osage R-1", "64075":"Oak Grove R-6", "64078":"Raymore-Peculiar", "64079":"Platte County R-3", "64081":"Lee's Summit R-7", "64082":"Lee's Summit R-7", "64083":"Raymore-Peculiar", "64086":"Lee's Summit R-7", "64089":"Smithville School District", "64092":"Platte County R-3", "64098":"Platte County R-3", "64101":"Kansas City Public Schools", "64105":"Kansas City Public Schools", "64106":"Kansas City Public Schools", "64108":"Kansas City Public Schools", "64109":"Kansas City Public Schools", "64110":"Kansas City Public Schools", "64111":"Kansas City Public Schools", "64112":"Kansas City Public Schools", "64113":"Kansas City Public Schools", "64114":"Center 58", "64116":"North Kansas City Schools", "64117":"North Kansas City Schools", "64118":"North Kansas City Schools", "64119":"North Kansas City Schools", "64120":"Kansas City Public Schools", "64121":"Kansas City Public Schools", "64123":"Kansas City Public Schools", "64124":"Kansas City Public Schools", "64125":"Kansas City Public Schools", "64126":"Kansas City Public Schools", "64127":"Kansas City Public Schools", "64128":"Kansas City Public Schools", "64130":"Kansas City Public Schools", "64131":"Center 58", "64132":"Kansas City Public Schools", "64133":"Raytown C-2", "64134":"Hickman Mills C-1", "64137":"Hickman Mills C-1", "64138":"Raytown C-2", "64145":"Center 58", "64146":"Hickman Mills C-1", "64147":"Hickman Mills C-1", "64149":"Hickman Mills C-1", "64151":"Park Hill School District", "64152":"Park Hill School District", "64153":"Park Hill School District", "64154":"Park Hill School District", "64155":"North Kansas City Schools", "64156":"North Kansas City Schools", "64157":"North Kansas City Schools", "64158":"North Kansas City Schools", "64161":"North Kansas City Schools", "64163":"Park Hill School District", "64164":"Park Hill School District", "64165":"North Kansas City Schools", "64166":"Park Hill School District", "64167":"North Kansas City Schools", "64168":"North Kansas City Schools"};
+function zipToDistrict(zip) {
+  const z = String(zip || '').trim().slice(0, 5);
+  return ZIP_DISTRICT[z] || null;
 }
 function deriveOrganizerId({ county, city, zip }) {
   // 1. Use supplied county if present
@@ -294,8 +313,21 @@ export default {
       if (url.pathname === '/export/amplifier-commits.csv' && request.method === 'GET') return await amplifierCommitsExportCsv(env, url);
       // Master rollup of every headline metric for Molly + Ellen's dashboard.
       if (url.pathname === '/export/rollup.csv' && request.method === 'GET') return await rollupExportCsv(env, url);
+      if (url.pathname === '/admin/sync-attendance' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        return json(await syncAttendanceMirror(env));
+      }
+      if (url.pathname === '/export/scoreboard.csv' && request.method === 'GET') return await scoreboardExportCsv(env, url);
+      if (url.pathname === '/export/recruit-chains.csv' && request.method === 'GET') return await recruitChainsExportCsv(env, url);
+      if (url.pathname === '/board/data.json' && request.method === 'GET') return await boardData(env, url);
+      if (url.pathname === '/board/save' && request.method === 'POST') return await boardSave(request, env, url);
+      if (url.pathname.startsWith('/board/') && request.method === 'GET') return boardPage(env, url);
       if (url.pathname === '/export/region.csv' && request.method === 'GET') return await regionExportCsv(env, url);
+      if (url.pathname === '/export/all.csv' && request.method === 'GET') return await allContactsExportCsv(env, url);
       if (url.pathname === '/sheet-region-update' && request.method === 'POST') return await sheetRegionUpdate(request, env);
+      if (url.pathname === '/sheet-add-contact' && request.method === 'POST') return await sheetAddContact(request, env);
+      if (url.pathname === '/sheet-add-organizer' && request.method === 'POST') return await sheetAddOrganizer(request, env);
+      if (url.pathname === '/export/organizers.csv' && request.method === 'GET') return await organizersExportCsv(env, url);
       if (url.pathname === '/export/signups.csv' && request.method === 'GET') return await signupsExportCsv(env, url);
       // Sheet → Airtable write-back for HM follow-up columns (status, 1-1, notes), by contact id.
       if (url.pathname === '/sheet-hm-followup' && request.method === 'POST') return await sheetHmFollowup(request, env);
@@ -320,6 +352,7 @@ export default {
         const L = (ics || '').split('\r\n');
         return json({ event: evKey, zoomlink_resolved: link, button_would_render: !!link,
           email_subject: evObj.subject || '',
+          email_signoff_name: evObj.signoff_name || 'LaNeé Bridewell (default)',
           email_body_date: evObj.big_date_html || '',
           ics_location: L.find(l => l.startsWith('LOCATION')) || '(no ics)',
           ics_method: L.find(l => l.startsWith('METHOD')) || '',
@@ -445,7 +478,7 @@ export default {
               if (zip) patch.zip = String(zip);
               if (county) patch.county = county;
               if (school) patch.school = school;
-              if (district) patch.district = district;
+              { const d = district || zipToDistrict(zip); if (d) patch.district = d; }
               if (email) patch.email = String(email).toLowerCase().trim();
               if (phone) patch.phone = String(phone).trim();
               await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
@@ -468,7 +501,7 @@ export default {
               if (zip) fields.zip = String(zip);
               if (county) fields.county = county;
               if (school) fields.school = school;
-              if (district) fields.district = district;
+              { const d = district || zipToDistrict(zip); if (d) fields.district = d; }
               if (signup_5_26) { fields.last_attempt_date = date; fields.last_attempt_result = 'Signed up'; }
               const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
                 method: 'POST',
@@ -1218,6 +1251,12 @@ export default {
   // each event and emails an alert if the confirmation or the record fails to land.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runSignupCanary(env).catch(() => {}));
+    // Daily board snapshot -> the master-tracker trend line.
+    ctx.waitUntil((async () => {
+      try { await env.KV_BINDING.delete('cache:rollup:v2'); const m = await computeRollupMetrics(env); await snapshotBoard(env, m, await boardDonations(env), true); } catch {}
+    })());
+    // Nightly mirror of campaign signups/attendance into the linked attendance table.
+    ctx.waitUntil(syncAttendanceMirror(env).catch(() => {}));
   }
 };
 
@@ -1994,7 +2033,7 @@ async function eventCheckin(request, env) {
       return json({ error: 'could not check you in, please see a volunteer' }, 500);
     }
   }
-  await env.KV_BINDING.delete('cache:events-overview:v7').catch(() => null);
+  await env.KV_BINDING.delete('cache:events-overview:v8').catch(() => null);
   return json({ ok: true, checked_in: true, already, walk_in: walkIn, name: cFirst });
 }
 
@@ -2196,6 +2235,8 @@ async function launchRsvp(request, env) {
     }
   } catch (e) { /* non-fatal — contact + events_signed_up already capture the RSVP */ }
 
+  let confirmation_email_sent = false;
+  try { if (cEmail) confirmation_email_sent = await sendLaunchConfirmation(env, cEmail, cFirst, launch); } catch (e) {}
   await invalidateReadCaches(env);
 
   // Fire webhooks (fanout to registered tracker sheets) so they update in real
@@ -2204,7 +2245,7 @@ async function launchRsvp(request, env) {
   try {
     await fireWebhooks(env, rsvpLaunch, {
       event: rsvpLaunch,
-      first: cFirst, last: cLast, email, phone,
+      first: cFirst, last: cLast, email: cEmail, phone: cPhone,
       role: (clean(body.role) || ''),
       school: (clean(body.school) || ''),
       district: (clean(body.district) || ''),
@@ -2217,7 +2258,7 @@ async function launchRsvp(request, env) {
     });
   } catch (e) { /* non-fatal */ }
 
-  return json({ ok: true, contact_id: contactId, created_new: createdNew, launch });
+  return json({ ok: true, contact_id: contactId, created_new: createdNew, launch, confirmation_email_sent });
 }
 
 // =========================================================================
@@ -3313,9 +3354,10 @@ async function runSignupCanary(env, opts = {}) {
   const now = Date.now();
   const results = [];
   for (const [key, meta] of Object.entries(EVENT_META)) {
-    if (!meta.signupField) continue;                                  // only events people can sign up for
+    if (!meta.signupField && meta.type !== 'makeup') continue;        // events people can sign up for (incl. makeup, which signs up via events_signed_up)
     const evTime = Date.parse(`${meta.date}T19:30:00-05:00`);
     const hrs = isNaN(evTime) ? null : (evTime - now) / 3.6e6;
+    if (evTime && evTime < now - 12 * 3.6e6) continue;               // never test an event that already happened — no signups, no alerts, even with force
     if (!force && !(hrs !== null && hrs > 12 && hrs < 48)) continue;  // ~36h window
     const failures = [];
     if (!meta.inPerson) {   // in-person events (KYN) have no Zoom link by design
@@ -3326,10 +3368,13 @@ async function runSignupCanary(env, opts = {}) {
     if (!dry) {
       let body = null, httpok = false;
       try {
-        const resp = await fetch(`${WORKER}/training-signup`, {
+        // Call the handler directly (in-process) — a worker fetching its OWN workers.dev URL
+        // is blocked/loops on Cloudflare, which made the canary false-fail even though signups work.
+        const req = new Request(`${WORKER}/training-signup`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ first: 'Pipeline', last: 'Canary', email: CANARY_MONITOR_EMAIL, events: [meta.attendEvent], source: 'pipeline canary' }),
         });
+        const resp = await trainingSignup(req, env);
         httpok = resp.ok; body = await resp.json().catch(() => null);
       } catch (e) { failures.push('The signup request failed outright: ' + e.message); }
       if (!httpok || !body || !body.ok) {
@@ -3581,6 +3626,7 @@ const EMAIL_EVENTS = {
     intro_event: '<strong>No on 5 Onboarding — protecting Missouri public school funding</strong>',
     big_date_html: 'Tue, June 30<br/>7:30-8:30 PM CT',
     sign_off_date: 'June 30th',
+    signoff_name: 'Ellen Schwartze', // Ellen leads the 6/30 makeup, so she signs its confirmation
     zoom_link: null, // live link is in KV (zoomlink:6_30); this stays null so KV is the single source
   },
 };
@@ -3601,7 +3647,7 @@ function autoEmailEvent(key) {
     : meta.label;
   return {
     subject: `You're in — ${fullTitle} · ${dayName} ${mdy} ${time}`,
-    preview: `${fullTitle} · ${dayName} ${monthName} ${d.getDate()} · ${time} · Zoom`,
+    preview: `${fullTitle} · ${dayName} ${monthName} ${d.getDate()} · ${time} · ${meta.inPerson ? 'In person' : 'Zoom'}`,
     eyebrow: `${fullTitle} · Parents for Missouri Public Schools`,
     intro_event: `<strong>${fullTitle}</strong>`,
     big_date_html: `${dayName}, ${monthName} ${d.getDate()}<br/>${time}`,
@@ -3711,20 +3757,118 @@ function calendarLinks(eventKey, ev) {
   };
 }
 
+// In-person regional launches. The RSVP form posts the launch name; we match on a substring.
+const LAUNCH_EVENTS = {
+  ejack: {
+    name: 'Eastern Jackson County Emergency Meeting on Public School Funding',
+    date: '2026-07-01', start: '18:00', end: '19:30', dateLabel: 'Wednesday, July 1 · 6:00 PM CT',
+    location: 'The Table, 3609 SW State Rte 7, Blue Springs, MO 64014',
+    logistics: 'Pizza at 6:00 PM, program 6:30–7:30 PM. Childcare available with RSVP.',
+  },
+  stl: {
+    name: 'St. Louis County Parent Action Meeting',
+    date: '2026-07-06', start: '18:00', end: '19:30', dateLabel: 'Monday, July 6 · 6:00 PM CT',
+    location: 'Oak Bend Branch, St. Louis County Library, 842 S Holmes Ave, St. Louis, MO 63122',
+    logistics: 'Pizza and community 6:00–6:30 PM, program 6:30–7:30 PM.',
+  },
+  stc: {
+    name: 'St. Charles County Parent Action Meeting',
+    date: '2026-07-11', start: '11:00', end: '12:30', dateLabel: 'Saturday, July 11 · 11:00 AM CT',
+    location: 'Weldon Spring Site Interpretive Center, 7295 MO-94, St Charles, MO 63304',
+    logistics: 'Refreshments and community from 11:00 AM, program 11:30 AM–12:30 PM. Childcare available with RSVP.',
+  },
+  kc: {
+    name: 'Kansas City No on 5 Regional Campaign Launch',
+    date: '2026-07-09', start: '17:30', end: '19:30', dateLabel: 'Thursday, July 9 · 5:30 PM CT',
+    location: 'Kansas City — location to be announced. We will email all RSVPs as soon as it is confirmed.',
+    logistics: 'Program 5:30–7:30 PM. Pizza and childcare available with RSVP.',
+  },
+  teacher: {
+    name: 'Teacher Meeting on Public School Funding',
+    date: '2026-07-21', start: '19:00', end: '20:00', dateLabel: 'Tuesday, July 21 · 7:00 PM CT',
+    location: 'The Combine, 2999 Troost Ave, Kansas City, MO',
+    logistics: 'Appetizers provided. Drinks available for purchase.',
+  },
+};
+function launchConfig(launchName) {
+  const s = String(launchName || '').toLowerCase();
+  if (s.includes('teacher meeting')) return LAUNCH_EVENTS.teacher;
+  if (s.includes('st. charles') || s.includes('st charles')) return LAUNCH_EVENTS.stc;
+  if (s.includes('st. louis') || s.includes('st louis')) return LAUNCH_EVENTS.stl;
+  if (s.includes('eastern jackson')) return LAUNCH_EVENTS.ejack;
+  if (s.includes('kansas city')) return LAUNCH_EVENTS.kc;
+  return null;
+}
+function buildLaunchIcs(cfg, email, name) {
+  const [Y, Mo, D] = cfg.date.split('-').map(n => parseInt(n, 10));
+  const [sh, sm] = cfg.start.split(':').map(n => parseInt(n, 10));
+  const [eh, em] = cfg.end.split(':').map(n => parseInt(n, 10));
+  const pad = n => String(n).padStart(2, '0');
+  const start = `${Y}${pad(Mo)}${pad(D)}T${pad(sh)}${pad(sm)}00`, end = `${Y}${pad(Mo)}${pad(D)}T${pad(eh)}${pad(em)}00`;
+  let stamp = '20260101T000000Z'; try { stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z'); } catch (e) {}
+  const uid = `launch-${cfg.date}-${String(email || 'invite').toLowerCase().replace(/[^a-z0-9]/g, '')}@parents4mopublicschools.org`;
+  const summary = `${cfg.name} (Parents for Missouri Public Schools)`;
+  const desc = `${cfg.logistics}\n\nLocation: ${cfg.location}\n\nParents for Missouri Public Schools. Vote NO on Amendment 5 to protect Missouri public school funding. Tuesday, August 4.`;
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//P4MPS//Groundwork//EN', 'CALSCALE:GREGORIAN', 'METHOD:REQUEST', ICS_TZ,
+    'BEGIN:VEVENT', `UID:${uid}`, `DTSTAMP:${stamp}`, 'SEQUENCE:0', 'STATUS:CONFIRMED', 'TRANSP:OPAQUE',
+    `DTSTART;TZID=America/Chicago:${start}`, `DTEND;TZID=America/Chicago:${end}`,
+    `SUMMARY:${icsEscape(summary)}`, `LOCATION:${icsEscape(cfg.location)}`, `DESCRIPTION:${icsEscape(desc)}`,
+    'ORGANIZER;CN=Parents for Missouri Public Schools:mailto:groundwork@civicpowerlab.us',
+    email ? `ATTENDEE;CN=${icsEscape(name || email)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${email}` : '',
+    'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:Reminder', 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR'].filter(Boolean).join('\r\n');
+}
+async function sendLaunchConfirmation(env, toEmail, firstName, launchName) {
+  if (!env.RESEND_KEY || !toEmail) return false;
+  const cfg = launchConfig(launchName);
+  if (!cfg) return false;
+  const greeting = firstName ? `Hi ${escapeHtml(firstName)},` : 'Hi there,';
+  const pad = n => String(n).padStart(2, '0');
+  const [Y, Mo, D] = cfg.date.split('-').map(n => parseInt(n, 10));
+  const [sh, sm] = cfg.start.split(':').map(n => parseInt(n, 10));
+  const [eh, em] = cfg.end.split(':').map(n => parseInt(n, 10));
+  const gdates = `${Y}${pad(Mo)}${pad(D)}T${pad(sh)}${pad(sm)}00/${Y}${pad(Mo)}${pad(D)}T${pad(eh)}${pad(em)}00`;
+  const gcal = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(cfg.name)}&dates=${gdates}&location=${encodeURIComponent(cfg.location)}&details=${encodeURIComponent(cfg.logistics)}&ctz=America/Chicago`;
+  const html = `<div style="font-family:Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1A2418">`
+    + `<div style="background:#3e4f6e;padding:16px 22px;border-radius:8px 8px 0 0"><div style="color:#d5b069;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.14em">Parents for Missouri Public Schools</div></div>`
+    + `<div style="border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px;padding:22px">`
+    + `<p style="font-size:16px;margin:0 0 14px">${greeting}</p>`
+    + `<p style="font-size:15px;line-height:1.6;margin:0 0 16px">You're RSVP'd for the <strong>${escapeHtml(cfg.name)}</strong>. Thank you for showing up for Missouri's public schools.</p>`
+    + `<div style="background:#f3f4f6;border-radius:8px;padding:16px 18px;margin:0 0 16px">`
+    + `<div style="font-size:15px;margin:0 0 6px">📅 <strong>${escapeHtml(cfg.dateLabel)}</strong></div>`
+    + `<div style="font-size:15px;margin:0 0 8px">📍 <strong>${escapeHtml(cfg.location)}</strong></div>`
+    + `<div style="font-size:14px;color:#555;line-height:1.5">${escapeHtml(cfg.logistics)}</div></div>`
+    + `<p style="font-size:14px;line-height:1.6;margin:0 0 12px">A calendar invite is attached — tap it to add this to your calendar, or:</p>`
+    + `<div style="margin:0 0 16px"><a href="${gcal}" style="display:inline-block;background:#d5b069;color:#1A2418;font-weight:700;text-decoration:none;padding:10px 18px;border-radius:6px;font-size:14px">Add to Google Calendar</a></div>`
+    + `<p style="font-size:13px;color:#888;line-height:1.5;margin:14px 0 0">Questions? Just reply to this email. Vote NO on Amendment 5 to protect Missouri public school funding. Vote Tuesday, August 4.</p>`
+    + `<p style="font-size:11px;color:#aaa;line-height:1.4;margin:16px 0 0;font-family:Helvetica,Arial,sans-serif">Paid for by Parents for Missouri Public Schools, Ellen Glover, Treasurer</p>`
+    + `</div></div>`;
+  const ics = buildLaunchIcs(cfg, toEmail, firstName);
+  const payload = { from: FROM_CONFIRM, to: [toEmail], reply_to: 'groundwork@civicpowerlab.us', subject: `You're RSVP'd — ${cfg.name}`, html,
+    attachments: [{ filename: 'invite.ics', content: btoa(unescape(encodeURIComponent(ics))), content_type: 'text/calendar; charset=utf-8; method=REQUEST' }] };
+  try {
+    const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { 'Authorization': `Bearer ${env.RESEND_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    return r.ok;
+  } catch (e) { return false; }
+}
+
 async function sendConfirmationEmail(env, toEmail, firstName, contactId, organizer, eventKey) {
   const date = todayCT();
   const safeName = firstName ? firstName : '';
   const greetingComma = safeName ? `, ${escapeHtml(safeName)}` : '';
   const profile = ORGANIZER_PROFILE[String(organizer || '').toLowerCase()] || ORGANIZER_PROFILE['lanee'];
   const replyTo = profile.reply_to;
-  const signoffName = profile.name;
+  let signoffName = profile.name;
   const signoffGroup = profile.group;
   const ev = { ...(EMAIL_EVENTS[String(eventKey || '5_26')] || autoEmailEvent(String(eventKey || '5_26')) || EMAIL_EVENTS['5_26']) };
+  if (ev.signoff_name) signoffName = ev.signoff_name;   // per-event signer (e.g., Ellen leads 6/30)
   // Per-event link override (set by /admin/set-zoom-link, no redeploy needed).
   try {
     const kvLink = await env.KV_BINDING.get(`zoomlink:${String(eventKey || '5_26')}`);
     if (kvLink) ev.zoom_link = kvLink;
   } catch (e) {}
+  const evMeta = EVENT_META[String(eventKey || '5_26')] || {};
+  const isInPerson = !!evMeta.inPerson;   // in-person events (e.g. Know Your Neighbor) never mention Zoom
   // "Add to calendar" buttons — reliable one-click across clients, unlike the inline
   // rendering of the attached invite. Generated from EVENT_META so they track the time.
   let calButtonsHtml = '';
@@ -3787,15 +3931,17 @@ ${ev.preview}
                 ${ev.big_date_html}
               </div>
               <div style="font-family:Helvetica,Arial,sans-serif;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:#1A2418;opacity:.65">
-                On Zoom
+                ${isInPerson ? 'In person' : 'On Zoom'}
               </div>
               <div style="margin:18px 0 0">
-                ${ev.zoom_link
-                  ? `<a href="${ev.zoom_link}" style="display:inline-block;background:#1A2418;color:#E9E5CE;text-decoration:none;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.06em;padding:14px 26px;border-radius:8px">Join the Zoom →</a>`
-                  : `<div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#1A2418">You're confirmed. The Zoom link arrives by email before the event.</div>`}
+                ${isInPerson
+                  ? `<div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#1A2418">You're confirmed. Location details arrive by email before the event.</div>`
+                  : (ev.zoom_link
+                    ? `<a href="${ev.zoom_link}" style="display:inline-block;background:#1A2418;color:#E9E5CE;text-decoration:none;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.06em;padding:14px 26px;border-radius:8px">Join the Zoom →</a>`
+                    : `<div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#1A2418">You're confirmed. The Zoom link arrives by email before the event.</div>`)}
               </div>
               <div style="margin:12px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;word-break:break-all">
-                ${ev.zoom_link ? `<a href="${ev.zoom_link}" style="color:#3e4f6e;text-decoration:underline">${ev.zoom_link}</a>` : ''}
+                ${(!isInPerson && ev.zoom_link) ? `<a href="${ev.zoom_link}" style="color:#3e4f6e;text-decoration:underline">${ev.zoom_link}</a>` : ''}
               </div>
             </td></tr>
           </table>
@@ -4345,8 +4491,8 @@ const AGE_BANDS = ['0–2', '3–5', '6–9', '10+'];
 function allMetaEvents() {
   return Object.entries(EVENT_META)
     // 'legacy' = the 5/26 orientation (the first onboarding) — keep it so it shows in Past events.
-    .filter(([, m]) => ['legacy', 'onboarding', 'hm', 'amp', 'kyn'].includes(m.type))
-    .map(([key, m]) => ({ key, ...m, type: m.type === 'legacy' ? 'onboarding' : m.type }))
+    .filter(([, m]) => ['legacy', 'onboarding', 'makeup', 'hm', 'amp', 'kyn'].includes(m.type))
+    .map(([key, m]) => ({ key, ...m, type: (m.type === 'legacy' || m.type === 'makeup') ? 'onboarding' : m.type }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 const TYPE_LABEL = { onboarding: 'Onboardings', hm: 'House Meeting trainings', amp: 'Amplifier trainings', kyn: 'Know Your Neighbor', camp: 'Power Camps', launch: 'Emergency meetings' };
@@ -4604,8 +4750,9 @@ async function amplifierCommitsExportCsv(env, urlObj) {
 // Master rollup for Molly + Ellen's dashboard: every headline metric, computed
 // server-side from Airtable (one contacts pass + one contact_log pass). Returns
 // key,Metric,Count; the Sheet holds the editable Goal column and draws the bars.
-async function rollupExportCsv(env, urlObj) {
-  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+async function computeRollupMetrics(env) {
+  const cached = await cacheGet(env, 'cache:rollup:v2');
+  if (cached) return cached;
   const att = v => v === 'Attended' || v === 'Walk-in';
   const onbAttend = Object.values(EVENT_META).filter(m => m.type === 'onboarding' || m.type === 'legacy').map(m => m.attendField);
   const hmAttend = Object.values(EVENT_META).filter(m => m.type === 'hm').map(m => m.attendField);
@@ -4671,10 +4818,758 @@ async function rollupExportCsv(env, urlObj) {
     ['hm_followed_up', 'HM commitments followed up on', m.hmfu],
     ['vote_reminders', 'Want to be reminded to vote', m.remind],
   ];
+  const metrics = rows.map(r => ({ key: r[0], label: r[1], count: r[2] }));
+  await cachePut(env, 'cache:rollup:v2', metrics, 120);
+  return metrics;
+}
+
+async function rollupExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const metrics = await computeRollupMetrics(env);
   const e = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const out = [['key', 'Metric', 'Count'].join(',')];
-  for (const r of rows) out.push(r.map(e).join(','));
+  for (const r of metrics) out.push([r.key, r.label, r.count].map(e).join(','));
   return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// =========================================================================
+// /board — the P4MPS master tracker as a live, on-brand web page. Unguessable
+// URL (bookmark it). Thermometer bars vs. editable goals, a commitments
+// pipeline (Committed -> Followed up -> Trained), donations, and a
+// week-over-week trend built from daily snapshots. Read-only aggregate counts
+// (no PII), gated by BOARD_TOKEN in the path.
+// =========================================================================
+const BOARD_TOKEN = 'f446d6e97fdc9d17b8666ece';
+const BOARD_GOALS_DEFAULT = {
+  outreach_attempts: 5000, onboarding_attended: 350, launch_attended: 400,
+  hm_trained: 100, amp_trained: 150, amp_convos: 2000, a5_commitments: 500,
+  hm_commitments: 150, one_on_ones: 200, a5_followed_up: 300, hm_followed_up: 100,
+  vote_reminders: 2000,
+};
+// The three headline metrics people watch closely -> big thermometers up top.
+const BOARD_HEADLINE = ['a5_commitments', 'launch_attended', 'onboarding_attended'];
+// Commitment pipeline: made a commitment -> has a real next step -> showed up.
+const BOARD_PIPELINE = [
+  { key: 'a5_commitments', label: 'Committed' },
+  { key: 'a5_followed_up', label: 'Followed up' },
+  { key: 'amp_trained',    label: 'Trained / showed up' },
+];
+
+async function boardGoals(env) {
+  let g = {}; try { g = JSON.parse(await env.KV_BINDING.get('board:goals') || '{}'); } catch {}
+  return { ...BOARD_GOALS_DEFAULT, ...g };
+}
+// Donations are the live ActBlue import (donations table), not a manual number.
+async function boardDonations(env) {
+  const cached = await cacheGet(env, 'cache:donations:v2');
+  if (cached) return cached;
+  let total = 0, count = 0, asOf = '', off = null;
+  do {
+    let q = `?pageSize=100&fields%5B%5D=amount`;
+    if (off) q += `&offset=${off}`;
+    const d = await at(env, `/${BASE}/${DONATIONS_TBL}${q}`);
+    for (const r of d.records) {
+      const a = Number(r.fields.amount); if (Number.isFinite(a) && a > 0) { total += a; count++; }
+      // Records are created at import time, so the newest createdTime = the last upload.
+      if (r.createdTime && (!asOf || r.createdTime > asOf)) asOf = r.createdTime;
+    }
+    off = d.offset;
+  } while (off);
+  const payload = { total: Math.round(total), count, asOf };
+  await cachePut(env, 'cache:donations:v2', payload, 300);
+  return payload;
+}
+// Stacked-bar timeline: commitments by the day they were made (log's own date),
+// split by commitment type, from the first commitment to today, with the events
+// that drove the surges. Colors + order come back with the data.
+const COMMIT_LABELS = { amplifier: 'Be an Amplifier', house_meeting: 'Host a house meeting', canvass: 'Canvass & outreach', school_board: 'School board resolution', regional_team: 'Join regional team', parent_team: 'Parent team at school', testimony: 'Write testimony', talk5: 'Talk to 5 neighbors', power_camp: 'Parent Power Camp', other: 'Other commitment' };
+async function boardCommitTimeline(env) {
+  const cached = await cacheGet(env, 'cache:commit-timeline:v2');
+  if (cached) return cached;
+  const byDay = {}; let minDate = null; const today = todayCT();
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent("{method}='Commitment'")}&pageSize=100&fields%5B%5D=date&fields%5B%5D=event`;
+    if (off) q += `&offset=${off}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      let dt = String(r.fields.date || '').slice(0, 10);
+      if (!dt) dt = String(r.createdTime || '').slice(0, 10);
+      if (!dt || dt > today) continue;
+      const key = commitBucket(r.fields.event) || 'other';
+      byDay[dt] = byDay[dt] || {}; byDay[dt][key] = (byDay[dt][key] || 0) + 1;
+      if (!minDate || dt < minDate) minDate = dt;
+    }
+    off = d.offset;
+  } while (off);
+  if (!minDate) minDate = today;
+  const totals = {};
+  for (const dt in byDay) for (const k in byDay[dt]) totals[k] = (totals[k] || 0) + byDay[dt][k];
+  const types = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
+  const days = [];
+  for (let t = Date.parse(minDate + 'T00:00:00Z'), e = Date.parse(today + 'T00:00:00Z'); t <= e; t += 86400000) {
+    const iso = new Date(t).toISOString().slice(0, 10);
+    days.push({ date: iso, byType: byDay[iso] || {} });
+  }
+  let events = [];
+  try {
+    const ov = await (await getEventsOverview(env)).json();
+    events = (ov.events || []).filter(e => e.date && e.date >= minDate && e.date <= today).map(e => ({ date: e.date, label: e.label }));
+  } catch {}
+  const payload = { generated: new Date().toISOString(), minDate, today, days, types, labels: COMMIT_LABELS, totals, events };
+  await cachePut(env, 'cache:commit-timeline:v2', payload, 300);
+  return payload;
+}
+// One snapshot per day of every headline count -> the trend line. Idempotent:
+// re-running on the same day overwrites that day. Index capped at 120 days.
+async function snapshotBoard(env, metrics, donations, force) {
+  const date = todayCT();
+  // From page loads, only seed the day once (bounds KV writes). The daily cron
+  // passes force=true to refresh the day's value.
+  if (!force) { try { if (await env.KV_BINDING.get('board:snap:' + date)) return; } catch {} }
+  const row = {}; for (const m of metrics) row[m.key] = m.count;
+  const snap = { date, metrics: row, donations: { total: donations.total || 0, count: donations.count || 0 } };
+  try {
+    await env.KV_BINDING.put('board:snap:' + date, JSON.stringify(snap));
+    let idx = []; try { idx = JSON.parse(await env.KV_BINDING.get('board:snap:index') || '[]'); } catch {}
+    if (!idx.includes(date)) { idx.push(date); idx.sort(); if (idx.length > 120) idx = idx.slice(-120); }
+    await env.KV_BINDING.put('board:snap:index', JSON.stringify(idx));
+  } catch {}
+}
+async function boardHistory(env) {
+  let idx = []; try { idx = JSON.parse(await env.KV_BINDING.get('board:snap:index') || '[]'); } catch {}
+  const recent = idx.slice(-60);
+  const out = [];
+  for (const date of recent) {
+    try { const raw = await env.KV_BINDING.get('board:snap:' + date); if (raw) out.push(JSON.parse(raw)); } catch {}
+  }
+  return out;
+}
+async function boardData(env, urlObj) {
+  if (urlObj.searchParams.get('k') !== BOARD_TOKEN) return json({ error: 'forbidden' }, 403);
+  const metrics = await computeRollupMetrics(env);
+  const goals = await boardGoals(env);
+  const donations = await boardDonations(env);
+  // Seed today's snapshot on first view so the WoW deltas aren't empty before the cron runs.
+  await snapshotBoard(env, metrics, donations);
+  const history = await boardHistory(env);
+  const commits = await boardCommitTimeline(env);
+  return json({ generated: new Date().toISOString(), metrics, goals, donations, history, commits });
+}
+async function boardSave(request, env, urlObj) {
+  if (urlObj.searchParams.get('k') !== BOARD_TOKEN) return json({ error: 'forbidden' }, 403);
+  let body = {}; try { body = await request.json(); } catch {}
+  if (body.goals && typeof body.goals === 'object') {
+    const cur = await boardGoals(env); const next = { ...cur };
+    for (const k of Object.keys(body.goals)) { const v = Number(body.goals[k]); if (Number.isFinite(v) && v >= 0) next[k] = Math.round(v); }
+    await env.KV_BINDING.put('board:goals', JSON.stringify(next));
+  }
+  // Donations are read-only (synced from the ActBlue import), so they are not editable here.
+  return json({ ok: true });
+}
+function boardPage(env, urlObj) {
+  const token = urlObj.pathname.slice('/board/'.length);
+  if (token !== BOARD_TOKEN) return new Response('Not found', { status: 404 });
+  return new Response(BOARD_HTML.replace(/__TOKEN__/g, BOARD_TOKEN), {
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
+const BOARD_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>P4MPS — Overall Tracker</title>
+<link rel="icon" href="https://parents4mopublicschools.org/brand/logo-circle-96.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1A2418; --paper:#E9E5CE; --rose:#B25048; --sky:#335A78; --teal:#2F5E3D; --gold:#C08A2D;
+    --card:#F4F1E1; --line:rgba(26,36,24,.14); --muted:#5C6356;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:"DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased;line-height:1.4}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 20px 64px}
+  a{color:var(--sky)}
+  h1,h2,h3,.disp{font-family:"Archivo Narrow",sans-serif;letter-spacing:.2px}
+  header.top{position:sticky;top:0;z-index:20;background:rgba(233,229,206,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .top-in{max-width:1120px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px}
+  .top-in img{width:40px;height:40px;border-radius:50%}
+  .brandname{font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:19px;line-height:1.05}
+  .brandname small{display:block;font-family:"DM Sans";font-weight:500;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .top-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .chip{font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);white-space:nowrap}
+  .chip.live{color:var(--teal)} .chip.live b{color:var(--teal)}
+  .count-chip{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .hero{padding:34px 0 8px}
+  .hero h1{font-size:40px;margin:0;font-weight:700}
+  .hero p{margin:6px 0 0;color:var(--muted);max-width:640px;font-size:15px}
+  .btn{font-family:"DM Sans";font-weight:600;font-size:13.5px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 14px;cursor:pointer}
+  .btn:hover{border-color:var(--ink)}
+  .btn.primary{background:var(--rose);color:#fff;border-color:var(--rose)}
+  .btn.ghost{background:transparent}
+  .sec-title{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:34px 0 14px}
+  .headline{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .hcard{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 20px 22px;position:relative;overflow:hidden}
+  .hcard .lab{font-size:14px;font-weight:600;color:var(--muted)}
+  .hcard .big{font-family:"Archivo Narrow";font-weight:700;font-size:46px;line-height:1;margin:8px 0 2px}
+  .hcard .of{font-size:14px;color:var(--muted);font-weight:500}
+  .therm{height:14px;border-radius:999px;background:rgba(26,36,24,.10);margin-top:16px;overflow:hidden}
+  .therm > span{display:block;height:100%;border-radius:999px;transition:width .8s cubic-bezier(.2,.7,.2,1)}
+  .hcard .pct{position:absolute;top:18px;right:20px;font-family:"Archivo Narrow";font-weight:700;font-size:22px}
+  .wow{font-size:12.5px;font-weight:600;margin-top:10px;color:var(--muted)}
+  .wow b{color:var(--teal)}
+  .mid{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;margin-top:16px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px}
+  .panel h3{margin:0 0 4px;font-size:19px;font-weight:700}
+  .panel .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
+  .pipe{display:flex;align-items:stretch;gap:0}
+  .stage{flex:1;text-align:center;padding:14px 8px;border-radius:12px;background:rgba(26,36,24,.04)}
+  .stage .n{font-family:"Archivo Narrow";font-weight:700;font-size:34px;line-height:1}
+  .stage .l{font-size:12.5px;font-weight:600;color:var(--muted);margin-top:4px}
+  .arrow{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 6px;min-width:56px}
+  .arrow .r{font-size:12px;font-weight:700}
+  .arrow .a{color:var(--line);font-size:20px;line-height:1}
+  .don .amt{font-family:"Archivo Narrow";font-weight:700;font-size:44px;line-height:1;color:var(--rose)}
+  .don .meta{color:var(--muted);font-size:13.5px;margin-top:6px}
+  .don .note{margin-top:12px;font-size:13px;color:var(--muted);font-style:italic}
+  .don .give{display:inline-block;margin-top:16px}
+  .trend-wrap{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;margin-top:16px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:2px 0 10px}
+  .legend span{font-size:12.5px;font-weight:600;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .grid{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-top:16px}
+  .grow{display:grid;grid-template-columns:minmax(220px,1fr) 92px 1fr 92px 56px;gap:14px;align-items:center;padding:13px 20px;border-top:1px solid var(--line)}
+  .grow:first-child{border-top:none;background:rgba(26,36,24,.04);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;padding-top:11px;padding-bottom:11px}
+  .grow .m{font-weight:600;font-size:14.5px}
+  .grow .c{font-family:"Archivo Narrow";font-weight:700;font-size:20px;text-align:right}
+  .grow .g{text-align:right;color:var(--muted);font-size:14px}
+  .grow .p{text-align:right;font-weight:700;font-size:14px}
+  .bar{height:11px;border-radius:999px;background:rgba(26,36,24,.10);overflow:hidden}
+  .bar > span{display:block;height:100%;border-radius:999px;transition:width .8s cubic-bezier(.2,.7,.2,1)}
+  .gin{width:82px;text-align:right;font-family:"DM Sans";font-size:14px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink)}
+  .foot{color:var(--muted);font-size:12.5px;margin-top:24px;text-align:center}
+  .toolbar{display:flex;gap:10px;align-items:center;margin:0 0 0 auto}
+  .savebar{display:none;gap:10px;align-items:center}
+  .savebar.on{display:flex}
+  #loading{padding:80px 0;text-align:center;color:var(--muted)}
+  @media(max-width:820px){
+    .headline{grid-template-columns:1fr}
+    .mid{grid-template-columns:1fr}
+    .hero h1{font-size:32px}
+    .grow{grid-template-columns:minmax(150px,1fr) 66px 56px;gap:10px}
+    .grow .barcell,.grow .g{display:none}
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <img src="https://parents4mopublicschools.org/brand/logo-circle-256.png" alt="P4MPS" />
+    <div class="brandname">Parents for Missouri Public Schools<small>Overall Tracker</small></div>
+    <div class="top-right">
+      <span class="chip count-chip" id="countdown">&nbsp;</span>
+      <span class="chip live" id="updated">Loading…</span>
+    </div>
+  </div>
+</header>
+<div class="wrap">
+  <section class="hero">
+    <h1>Where the work stands</h1>
+    <p>Live from Airtable. Every count updates as organizers log calls, RSVPs, attendance, and commitments across Missouri. Bars show progress toward goal.</p>
+  </section>
+
+  <div id="loading">Loading the numbers…</div>
+  <div id="app" style="display:none">
+    <div class="sec-title" style="display:flex;align-items:center;margin-bottom:14px">Headline
+      <div class="toolbar">
+        <div class="savebar" id="savebar"><button class="btn ghost" id="cancelBtn">Cancel</button><button class="btn primary" id="saveBtn">Save</button></div>
+        <button class="btn" id="editBtn">Edit goals</button>
+      </div>
+    </div>
+    <div class="headline" id="headline"></div>
+
+    <div class="mid">
+      <div class="panel">
+        <h3>Commitment pipeline</h3>
+        <p class="sub">How people move from a commitment to showing up. Ellen's question: are commitments turning into action?</p>
+        <div class="pipe" id="pipe"></div>
+      </div>
+      <div class="panel don">
+        <h3>Donations</h3>
+        <div class="amt" id="donAmt">$0</div>
+        <div class="meta" id="donMeta">No gifts logged yet</div>
+        <div class="note" id="donNote">From ActBlue</div>
+        <a class="btn primary give" id="giveBtn" href="https://secure.actblue.com/donate/parents-for-missouri-public-schools-1" target="_blank" rel="noopener">Donate</a>
+      </div>
+    </div>
+
+    <div class="trend-wrap">
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+        <h3 style="margin:0;font-size:19px;font-weight:700;font-family:'Archivo Narrow'">Commitments over time</h3>
+        <span class="sub" style="margin:0;color:var(--muted);font-size:13px" id="trendNote"></span>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div id="chart"></div>
+    </div>
+
+    <div class="sec-title">All metrics</div>
+    <div class="grid" id="grid"></div>
+
+    <div class="foot" id="foot"></div>
+  </div>
+</div>
+<script>
+var TOKEN = "__TOKEN__";
+var VOTE_DAY = "2026-08-04";
+var COLORS = {
+  outreach_attempts:"#335A78", onboarding_attended:"#2F5E3D", launch_attended:"#B25048",
+  hm_trained:"#2F5E3D", amp_trained:"#335A78", amp_convos:"#335A78", a5_commitments:"#B25048",
+  hm_commitments:"#2F5E3D", one_on_ones:"#C08A2D", a5_followed_up:"#B25048", hm_followed_up:"#2F5E3D",
+  vote_reminders:"#335A78"
+};
+var PIPE = [
+  {key:"a5_commitments", label:"Committed", color:"#B25048"},
+  {key:"a5_followed_up", label:"Followed up", color:"#C08A2D"},
+  {key:"amp_trained", label:"Trained / showed up", color:"#2F5E3D"}
+];
+var HEADLINE = ["a5_commitments","launch_attended","onboarding_attended"];
+var DATA = null, EDIT = false;
+
+function nf(n){ return Number(n||0).toLocaleString("en-US"); }
+function byKey(arr){ var o={}; for(var i=0;i<arr.length;i++) o[arr[i].key]=arr[i]; return o; }
+function pct(c,g){ if(!g||g<=0) return 0; return Math.min(100, Math.round(c/g*100)); }
+// Bars are colored by progress to goal so color tracks the number: red behind, amber on the way, green on track.
+function barColor(p){ p=Number(p)||0; if(p>=67) return "#2F5E3D"; if(p>=34) return "#C08A2D"; return "#B25048"; }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(x){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[x];}); }
+
+function mdLabel(d){ var p=String(d).split("-"); return p.length===3 ? (Number(p[1])+"/"+Number(p[2])) : d; }
+
+function wow(key){
+  var h=DATA.history||[]; if(h.length<2) return null;
+  var last=h[h.length-1]; var cur=(last.metrics||{})[key]||0;
+  var target=h.length>7?h[h.length-8]:h[0];
+  var prev=(target.metrics||{})[key]||0;
+  return cur-prev;
+}
+function wowStr(key){
+  var d=wow(key); if(d===null) return "";
+  if(d>0) return "<b>+"+nf(d)+"</b> this week";
+  if(d<0) return nf(d)+" this week";
+  return "no change this week";
+}
+
+function render(){
+  var m=byKey(DATA.metrics), g=DATA.goals;
+
+  // headline thermometers
+  var hh="";
+  for(var i=0;i<HEADLINE.length;i++){
+    var k=HEADLINE[i], row=m[k]; if(!row) continue;
+    var goal=g[k]||0, p=pct(row.count,goal), col=barColor(p);
+    hh+='<div class="hcard">'
+      +'<div class="pct" style="color:'+col+'">'+p+'%</div>'
+      +'<div class="lab">'+esc(row.label)+'</div>'
+      +'<div class="big">'+nf(row.count)+'</div>'
+      +'<div class="of">of '+nf(goal)+' goal</div>'
+      +'<div class="therm"><span style="width:'+p+'%;background:'+col+'"></span></div>'
+      +'<div class="wow">'+(wowStr(k)||"&nbsp;")+'</div>'
+      +'</div>';
+  }
+  document.getElementById("headline").innerHTML=hh;
+
+  // pipeline
+  var pp="";
+  for(var j=0;j<PIPE.length;j++){
+    var pk=PIPE[j], r=m[pk.key], n=r?r.count:0;
+    pp+='<div class="stage"><div class="n" style="color:'+pk.color+'">'+nf(n)+'</div><div class="l">'+pk.label+'</div></div>';
+    if(j<PIPE.length-1){
+      var nextR=m[PIPE[j+1].key], nextN=nextR?nextR.count:0;
+      var rate=n>0?Math.round(nextN/n*100):0;
+      pp+='<div class="arrow"><div class="a">&rarr;</div><div class="r" style="color:var(--muted)">'+rate+'%</div></div>';
+    }
+  }
+  document.getElementById("pipe").innerHTML=pp;
+
+  // donations — from the manual ActBlue export, dated by the last import
+  var d=DATA.donations||{total:0,count:0,asOf:""};
+  document.getElementById("donAmt").textContent="$"+nf(d.total);
+  document.getElementById("donMeta").textContent=(d.count>0? nf(d.count)+" gift"+(d.count===1?"":"s") : "No gifts yet");
+  var asof="";
+  if(d.asOf){ try{ asof=new Date(d.asOf).toLocaleDateString("en-US",{timeZone:"America/Chicago",month:"short",day:"numeric"}); }catch(e){} }
+  document.getElementById("donNote").textContent="From ActBlue export"+(asof? " · as of "+asof : "");
+
+  // commitments-over-time stacked bars
+  renderCommits();
+
+  // full grid
+  var gh='<div class="grow"><div>Metric</div><div style="text-align:right">Count</div><div class="barcell">Progress</div><div style="text-align:right">Goal</div><div style="text-align:right">%</div></div>';
+  for(var x=0;x<DATA.metrics.length;x++){
+    var mm=DATA.metrics[x], gg=g[mm.key]||0, pp2=pct(mm.count,gg), cc=barColor(pp2);
+    var goalCell = EDIT
+      ? '<input class="gin" type="number" min="0" data-key="'+mm.key+'" value="'+gg+'">'
+      : nf(gg);
+    gh+='<div class="grow">'
+      +'<div class="m">'+esc(mm.label)+'</div>'
+      +'<div class="c">'+nf(mm.count)+'</div>'
+      +'<div class="barcell"><div class="bar"><span style="width:'+pp2+'%;background:'+cc+'"></span></div></div>'
+      +'<div class="g">'+goalCell+'</div>'
+      +'<div class="p" style="color:'+cc+'">'+pp2+'%</div>'
+      +'</div>';
+  }
+  document.getElementById("grid").innerHTML=gh;
+
+  var upd=DATA.generated?new Date(DATA.generated):new Date();
+  document.getElementById("foot").innerHTML="Live from Airtable. Auto-refreshes every few minutes. Goals are editable with the button up top; donations sync from ActBlue. Private link — please do not share publicly.";
+}
+
+// Colors for the commitment-type stacks (brand + a few harmonious extras).
+var COMMIT_COLORS={ amplifier:"#B25048", house_meeting:"#2F5E3D", canvass:"#335A78", school_board:"#C08A2D", regional_team:"#7A5C8E", parent_team:"#4E8C7E", testimony:"#A0642F", talk5:"#5C6356", power_camp:"#88304E", other:"#9AA091" };
+function commitColor(k){ return COMMIT_COLORS[k]||"#9AA091"; }
+
+function renderCommits(){
+  var C=DATA.commits||{days:[],types:[],labels:{},events:[]};
+  var days=C.days||[], types=C.types||[], labels=C.labels||{}, events=C.events||[];
+  var note=document.getElementById("trendNote");
+  if(!days.length){ document.getElementById("chart").innerHTML=""; document.getElementById("legend").innerHTML=""; note.textContent="No commitments logged yet."; return; }
+  var evByDate={}; for(var i=0;i<events.length;i++){ (evByDate[events[i].date]=evByDate[events[i].date]||[]).push(events[i].label); }
+  // day totals + max
+  var maxV=1, tot=0;
+  for(var a=0;a<days.length;a++){ var s=0; for(var k in days[a].byType) s+=days[a].byType[k]; days[a]._t=s; tot+=s; if(s>maxV)maxV=s; }
+  var yTop=Math.ceil(maxV/5)*5||5;
+  var W=980,H=300,padL=34,padR=14,padT=44,padB=54;
+  var n=days.length, gap=n>60?0.5:1.5, bw=(W-padL-padR)/n;
+  function X(idx){ return padL+idx*bw; }
+  function Y(v){ return (H-padB) - v/yTop*(H-padT-padB); }
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" width="100%" preserveAspectRatio="xMidYMid meet" style="display:block;overflow:visible">';
+  // y gridlines
+  var ticks=[0,yTop/2,yTop];
+  for(var t=0;t<ticks.length;t++){ var yy=Y(ticks[t]); svg+='<line x1="'+padL+'" y1="'+yy+'" x2="'+(W-padR)+'" y2="'+yy+'" stroke="rgba(26,36,24,.10)"/>'; svg+='<text x="'+(padL-6)+'" y="'+(yy+4)+'" text-anchor="end" font-size="11" fill="#5C6356" font-family="DM Sans">'+Math.round(ticks[t])+'</text>'; }
+  // annotate the biggest surge days that have an event; drop any that would crowd
+  // a bigger neighbor, so labels never overlap. Then order left-to-right + stagger.
+  var surge=[]; for(var si=0;si<days.length;si++){ if(evByDate[days[si].date] && days[si]._t>0) surge.push(si); }
+  surge.sort(function(p,q){ return days[q]._t-days[p]._t; });   // biggest first
+  var keptIdx=[], MINGAP=94;
+  for(var kc=0;kc<surge.length && keptIdx.length<6;kc++){
+    var cx=X(surge[kc])+bw/2, ok=true;
+    for(var kk=0;kk<keptIdx.length;kk++){ if(Math.abs(cx-(X(keptIdx[kk])+bw/2))<MINGAP){ ok=false; break; } }
+    if(ok) keptIdx.push(surge[kc]);
+  }
+  keptIdx.sort(function(a,b){ return a-b; });
+  var labelRank={}; keptIdx.forEach(function(idx,i){ labelRank[idx]=i; });
+  // bars (stacked) + surge markers
+  for(var b=0;b<days.length;b++){
+    var day=days[b], y0=H-padB, x=X(b)+gap/2, w=Math.max(1,bw-gap);
+    for(var ti=0;ti<types.length;ti++){ var key=types[ti], v=day.byType[key]||0; if(!v) continue; var hgt=(v/yTop)*(H-padT-padB); y0-=hgt; svg+='<rect x="'+x.toFixed(1)+'" y="'+y0.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+hgt.toFixed(1)+'" fill="'+commitColor(key)+'" rx="1"/>'; }
+    // event surge label (top days only, staggered so neighbors don't collide)
+    if(labelRank[b]!==undefined){
+      var lx=X(b)+bw/2, topY=Y(day._t), ly=padT-12-((labelRank[b]%2)*15);
+      svg+='<line x1="'+lx.toFixed(1)+'" y1="'+(topY-4).toFixed(1)+'" x2="'+lx.toFixed(1)+'" y2="'+(ly+3)+'" stroke="#1A2418" stroke-width="1" stroke-dasharray="2,2" opacity="0.4"/>';
+      svg+='<circle cx="'+lx.toFixed(1)+'" cy="'+(topY-6).toFixed(1)+'" r="2.5" fill="#1A2418"/>';
+      var anchor=lx<90?"start":(lx>W-90?"end":"middle");
+      svg+='<text x="'+lx.toFixed(1)+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="11" font-weight="600" fill="#1A2418" font-family="DM Sans">'+esc(shortEv(evByDate[day.date][0]))+'</text>';
+    }
+  }
+  // x axis: month/day ticks spaced out
+  var step=Math.ceil(n/10);
+  for(var xi=0;xi<n;xi+=step){ svg+='<text x="'+(X(xi)+bw/2).toFixed(1)+'" y="'+(H-padB+18)+'" text-anchor="middle" font-size="10" fill="#5C6356" font-family="DM Sans">'+mdLabel(days[xi].date)+'</text>'; }
+  svg+='</svg>';
+  document.getElementById("chart").innerHTML=svg;
+  // legend (types present, by volume)
+  var lg="";
+  for(var L=0;L<types.length;L++){ var kk=types[L]; lg+='<span><i style="background:'+commitColor(kk)+'"></i>'+esc(labels[kk]||kk)+'</span>'; }
+  document.getElementById("legend").innerHTML=lg;
+  note.textContent = nf(tot)+" individual commitments logged since "+mdLabel(C.minDate)+" (a person often makes several). Labeled spikes mark the meeting that drove them.";
+}
+function shortEv(s){ s=String(s||""); s=s.replace(/ ?(Onboarding|Emergency Meeting|Parent Action Meeting|Training)/gi,""); s=s.replace(/  +/g," ").replace(/^ +| +$/g,""); return s.length>24?s.slice(0,23)+"…":s; }
+
+function setEdit(on){
+  EDIT=on;
+  document.getElementById("savebar").className="savebar"+(on?" on":"");
+  document.getElementById("editBtn").style.display=on?"none":"inline-block";
+  render();
+}
+function save(){
+  var goals={}; var ins=document.querySelectorAll(".gin[data-key]");
+  for(var i=0;i<ins.length;i++){ var v=Number(ins[i].value); if(isFinite(v)&&v>=0) goals[ins[i].getAttribute("data-key")]=v; }
+  var btn=document.getElementById("saveBtn"); btn.textContent="Saving…"; btn.disabled=true;
+  fetch("/board/save?k="+encodeURIComponent(TOKEN),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({goals:goals})})
+    .then(function(r){return r.json();})
+    .then(function(){ btn.textContent="Save"; btn.disabled=false; DATA.goals=Object.assign({},DATA.goals,goals); setEdit(false); })
+    .catch(function(){ btn.textContent="Save"; btn.disabled=false; alert("Save failed — try again."); });
+}
+
+function countdown(){
+  var el=document.getElementById("countdown");
+  var days=Math.ceil((Date.parse(VOTE_DAY+"T00:00:00")-Date.now())/86400000);
+  el.textContent = days>0 ? (days+" days to Aug 4 vote") : (days===0?"Vote today — Aug 4":"Election passed");
+}
+function stamp(){
+  var upd=DATA&&DATA.generated?new Date(DATA.generated):new Date();
+  var hh=upd.getHours(), mm=upd.getMinutes(); var ap=hh>=12?"PM":"AM"; hh=hh%12||12; if(mm<10)mm="0"+mm;
+  document.getElementById("updated").innerHTML="Updated "+hh+":"+mm+" "+ap;
+}
+function load(){
+  fetch("/board/data.json?k="+encodeURIComponent(TOKEN)+"&t="+Date.now())
+    .then(function(r){ if(!r.ok) throw new Error("auth"); return r.json(); })
+    .then(function(j){ DATA=j; document.getElementById("loading").style.display="none"; document.getElementById("app").style.display="block"; render(); stamp(); })
+    .catch(function(){ document.getElementById("loading").innerHTML="Could not load — check the link, or refresh in a minute."; });
+}
+document.getElementById("editBtn").addEventListener("click",function(){setEdit(true);});
+document.getElementById("cancelBtn").addEventListener("click",function(){setEdit(false);});
+document.getElementById("saveBtn").addEventListener("click",save);
+countdown(); load();
+setInterval(function(){ if(!EDIT) load(); }, 240000);
+</script>
+</body>
+</html>`;
+
+// =========================================================================
+// Organizer scoreboard — who converts leads best, and (weighted highest) who
+// develops recruiters. Credits each contact's ASSIGNED organizer for their
+// book moving up the funnel: lead -> worked -> signed up -> took action ->
+// their contacts recruit others -> their contacts recruit a recruiter (depth).
+// Feeds two CSVs the coaching-tab Apps Script consumes. One contacts pass.
+// =========================================================================
+async function computeScoreboard(env) {
+  const cached = await cacheGet(env, 'cache:scoreboard:v3');
+  if (cached) return cached;
+  const orgName = await orgNameById(env);
+  const flds = ['first', 'last', 'assigned_organizer', 'organized_by', 'events_signed_up', 'amendment5_commitments', 'house_meeting_date', 'one_on_one_booked', 'attempt_count', 'last_attempt_result'];
+  const C = {}; // contact id -> {name, orgs, recr:[recruiter ids], signed, acted, worked}
+  let off = null;
+  do {
+    let q = `?pageSize=100` + flds.map(f => `&fields%5B%5D=${encodeURIComponent(f)}`).join('');
+    if (off) q += `&offset=${off}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) {
+      const f = r.fields;
+      const signed = Array.isArray(f.events_signed_up) && f.events_signed_up.length > 0;
+      const acted = !!(String(f.amendment5_commitments || '').trim() || String(f.house_meeting_date || '').trim() || f.one_on_one_booked);
+      const worked = (Number(f.attempt_count) || 0) > 0 || !!String(f.last_attempt_result || '').trim();
+      C[r.id] = { name: ((f.first || '') + ' ' + (f.last || '')).trim(), orgs: (f.assigned_organizer || []), recr: (f.organized_by || []), signed, acted, worked };
+    }
+    off = d.offset;
+  } while (off);
+  // Peer-recruitment network from organized_by (child -> the contact who recruited them).
+  const recruitedCount = {}, childrenOf = {};
+  for (const [cid, c] of Object.entries(C)) for (const pid of c.recr) { recruitedCount[pid] = (recruitedCount[pid] || 0) + 1; (childrenOf[pid] = childrenOf[pid] || []).push(cid); }
+  const recruiters = new Set(Object.keys(recruitedCount));
+  const isDeveloper = pid => (childrenOf[pid] || []).some(cid => recruiters.has(cid)); // recruited a recruiter (depth-2)
+  // Aggregate to each contact's assigned organizer.
+  const O = {};
+  const ensure = id => O[id] || (O[id] = { org: orgName[id] || id, leads: 0, worked: 0, signed: 0, acted: 0, recr: 0, leaders: 0, personal: 0, ws: 0, wa: 0, wr: 0 });
+  for (const [cid, c] of Object.entries(C)) {
+    const isR = recruiters.has(cid), isD = isDeveloper(cid);
+    for (const oid of c.orgs) {
+      const a = ensure(oid);
+      a.leads++;
+      if (c.worked) a.worked++;
+      if (c.signed) a.signed++;
+      if (c.acted) a.acted++;
+      if (isR) a.recr++;
+      if (isD) a.leaders++;
+      // worked-book intersections -> rates that stay <=100% despite self-signups
+      if (c.worked && c.signed) a.ws++;
+      if (c.worked && c.acted) a.wa++;
+      if (c.worked && isR) a.wr++;
+    }
+  }
+  // Personal recruiting: match an organizer's name to their own contact record's recruits.
+  const nameToRecruited = {};
+  for (const pid of recruiters) { const nm = (C[pid] && C[pid].name || '').toLowerCase(); if (nm) nameToRecruited[nm] = (nameToRecruited[nm] || 0) + recruitedCount[pid]; }
+  for (const id of Object.keys(O)) { O[id].personal = nameToRecruited[(orgName[id] || '').toLowerCase()] || 0; }
+  const orgs = Object.values(O).filter(o => o.leads > 0 || o.personal > 0)
+    .sort((a, b) => (b.recr - a.recr) || (b.acted - a.acted) || (b.signed - a.signed));
+  // Recruitment chains for the recognition tab: one row per recruiter.
+  const chains = [];
+  for (const pid of recruiters) {
+    const kids = childrenOf[pid] || [];
+    const bringers = kids.filter(cid => recruiters.has(cid));
+    const rc = C[pid];
+    chains.push({
+      recruiter: rc ? rc.name : pid,
+      org: rc && rc.orgs.length ? (orgName[rc.orgs[0]] || '') : '',
+      brought: kids.length,
+      bringers: bringers.length,
+      names: kids.map(cid => (C[cid] && C[cid].name) || '').filter(Boolean).join('; '),
+    });
+  }
+  chains.sort((a, b) => (b.bringers - a.bringers) || (b.brought - a.brought));
+  const payload = { generated: new Date().toISOString(), orgs, chains };
+  await cachePut(env, 'cache:scoreboard:v2', payload, 300);
+  return payload;
+}
+function csvEsc(s) { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+async function scoreboardExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const { orgs } = await computeScoreboard(env);
+  const out = [['Organizer', 'Leads assigned', 'Leads worked', 'Signed up', 'Took action', 'Recruiters developed', 'Leaders developed', 'Personally recruited', 'Signed (worked)', 'Acted (worked)', 'Recruiters (worked)'].join(',')];
+  for (const o of orgs) out.push([o.org, o.leads, o.worked, o.signed, o.acted, o.recr, o.leaders, o.personal, o.ws, o.wa, o.wr].map(csvEsc).join(','));
+  return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=300', 'Access-Control-Allow-Origin': '*' } });
+}
+async function recruitChainsExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const { chains } = await computeScoreboard(env);
+  const out = [['Recruiter', 'Their organizer', 'Brought in', 'Of those who recruit others', 'People they brought in'].join(',')];
+  for (const c of chains) out.push([c.recruiter, c.org, c.brought, c.bringers, c.names].map(csvEsc).join(','));
+  return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=300', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// =========================================================================
+// Nightly sync: mirror campaign signups/attendance (contact fields + launch
+// log rows) into the linked attendance table (ATTENDANCE_MIRROR_TBL), so the
+// events<->attendance structure stays current without changing the live
+// pipeline. Creates missing event records, adds missing rows, and upgrades
+// statuses (Registered -> Showed up / No show). Never deletes or downgrades,
+// so manual team rows (Border Star etc.) are untouched.
+// =========================================================================
+const MIRROR_RANK = { 'Registered': 1, 'No show': 2, 'Showed up': 3 };
+function mirrorEventName(meta) {
+  return meta.type === 'amp' ? meta.label.replace(/^Amplifier /, 'Amplifier Training ') : meta.label;
+}
+function mirrorLaunchDef(name) {
+  const m = String(name).match(/(\d{1,2})\/(\d{1,2})/);
+  const date = m ? `2026-${String(m[1]).padStart(2, '0')}-${String(m[2]).padStart(2, '0')}` : null;
+  const typ = /power camp/i.test(name) ? 'Power Camp' : /teacher/i.test(name) ? 'Team meeting' : 'Regional launch';
+  return { date, typ };
+}
+async function syncAttendanceMirror(env) {
+  // 1. events table: name -> record id
+  const evByName = {};
+  let off = null;
+  do {
+    let q = `?pageSize=100&fields%5B%5D=Name`;
+    if (off) q += `&offset=${off}`;
+    const d = await at(env, `/${BASE}/${EVENTS_TBL}${q}`);
+    for (const r of d.records) { const nm = String(r.fields.Name || '').trim(); if (nm) evByName[nm] = r.id; }
+    off = d.offset;
+  } while (off);
+
+  // 2. desired status per (contact, event name) from the per-event contact fields
+  const metas = Object.values(EVENT_META).filter(m => m.signupField || m.attendField);
+  const fields = [];
+  for (const m of metas) { if (m.signupField) fields.push(m.signupField); if (m.attendField) fields.push(m.attendField); }
+  const best = {}; // 'cid|eventName' -> status
+  const put = (cid, ev, status) => { const k = cid + '|' + ev; if (!best[k] || MIRROR_RANK[status] > MIRROR_RANK[best[k]]) best[k] = status; };
+  off = null;
+  do {
+    let q = `?pageSize=100` + fields.map(f => `&fields%5B%5D=${encodeURIComponent(f)}`).join('');
+    if (off) q += `&offset=${off}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) {
+      for (const m of metas) {
+        const nm = mirrorEventName(m);
+        const av = m.attendField ? r.fields[m.attendField] : null;
+        const sv = m.signupField ? r.fields[m.signupField] : null;
+        if (av === 'Attended' || av === 'Walk-in' || av === 'Partial') put(r.id, nm, 'Showed up');
+        else if (av === 'No-show') put(r.id, nm, 'No show');
+        else if (sv === 'Signed up') put(r.id, nm, 'Registered');
+      }
+    }
+    off = d.offset;
+  } while (off);
+
+  // 3. launches/camps from contact_log (rsvp_launch rows)
+  const launchNames = new Set();
+  off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`AND(OR({method}='Event RSVP',{method}='Event attendance'),{rsvp_launch}!=BLANK())`)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=rsvp_launch&fields%5B%5D=contact`;
+    if (off) q += `&offset=${off}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      const nm = String(r.fields.rsvp_launch || '').trim();
+      if (!nm) continue;
+      launchNames.add(nm);
+      for (const cid of (r.fields.contact || [])) put(cid, nm, r.fields.method === 'Event attendance' ? 'Showed up' : 'Registered');
+    }
+    off = d.offset;
+  } while (off);
+
+  // 4. create any missing event records (launch names only; meta events were backfilled)
+  const missingEvents = [];
+  const wanted = new Set(Object.keys(best).map(k => k.split('|')[1]));
+  for (const nm of wanted) {
+    if (!evByName[nm]) {
+      const { date, typ } = mirrorLaunchDef(nm);
+      const f = { Name: nm, type: typ };
+      if (date) f.date = date;
+      missingEvents.push({ fields: f });
+    }
+  }
+  for (let i = 0; i < missingEvents.length; i += 10) {
+    const d = await at(env, `/${BASE}/${EVENTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: missingEvents.slice(i, i + 10), typecast: true }) });
+    for (const r of d.records) evByName[r.fields.Name] = r.id;
+  }
+
+  // 4b. confirmation calls (result Confirmed/Cancelled) -> reminder_status on the mirror row.
+  // Cancelled outranks Confirmed (it's the later state).
+  const remind = {}; // 'cid|evid' -> 'Confirmed'|'Cancelled'
+  off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`OR({result}='Confirmed',{result}='Cancelled')`)}&pageSize=100&fields%5B%5D=result&fields%5B%5D=event&fields%5B%5D=rsvp_launch&fields%5B%5D=contact`;
+    if (off) q += `&offset=${off}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      const f = r.fields;
+      const evLabel = String(f.event || '').trim(), rl = String(f.rsvp_launch || '').trim();
+      let name = null;
+      const cm = metas.find(m => m.confirmEvent === evLabel);
+      if (cm) name = mirrorEventName(cm);
+      else if (rl && evByName[rl]) name = rl;
+      else if (evByName[evLabel]) name = evLabel;
+      else { const ln = (rl || evLabel).replace(/^confirm\s+/i, '').trim(); if (evByName[ln]) name = ln; }
+      if (!name) continue;
+      const evid = evByName[name];
+      for (const cid of (f.contact || [])) {
+        const k = cid + '|' + evid;
+        if (f.result === 'Cancelled' || !remind[k]) remind[k] = f.result;
+      }
+    }
+    off = d.offset;
+  } while (off);
+
+  // 5. existing mirror rows -> create missing / upgrade status / fill reminder_status
+  const have = {}; // 'cid|evid' -> {id, status, remind}
+  off = null;
+  do {
+    let q = `?pageSize=100&fields%5B%5D=contact&fields%5B%5D=event&fields%5B%5D=attended&fields%5B%5D=reminder_status`;
+    if (off) q += `&offset=${off}`;
+    const d = await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}${q}`);
+    for (const r of d.records) {
+      const c = (r.fields.contact || [])[0], e = (r.fields.event || [])[0];
+      if (c && e) have[c + '|' + e] = { id: r.id, status: r.fields.attended || '', remind: r.fields.reminder_status || '' };
+    }
+    off = d.offset;
+  } while (off);
+
+  const creates = [], updates = {};
+  for (const [k, status] of Object.entries(best)) {
+    const [cid, evName] = k.split('|');
+    const evid = evByName[evName];
+    if (!evid) continue;
+    const mk = cid + '|' + evid;
+    const cur = have[mk];
+    if (!cur) {
+      const f = { contact: [cid], event: [evid], attended: status };
+      if (remind[mk]) f.reminder_status = remind[mk];
+      creates.push({ fields: f });
+    } else if ((MIRROR_RANK[status] || 0) > (MIRROR_RANK[cur.status] || 0)) {
+      (updates[cur.id] = updates[cur.id] || {}).attended = status;
+    }
+  }
+  // reminder_status fills only where the mirror cell is empty — never overwrites a manual value.
+  for (const [mk, res] of Object.entries(remind)) {
+    const cur = have[mk];
+    if (cur && !cur.remind) (updates[cur.id] = updates[cur.id] || {}).reminder_status = res;
+  }
+  const updList = Object.entries(updates).map(([id, fields]) => ({ id, fields }));
+  for (let i = 0; i < creates.length; i += 10) await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}`, { method: 'POST', body: JSON.stringify({ records: creates.slice(i, i + 10), typecast: true }) });
+  for (let i = 0; i < updList.length; i += 10) await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: updList.slice(i, i + 10), typecast: true }) });
+  return { events_created: missingEvents.length, rows_created: creates.length, rows_updated: updList.length };
 }
 
 // =========================================================================
@@ -4694,6 +5589,60 @@ const REGIONS = {
       district: ['nkc', 'north kansas city', 'liberty', 'park hill', 'smithville', 'kearney', 'excelsior', 'platte city'],
     },
   },
+  ejackson: {
+    label: 'Eastern Jackson County',
+    launchEvent: '',   // no dedicated launch event yet — needs-data bucket stays empty until one is set
+    // No broad county match: Jackson is split east/west (KCPS is its own region). Route by the EJ cities + districts.
+    match: {
+      county:   [],
+      city:     ['blue springs', 'independence', "lee's summit", 'lees summit', 'raytown', 'grandview', 'grain valley', 'oak grove', 'fort osage', 'peculiar', 'raymore'],
+      district: ['blue springs', 'independence', "lee's summit", 'lees summit', 'raytown', 'grandview', 'grain valley', 'oak grove', 'fort osage', 'raypec', 'raymore-peculiar', 'raymore'],
+    },
+  },
+  stl_stc: {
+    label: 'St. Charles / St. Louis',
+    launchEvent: '',
+    match: {
+      county:   ['st. louis', 'st louis', 'st. charles', 'st charles', 'warren count', 'lincoln count', 'jefferson count', 'franklin count', 'gasconade'],
+      city:     ['st. louis', 'st louis', 'st charles', 'st. charles', 'wentzville', "o'fallon", 'ofallon', 'florissant', 'ferguson', 'hazelwood', 'kirkwood', 'chesterfield', 'ballwin', 'wildwood'],
+      district: ['slps', 'st. louis public', 'stc city', 'riverview gardens', 'jennings', 'normandy', 'ferg flor', 'ferguson', 'florissant', 'hazelwood', 'pattonville', 'ritenour', 'university city', 'francis howell', 'wentzville', 'zumwalt', 'orchard farm', 'rockwood', 'parkway', 'kirkwood', 'webster groves', 'ladue', 'clayton', 'lindbergh', 'mehlville', 'fox c-6', 'bayless', 'hancock place', 'maplewood', 'brentwood', 'crystal city', 'hillsboro', 'meramec', 'valley park', 'vally park', 'wright city', 'warren county', 'lincoln county'],
+    },
+  },
+  swmo: {
+    label: 'Southwest MO',
+    launchEvent: '',
+    // Match by county (the SWMO breakdown is county-based per the roster).
+    match: {
+      county:   ['barton', 'bates', 'cedar', 'christian', 'dade', 'dallas', 'greene', 'hickory', 'jasper', 'lawrence', 'mcdonald', 'newton', 'polk', 'st. clair', 'st clair', 'stone', 'taney', 'vernon', 'webster'],
+      city:     [],
+      district: [],
+    },
+  },
+  columbia: {
+    label: 'Columbia',
+    launchEvent: '',
+    match: { county: ['boone'], city: ['columbia'], district: ['columbia'] },
+  },
+  stjoseph: {
+    label: 'St. Joseph',
+    launchEvent: '',
+    match: {
+      county:   ['clinton', 'buchanan', 'andrew', 'holt', 'dekalb', 'de kalb', 'nodaway'],
+      city:     ['st. joseph', 'st joseph', 'st joe', 'maryville', 'faucett', 'plattsburg'],
+      district: ['mid-buchanan', 'st. joseph', 'st joseph', 'savannah', 'maryville'],
+    },
+  },
+  kc: {
+    label: 'Kansas City',
+    launchEvent: '',
+    // KCPS urban core: match the district (KCPS/Center/Hickman Mills) OR a known KC school (charters + KCPS buildings).
+    match: {
+      county:   [],
+      city:     [],
+      district: ['kcps', 'kansas city public', 'kansas city 33', 'center', 'hickman mills'],
+      school:   ['border star', 'hale cook', 'lincoln prep', 'lincoln middle', 'lincoln college', 'foreign language', 'fla', 'lafayette', 'lcpa', 'paseo', 'holliday', 'hogan', 'crossroads', 'primitivo', 'wendell phillips', 'hartman', 'melcher', 'wheatley', 'carver', 'silver city', 'garfield', 'garcia', 'woodland', 'faxon', 'trailwoods', 'troost', 'banneker', 'longfellow', 'pitcher', 'whittier', 'della lamb', 'guadalupe', 'gordon parks', 'allen village', 'frontier school', 'genesis school', 'university academy', 'scuola vita nuova', 'brookside', 'kauffman', 'james', 'northeast', 'north east'],
+    },
+  },
 };
 
 async function regionExportCsv(env, urlObj) {
@@ -4701,30 +5650,35 @@ async function regionExportCsv(env, urlObj) {
   const region = REGIONS[(urlObj.searchParams.get('region') || 'northland').toLowerCase()];
   if (!region) return new Response('unknown region', { status: 404 });
   const isAtt = v => { v = String(v || '').toLowerCase(); return v === 'attended' || v === 'walk-in' || v === 'walk in'; };
+  const escF = s => String(s).replace(/'/g, "\\'");   // escape apostrophes so "lee's summit" can't break the formula
   const clauses = [];
-  for (const c of region.match.county)   clauses.push(`FIND('${c}',LOWER({county}&''))`);
-  for (const c of region.match.city)     clauses.push(`FIND('${c}',LOWER({city}&''))`);
-  for (const c of region.match.district) clauses.push(`FIND('${c}',LOWER({district}&''))`);
+  for (const c of region.match.county)   clauses.push(`FIND('${escF(c)}',LOWER({county}&''))`);
+  for (const c of region.match.city)     clauses.push(`FIND('${escF(c)}',LOWER({city}&''))`);
+  for (const c of region.match.district) clauses.push(`FIND('${escF(c)}',LOWER({district}&''))`);
+  for (const c of (region.match.school || [])) clauses.push(`FIND('${escF(c)}',LOWER({school}&''))`);   // KC routes by school too (charters + KCPS buildings)
   const formula = `AND({dnc_flag_date}='',OR(${clauses.join(',')}))`;
   const ampFields = Object.values(EVENT_META).filter(e => e.type === 'amp').map(e => e.attendField);
   const hmFields  = Object.values(EVENT_META).filter(e => e.type === 'hm').map(e => e.attendField);
   const baseFields = ['first', 'last', 'role', 'email', 'phone', 'street_address', 'city', 'zip', 'school', 'district', 'county',
     'assigned_organizer', 'amendment5_commitments', 'house_meeting_commitments', 'commitments_added'];
   const allFields = baseFields.concat(ampFields, hmFields);
-  // launch attendance set
+  // launch attendance set (skip entirely if the region has no launch event — avoids matching blank rsvp_launch)
   const launchSet = new Set();
   let off = null;
-  do {
-    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{rsvp_launch}='${region.launchEvent.replace(/'/g, "\\'")}')`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=result`;
-    if (off) q += `&offset=${encodeURIComponent(off)}`;
-    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
-    for (const r of d.records) if (isAtt(r.fields.result)) (r.fields.contact || []).forEach(id => launchSet.add(id));
-    off = d.offset;
-  } while (off);
+  if (region.launchEvent) {
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{rsvp_launch}='${region.launchEvent.replace(/'/g, "\\'")}')`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=result`;
+      if (off) q += `&offset=${encodeURIComponent(off)}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+      for (const r of d.records) if (isAtt(r.fields.result)) (r.fields.contact || []).forEach(id => launchSet.add(id));
+      off = d.offset;
+    } while (off);
+  }
   // bucket=needs-data → launch attendees who can't be routed (no usable county/city/district)
   const bucket = (urlObj.searchParams.get('bucket') || '').toLowerCase();
   const junkDist = d => { const s = String(d || '').toLowerCase().replace(/[’']/g, '').trim(); return !s || /^(i\s*dont\s*know|dont\s*know|unknown|n\/?a|none|tbd|\?+)$/.test(s); };
   const isUnrouted = f => !String(f.county || '').trim() && !String(f.city || '').trim() && junkDist(f.district);
+  const orgIdName = await orgNameById(env);
   const buildRow = r => {
     const f = r.fields;
     const fn = String(f.first || ''), ln = String(f.last || '');
@@ -4735,7 +5689,7 @@ async function regionExportCsv(env, urlObj) {
     return {
       id: r.id,
       first: f.first || '', last: f.last || '',
-      organized_by: (f.assigned_organizer || []).map(id => ORGANIZER_NAME_BY_ID[id] || '').filter(Boolean).join('; '),
+      organized_by: (f.assigned_organizer || []).map(id => ORGANIZER_NAME_BY_ID[id] || orgIdName[id] || '').filter(Boolean).join('; '),
       role: Array.isArray(f.role) ? f.role.join(', ') : (f.role || ''),
       email: f.email || '', phone: f.phone || '', address: f.street_address || '', city: f.city || '', zip: f.zip || '',
       school: f.school || '', district: f.district || '', county: f.county || '',
@@ -4765,7 +5719,7 @@ async function regionExportCsv(env, urlObj) {
       if (off) q += `&offset=${encodeURIComponent(off)}`;
       const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
       for (const r of d.records) {
-        if (/kcps|kansas city public|kansas city 33/i.test(String(r.fields.district || ''))) continue;  // KCPS is its own region
+        if (region.label !== 'Kansas City' && /kcps|kansas city public|kansas city 33/i.test(String(r.fields.district || ''))) continue;  // KCPS excluded from other regions, but IS the KC region
         const row = buildRow(r); if (row) rows.push(row);
       }
       off = d.offset;
@@ -4786,23 +5740,275 @@ async function regionExportCsv(env, urlObj) {
 // Write the data-quality (cleanup) tier back to Airtable. Only existing text
 // fields are whitelisted; role and the organizing-work columns are not pushed
 // (role is a select, and commitment-status / Team / Flag have no Airtable field).
+// Which regional tracker a contact routes to (by county/city/district), or '' if it can't be routed.
+function regionFor(f) {
+  const county = String(f.county || '').toLowerCase(), city = String(f.city || '').toLowerCase(), district = String(f.district || '').toLowerCase(), school = String(f.school || '').toLowerCase();
+  if (String(f.state || '').toUpperCase() === 'KS' || /,\s*ks\b/.test(county) || /^6[67]/.test(String(f.zip || ''))) return 'Kansas (out of state)';  // KS = no MO region
+  if (/kcps|kansas city public|kansas city 33|hickman mills|center 58|center school/.test(district)) return 'Kansas City';
+  for (const r of Object.values(REGIONS)) {
+    const hit = r.match.county.some(c => county.includes(c)) || r.match.city.some(c => city.includes(c)) || r.match.district.some(c => district.includes(c));
+    if (hit) return r.label;
+  }
+  for (const [re, region] of SCHOOL_REGION) if (school && re.test(school)) return region;   // school -> region fallback for the geo-blank
+  return '';
+}
+
+// Whole-database cleaning feed: every contact + which region they route to + a duplicate hint.
+// Powers the all-contacts cleaning sheet. Stranded contacts (no region) sort to the top.
+async function allContactsExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const fields = ['first', 'last', 'email', 'phone', 'street_address', 'city', 'zip', 'school', 'district', 'county', 'assigned_organizer', 'organized_by', 'leader_ladder', 'source', 'state', 'last_attempt_date', 'dnc_flag_date'];
+  const recs = [];
+  let off = null;
+  do {
+    let q = `?pageSize=100`;
+    for (const fl of fields) q += `&fields%5B%5D=${encodeURIComponent(fl)}`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) recs.push(r);
+    off = d.offset;
+  } while (off);
+  // name lookup (for resolving the peer recruiter) + every contact's event history (the best thread for a blank record)
+  const nameById = {};
+  for (const r of recs) nameById[r.id] = `${r.fields.first || ''} ${r.fields.last || ''}`.trim();
+  const orgIdName = await orgNameById(env);
+  // full event history: historical/2025 attendance lives in event_attendance; 2026 campaign signups in contact_log. Merge both.
+  const eventsBy = {};   // contact_id -> { dates:{event->latestDate}, last:'' }
+  const addEv = (cid, ev, dt) => {
+    const e = eventsBy[cid] = eventsBy[cid] || { dates: {}, last: '' };
+    if (ev) { if (!e.dates[ev] || dt > e.dates[ev]) e.dates[ev] = dt; }
+    if (dt && dt > e.last) e.last = dt;
+  };
+  for (const src of [{ tbl: EVENT_ATTENDANCE_TBL, f: '' }, { tbl: CONTACT_LOG_TBL, f: `&filterByFormula=${encodeURIComponent(`{method}='Event attendance'`)}` }]) {
+    let o = null;
+    do {
+      let q = `?pageSize=100&fields%5B%5D=contact&fields%5B%5D=event&fields%5B%5D=date${src.f}`;
+      if (o) q += `&offset=${encodeURIComponent(o)}`;
+      const d = await at(env, `/${BASE}/${src.tbl}${q}`);
+      for (const lr of d.records) {
+        const ev = String(lr.fields.event || '').trim(), dt = String(lr.fields.date || '');
+        for (const cid of (lr.fields.contact || [])) addEv(cid, ev, dt);
+      }
+      o = d.offset;
+    } while (o);
+  }
+  // duplicate detection: contacts sharing an email or a 10-digit phone
+  const norm10 = p => String(p || '').replace(/\D/g, '').slice(-10);
+  const byEmail = {}, byPhone = {};
+  for (const r of recs) {
+    const e = String(r.fields.email || '').toLowerCase().trim(); const p = norm10(r.fields.phone);
+    if (e) (byEmail[e] = byEmail[e] || []).push(r.id);
+    if (p.length === 10) (byPhone[p] = byPhone[p] || []).push(r.id);
+  }
+  const rows = [];
+  for (const r of recs) {
+    const f = r.fields;
+    const fn = String(f.first || ''), ln = String(f.last || '');
+    if (/^(test|smoke|sample|audit|final|demo)\b/i.test(fn) || /^(test|smoke|sample|audit|final|demo)\b/i.test(ln)) continue;
+    if (/test|smoke|example/i.test(String(f.email || ''))) continue;
+    if (String(f.dnc_flag_date || '').trim()) continue;
+    const e = String(f.email || '').toLowerCase().trim(), p = norm10(f.phone);
+    const dupe = ((e && (byEmail[e] || []).length > 1) || (p.length === 10 && (byPhone[p] || []).length > 1)) ? 'Possible dupe' : '';
+    const evh = eventsBy[r.id] || { dates: {}, last: '' };
+    rows.push({
+      id: r.id, first: f.first || '', last: f.last || '', email: f.email || '', phone: f.phone || '',
+      address: f.street_address || '', city: f.city || '', zip: f.zip || '', school: f.school || '',
+      district: f.district || '', county: f.county || '', routes_to: regionFor(f),
+      state: f.state || '', events: Object.entries(evh.dates).sort((a, b) => String(b[1] || '').localeCompare(String(a[1] || ''))).slice(0, 8).map(e => e[0]).join('; '),
+      recruiter: (f.organized_by || []).map(id => nameById[id] || '').filter(Boolean).join('; '),
+      last_touch: String(f.last_attempt_date || '') || evh.last || '',
+      organized_by: (f.assigned_organizer || []).map(id => ORGANIZER_NAME_BY_ID[id] || orgIdName[id] || '').filter(Boolean).join('; '),
+      leader: f.leader_ladder || '', source: f.source || '', dupe,
+    });
+  }
+  rows.sort((a, b) => {
+    const aks = a.routes_to === 'Kansas (out of state)' ? 1 : 0, bks = b.routes_to === 'Kansas (out of state)' ? 1 : 0;
+    if (aks !== bks) return aks - bks;                                  // Kansas to the very bottom
+    const ar = a.routes_to ? 1 : 0, br = b.routes_to ? 1 : 0;          // then stranded (no region) first
+    if (ar !== br) return ar - br;
+    if (a.routes_to !== b.routes_to) return a.routes_to.localeCompare(b.routes_to);
+    return (a.last + a.first).toLowerCase().localeCompare((b.last + b.first).toLowerCase());
+  });
+  const cols = [['contact_id', 'id'], ['First', 'first'], ['Last', 'last'], ['Email', 'email'], ['Phone', 'phone'],
+    ['Address', 'address'], ['City', 'city'], ['Zip', 'zip'], ['School', 'school'], ['District', 'district'],
+    ['County', 'county'], ['Routes to', 'routes_to'], ['State', 'state'], ['Events attended', 'events'],
+    ['Recruiter', 'recruiter'], ['Last touch', 'last_touch'], ['Possible dupe', 'dupe'], ['Organized By', 'organized_by'],
+    ['Leader', 'leader'], ['Source', 'source']];
+  const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const out = [cols.map(c => c[0]).join(',')];
+  for (const r of rows) out.push(cols.map(c => esc(r[c[1]])).join(','));
+  return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Live name -> organizer id map (cached 5 min). Lets newly-added organizers write back
+// without a redeploy. The hardcoded ORGANIZER_ID_BY_NAME stays as a fast-path / fallback.
+async function orgMap(env) {
+  const cached = await cacheGet(env, 'cache:orgmap:v1');
+  if (cached) return cached;
+  const map = {}; let off = null;
+  do {
+    let q = `?pageSize=100&fields%5B%5D=name`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${ORGANIZERS_TBL}${q}`);
+    for (const r of d.records) { const nm = String(r.fields.name || '').trim(); if (nm) map[nm.toLowerCase()] = r.id; }
+    off = d.offset;
+  } while (off);
+  await cachePut(env, 'cache:orgmap:v1', map, 300);
+  return map;
+}
+// id -> organizer name, live from the organizers table (so newly-added organizers display in
+// the Organized By column + get color-coded, instead of resolving to blank via the fixed map).
+async function orgNameById(env) {
+  const cached = await cacheGet(env, 'cache:orgnamebyid:v1');
+  if (cached) return cached;
+  const map = {}; let off = null;
+  do {
+    let q = `?pageSize=100&fields%5B%5D=name`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${ORGANIZERS_TBL}${q}`);
+    for (const r of d.records) { const nm = String(r.fields.name || '').trim(); if (nm) map[r.id] = nm; }
+    off = d.offset;
+  } while (off);
+  await cachePut(env, 'cache:orgnamebyid:v1', map, 300);
+  return map;
+}
+async function resolveOrganizerId(env, name) {
+  const k = String(name || '').toLowerCase().trim();
+  if (!k) return null;
+  return ORGANIZER_ID_BY_NAME[k] || (await orgMap(env))[k] || null;
+}
+
+// Self-serve "add an organizer" from a sheet menu. Creates the organizer (dedupes by name),
+// busts the cache so they resolve immediately + show in the dropdown on next refresh.
+async function sheetAddOrganizer(request, env) {
+  let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad json' }, 400); }
+  if (!env.EXPORT_KEY || body.key !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+  const name = String(body.name || '').trim();
+  if (!name) return json({ error: 'name required' }, 400);
+  if (/^(test|smoke|sample|demo)\b/i.test(name)) return json({ error: 'looks like a test name' }, 400);
+  const rk = String(body.region || '').toLowerCase();
+  const label = (rk && REGIONS[rk]) ? REGIONS[rk].label : '';
+  const existing = await at(env, `/${BASE}/${ORGANIZERS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({name})='${name.toLowerCase().replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+  if (existing.records.length) {
+    const ex = existing.records[0];
+    if (label) {   // tag this region onto an existing organizer (separate try so a missing `regions` field never errors the add)
+      const cur = String((ex.fields || {}).regions || '');
+      if (!cur.toLowerCase().includes(label.toLowerCase())) {
+        try { await at(env, `/${BASE}/${ORGANIZERS_TBL}/${ex.id}`, { method: 'PATCH', body: JSON.stringify({ fields: { regions: cur ? cur + ', ' + label : label } }) }); } catch (e) {}
+        await env.KV_BINDING.delete('cache:orgmap:v1').catch(() => null);
+      }
+    }
+    return json({ status: 'exists', id: ex.id, name });
+  }
+  const fields = { name, active: true };
+  if (body.email) fields.email = String(body.email).trim();
+  if (body.role) fields.role = String(body.role).trim();
+  const created = await at(env, `/${BASE}/${ORGANIZERS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+  const id = created.records[0].id;
+  if (label) { try { await at(env, `/${BASE}/${ORGANIZERS_TBL}/${id}`, { method: 'PATCH', body: JSON.stringify({ fields: { regions: label } }) }); } catch (e) {} }   // tag region separately so it's a no-op until the field exists
+  await env.KV_BINDING.delete('cache:orgmap:v1').catch(() => null);
+  return json({ status: 'created', id, name });
+}
+
+// Live organizer list for the sheet dropdowns. Active organizers, alphabetical, test names dropped.
+async function organizersExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const rk = (urlObj.searchParams.get('region') || '').toLowerCase();
+  const label = (rk && REGIONS[rk]) ? REGIONS[rk].label.toLowerCase() : '';
+  const all = []; let off = null;
+  do {
+    let q = `?pageSize=100&fields%5B%5D=name&fields%5B%5D=active&fields%5B%5D=regions`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${ORGANIZERS_TBL}${q}`);
+    for (const r of d.records) { const nm = String(r.fields.name || '').trim(); if (nm && r.fields.active !== false && !/^(test|smoke|sample|demo)\b/i.test(nm)) all.push({ nm, regions: String(r.fields.regions || '').toLowerCase() }); }
+    off = d.offset;
+  } while (off);
+  let names = all.map(o => o.nm);
+  if (label) { const lab2 = label.replace(/ county$/, ''); const f = all.filter(o => o.regions.includes(label) || o.regions.includes(lab2)); if (f.length) names = f.map(o => o.nm); }   // region-specific ("Eastern Jackson" or "...County" both match); falls back to ALL until orgs are tagged
+  names.sort((a, b) => a.localeCompare(b));
+  const esc = s => /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  return new Response('name\n' + names.map(esc).join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Create a contact straight from a region sheet's "Add people" tab. Dedupes by email/phone
+// (links instead of doubling), derives county from zip, and assigns an organizer. The new
+// person then appears in their district tab on the next refresh.
+async function sheetAddContact(request, env) {
+  let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad json' }, 400); }
+  if (!env.EXPORT_KEY || body.key !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+  const first = String(body.first || '').trim(), last = String(body.last || '').trim();
+  const email = body.email ? String(body.email).toLowerCase().trim() : '';
+  const phone = body.phone ? String(body.phone).trim() : '';
+  if (!first || !last || (!email && !phone)) return json({ error: 'need first, last, and an email or phone' }, 400);
+  const zip = body.zip ? String(body.zip).trim() : '';
+  const district = body.district ? String(body.district).trim() : '';
+  const school = body.school ? String(body.school).trim() : '';
+  // dedupe by email then phone — never create a double
+  let existingId = null;
+  if (email) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+    if (r.records.length) existingId = r.records[0].id;
+  }
+  if (!existingId && phone) {
+    const digits = phone.replace(/\D/g, '').slice(-10);
+    if (digits.length === 10) {
+      const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+      if (r2.records.length) existingId = r2.records[0].id;
+    }
+  }
+  if (existingId) {
+    // already in the system: apply the location data they typed (so it routes), but don't touch name/contact
+    const patch = {};
+    if (district) patch.district = district;
+    if (school) patch.school = school;
+    if (zip) { patch.zip = zip; const c = zipToCounty(zip.slice(0, 5)); if (c) patch.county = c; if (!school && !patch.district) { const d = zipToDistrict(zip); if (d) patch.district = d; } }
+    let rec;
+    try {
+      rec = Object.keys(patch).length
+        ? await at(env, `/${BASE}/${CONTACTS_TBL}/${existingId}`, { method: 'PATCH', body: JSON.stringify({ fields: patch, typecast: true }) })
+        : await at(env, `/${BASE}/${CONTACTS_TBL}/${existingId}`);
+    } catch (e) {}
+    const ef = (rec && rec.fields) || {};
+    await invalidateReadCaches(env);
+    return json({ contact_id: existingId, status: 'matched', name: `${ef.first || first} ${ef.last || last}`.trim(), district: ef.district || district || '' });
+  }
+  const fields = { first, last, source: 'sheet add', last_attempt_date: todayCT(), leader_ladder: 'Prospect' };
+  if (email) fields.email = email;
+  if (phone) fields.phone = phone;
+  if (zip) { fields.zip = zip; const c = zipToCounty(zip.slice(0, 5)); if (c) fields.county = c; if (!fields.district) { const d = zipToDistrict(zip); if (d) fields.district = d; } }
+  if (district) fields.district = district;
+  if (school) fields.school = school;
+  const orgName = String(body.organized_by || '').toLowerCase().trim();
+  const oid = (orgName && ORGANIZER_ID_BY_NAME[orgName]) ? ORGANIZER_ID_BY_NAME[orgName] : deriveOrganizerId({ zip });
+  if (oid) fields.assigned_organizer = [oid];
+  const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+  await invalidateReadCaches(env);
+  return json({ contact_id: created.records[0].id, status: 'created', name: `${first} ${last}`.trim(), district: district || '' });
+}
+
 async function sheetRegionUpdate(request, env) {
   let body; try { body = await request.json(); } catch (e) { return new Response('bad json', { status: 400 }); }
   if (!env.EXPORT_KEY || body.key !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
   const ALLOWED = { first: 'first', last: 'last', email: 'email', phone: 'phone', school: 'school',
-    district: 'district', city: 'city', zip: 'zip', address: 'street_address' };
+    district: 'district', city: 'city', zip: 'zip', address: 'street_address', county: 'county' };
   let n = 0;
   for (const u of (body.updates || [])) {
     if (!u.contact_id) continue;
     if (u.field === 'organized_by') {   // Organized By -> assigned_organizer. Match-only: a known organizer writes; an unknown/typo name stays sheet-only (no junk organizer created).
       const v = String(u.value || '').trim();
       if (!v) { try { await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`, { method: 'PATCH', body: JSON.stringify({ fields: { assigned_organizer: [] } }) }); n++; } catch (e) {} continue; }
-      const oid = ORGANIZER_ID_BY_NAME[v.toLowerCase()];
+      const oid = await resolveOrganizerId(env, v);   // hardcoded fast-path, then the live org table (so newly-added organizers write back)
       if (oid) { try { await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`, { method: 'PATCH', body: JSON.stringify({ fields: { assigned_organizer: [oid] } }) }); n++; } catch (e) {} }
       continue;
     }
     if (!ALLOWED[u.field]) continue;
     const fields = {}; fields[ALLOWED[u.field]] = u.value == null ? '' : String(u.value);
+    if (u.field === 'zip') {
+      const c = zipToCounty(String(u.value || '').slice(0, 5)); if (c) fields.county = c;
+      const dz = zipToDistrict(u.value);
+      // only fill district from zip when it is currently blank — never overwrite a real one (their kid may attend elsewhere: charter, magnet, open enrollment)
+      if (dz) { try { const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`); if (!String((cur.fields || {}).district || '').trim()) fields.district = dz; } catch (e) {} }
+    }
     try { await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`, { method: 'PATCH', body: JSON.stringify({ fields }) }); n++; } catch (e) {}
   }
   return new Response(JSON.stringify({ updated: n }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
@@ -5039,12 +6245,12 @@ async function sheetAttendance(request, env) {
     const qs = toDelete.slice(i, i + 10).map(id => `records[]=${encodeURIComponent(id)}`).join('&');
     await at(env, `/${BASE}/${CONTACT_LOG_TBL}?${qs}`, { method: 'DELETE' });
   }
-  await env.KV_BINDING.delete('cache:events-overview:v7').catch(() => null);
+  await env.KV_BINDING.delete('cache:events-overview:v8').catch(() => null);
   return json({ ok: true, created: toCreate.length, deleted: toDelete.length });
 }
 
 async function getEventsOverview(env) {
-  const cached = await cacheGet(env, 'cache:events-overview:v7');
+  const cached = await cacheGet(env, 'cache:events-overview:v8');
   if (cached) return json(cached);
   const today = todayCT();
   const metas = allMetaEvents();
@@ -5054,10 +6260,11 @@ async function getEventsOverview(env) {
   // Scan 1 — contacts: signups + attendance for the upcoming meta events.
   if (metas.length) {
     const signupOr = metas.filter(m => m.signupField).map(m => `{${m.signupField}}='Signed up'`);
-    const attendOr = metas.map(m => `{${m.attendField}}!=BLANK()`);
-    const formula = `OR(${[...signupOr, ...attendOr].join(',')})`;
-    const fields = [];
-    for (const m of metas) { if (m.signupField) fields.push(m.signupField); fields.push(m.attendField); }
+    const attendOr = metas.filter(m => m.attendField).map(m => `{${m.attendField}}!=BLANK()`);
+    const listOr = metas.filter(m => !m.signupField && m.attendEvent).map(m => `FIND('${String(m.attendEvent).replace(/'/g, "\\'")}',ARRAYJOIN({events_signed_up}))`);   // makeup-style events (no signup field) live only in events_signed_up
+    const formula = `OR(${[...signupOr, ...attendOr, ...listOr].join(',')})`;
+    const fields = ['events_signed_up'];
+    for (const m of metas) { if (m.signupField) fields.push(m.signupField); if (m.attendField) fields.push(m.attendField); }
     let offset = null;
     do {
       let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
@@ -5065,14 +6272,18 @@ async function getEventsOverview(env) {
       if (offset) q += `&offset=${encodeURIComponent(offset)}`;
       const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
       for (const r of d.records) {
+        const esu = Array.isArray(r.fields.events_signed_up) ? r.fields.events_signed_up.map(x => String(x).toLowerCase()) : [];
         for (const m of metas) {
-          if (m.signupField && r.fields[m.signupField] === 'Signed up') stat[m.key].rsvp++;
-          const a = r.fields[m.attendField];
-          if (a === 'Attended' || a === 'Walk-in' || a === 'Partial') stat[m.key].attended++;
-          else if (a === 'No-show') stat[m.key].no_show++;
-          // "on the list" = registered, inferable from the attendance field for legacy
-          // events (5/26) that never had a signup field.
-          if (a === 'Attended' || a === 'No-show' || a === 'Partial') stat[m.key].onlist++;
+          if (m.signupField) { if (r.fields[m.signupField] === 'Signed up') stat[m.key].rsvp++; }
+          else if (m.attendEvent && esu.includes(String(m.attendEvent).toLowerCase())) stat[m.key].rsvp++;   // makeup signups come from events_signed_up
+          if (m.attendField) {
+            const a = r.fields[m.attendField];
+            if (a === 'Attended' || a === 'Walk-in' || a === 'Partial') stat[m.key].attended++;
+            else if (a === 'No-show') stat[m.key].no_show++;
+            // "on the list" = registered, inferable from the attendance field for legacy
+            // events (5/26) that never had a signup field.
+            if (a === 'Attended' || a === 'No-show' || a === 'Partial') stat[m.key].onlist++;
+          }
         }
       }
       offset = d.offset;
@@ -5130,7 +6341,7 @@ async function getEventsOverview(env) {
   for (const m of metas) {
     const s = stat[m.key];
     const confirmed = confirmByEvent[m.confirmEvent].size;
-    const reg = m.signupField ? s.rsvp : s.onlist;   // legacy events have no signup field
+    const reg = (m.signupField || !m.attendField) ? s.rsvp : s.onlist;   // legacy (5/26) uses onlist; makeup (no fields) uses events_signed_up count in rsvp
     events.push({
       kind: 'meta', key: m.key, type: m.type, label: m.label, date: m.date,
       time: m.time || null, past: m.date < today,
@@ -5154,7 +6365,7 @@ async function getEventsOverview(env) {
   }
   events.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
   const payload = { generated: new Date().toISOString(), today, events, type_labels: TYPE_LABEL };
-  await cachePut(env, 'cache:events-overview:v7', payload, 60);
+  await cachePut(env, 'cache:events-overview:v8', payload, 60);
   return json(payload);
 }
 
@@ -5268,6 +6479,36 @@ async function getEventRoster(env, urlObj) {
   // Meta event (onboarding / training)
   const m = EVENT_META[key];
   if (!m) return json({ error: 'unknown event' }, 400);
+  // Makeup-style events (no signup/attend status fields): the roster lives in events_signed_up,
+  // and confirmed/unconfirmed split on the confirm logs the same way as a normal onboarding.
+  if (!m.signupField && !m.attendField && m.attendEvent) {
+    if (segment === 'attended') return json({ key, segment, count: 0, people: [] });
+    const signed = {}; let offset = null;
+    const sf = `FIND('${String(m.attendEvent).replace(/'/g, "\\'")}',ARRAYJOIN({events_signed_up}))`;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(sf)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=phone&fields%5B%5D=email&fields%5B%5D=school&fields%5B%5D=city`;
+      if (offset) q += `&offset=${encodeURIComponent(offset)}`;
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      for (const r of d.records) signed[r.id] = r.fields;
+      offset = d.offset;
+    } while (offset);
+    const confirmedIds = new Set();
+    { let o2 = null;
+      const lf = `AND({event}='${String(m.confirmEvent).replace(/'/g, "\\'")}',{result}='Confirmed')`;
+      do {
+        let q = `?filterByFormula=${encodeURIComponent(lf)}&pageSize=100&fields%5B%5D=contact`;
+        if (o2) q += `&offset=${encodeURIComponent(o2)}`;
+        const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+        for (const r of d.records) { const cid = (r.fields.contact || [])[0]; if (cid) confirmedIds.add(cid); }
+        o2 = d.offset;
+      } while (o2);
+    }
+    let entries = Object.entries(signed);
+    if (segment === 'confirmed') entries = entries.filter(([id]) => confirmedIds.has(id));
+    if (segment === 'unconfirmed') entries = entries.filter(([id]) => !confirmedIds.has(id));
+    const people = entries.map(([id, f]) => person(f, { id, confirmed: confirmedIds.has(id) }));
+    return json({ key, segment, count: people.length, people });
+  }
   // Legacy events (5/26, no signup field): registration + attendance both come
   // from the attendance field. on-list = Attended/No-show/Partial; came = Attended/Partial/Walk-in.
   if (segment === 'attended' || (!m.signupField && (segment === 'rsvp' || segment === 'registered'))) {
