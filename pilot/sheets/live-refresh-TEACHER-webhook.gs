@@ -33,8 +33,7 @@ const C_RED='#F2C9C4', C_GREEN='#CDE9D5', C_GREEN_STRONG='#1F7A43', C_GREY='#E0E
 const TAB='RSVPs (live)';
 const DATA_COLS=8;
 const MANUAL=['Claimed by','Reminder: assigned to','Reminder: status','Attendance'];
-const M_START=DATA_COLS+1, TOTAL_COLS=DATA_COLS+MANUAL.length, EMAIL_COL=3, HDR=2, FIRST=3;
-const BANNER='⚠️ LIVE LIST — pushed from the database within seconds of every RSVP. Do NOT touch the RED columns (A–H); anything typed there is erased on the next refresh. The PLUM columns are YOURS: Claimed by, reminders, and Attendance. They survive every refresh.';
+const M_START=DATA_COLS+1, TOTAL_COLS=DATA_COLS+MANUAL.length, EMAIL_COL=3, HDR=1, FIRST=2;
 
 // ============================================================================
 // WEBHOOK RECEIVER — worker POSTs here on every new RSVP for our event.
@@ -185,19 +184,25 @@ function setUp(){
     sh=(all.length===1 && all[0].getLastRow()<1 && all[0].getLastColumn()<2) ? all[0].setName(TAB) : ss.insertSheet(TAB);
   }
   ensureGoals(ss);
-  sh.getRange(1,1,1,TOTAL_COLS).breakApart();
-  sh.getRange(1,3,1,TOTAL_COLS-2).merge().setValue(BANNER)
-    .setFontFamily(FONT).setFontWeight('bold').setFontColor(INK).setBackground(ALERT)
-    .setWrap(true).setVerticalAlignment('middle').setHorizontalAlignment('left');
-  sh.setRowHeight(1,52);
+  // Migrate from the old banner layout: if row 1 is the warning banner,
+  // delete it so headers land on row 1 and existing data shifts to row 2.
+  try {
+    const r1 = sh.getRange(1,1,1,Math.min(sh.getMaxColumns(),TOTAL_COLS)).getValues()[0].join(' ');
+    if (r1.indexOf('⚠') >= 0 || r1.indexOf('LIVE LIST') >= 0) sh.deleteRow(1);
+  } catch(e) {}
+  // Headers on row 1 — no banner. Clear any old validations/merges leftover
+  // from the previous (banner) layout so header cells never flag "Invalid".
+  sh.getRange(1,1,2,TOTAL_COLS).breakApart().clearDataValidations();
   sh.getRange(HDR,M_START,1,MANUAL.length).setValues([MANUAL]);
   sh.getRange(HDR,1,1,DATA_COLS).setValues([['First Name','Last Name','Email','Phone','Role','School','District','Who Recruited']]);
+  sh.getRange(HDR,1,1,TOTAL_COLS).setWrap(true).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  sh.setRowHeight(HDR,44);
   const dv=v=>SpreadsheetApp.newDataValidation().requireValueInList(v.split(','),true).setAllowInvalid(true).build();
   sh.getRange(FIRST,M_START,400,1).setDataValidation(dv(LEADS));
   sh.getRange(FIRST,M_START+1,400,1).setDataValidation(dv(LEADS));
   sh.getRange(FIRST,M_START+2,400,1).setDataValidation(dv(STATUS));
   sh.getRange(FIRST,M_START+3,400,1).setDataValidation(dv(ATTEND));
-  sh.setFrozenRows(2); sh.setFrozenColumns(2);
+  sh.setFrozenRows(1); sh.setFrozenColumns(2);
   sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(p=>{if(p.getDescription()==='GW live')p.remove();});
   sh.getRange(1,1,sh.getMaxRows(),DATA_COLS).protect().setDescription('GW live').setWarningOnly(true);
   styleStatuses(sh);
