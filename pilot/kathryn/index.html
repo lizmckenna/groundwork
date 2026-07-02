@@ -2304,8 +2304,8 @@ document.getElementById('ac-save')?.addEventListener('click', async () => {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-    st.textContent = d.matched_existing ? `✓ Already in the base: ${d.existing_name} — showing them below` : '✓ Added to your queue';
-    st.style.color = 'var(--gw-green)';
+    st.textContent = d.matched_existing ? `⚠ Not added — this matched an existing contact: ${d.existing_name} (showing them below)` : '✓ Added to your queue';
+    st.style.color = d.matched_existing ? 'var(--gw-orange, #b45309)' : 'var(--gw-green)';
     // Show the new/matched contact as a search result so they can log right away
     document.getElementById('find-input').value = payload.email || payload.phone;
     runSearch();
