@@ -363,6 +363,7 @@ export default {
           calendar_links: calendarLinks(evKey, evObj),
           kv_error: err });
       }
+      if (url.pathname === '/admin/send-venue-update') return await adminSendVenueUpdate(request, env, url);
       if (url.pathname === '/admin/kv-set-zoomlink' && request.method === 'GET') {
         if (url.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
         const ev = url.searchParams.get('event'); const link = url.searchParams.get('link');
@@ -3935,6 +3936,77 @@ async function sendLaunchConfirmation(env, toEmail, firstName, launchName) {
   } catch (e) { return false; }
 }
 
+// "Location confirmed" announcement to people who RSVP'd while the venue was
+// TBD. Same branding/ICS as the RSVP confirmation, but the copy leads with the
+// venue, and the calendar invite carries SEQUENCE:1 with the SAME UID so
+// calendar apps UPDATE the existing event's location instead of ignoring a
+// duplicate. Triggered once per launch via /admin/send-venue-update.
+async function sendVenueUpdate(env, toEmail, firstName, launchName) {
+  if (!env.RESEND_KEY || !toEmail) return false;
+  const cfg = launchConfig(launchName);
+  if (!cfg) return false;
+  const greeting = firstName ? `Hi ${escapeHtml(firstName)},` : 'Hi there,';
+  const pad = n => String(n).padStart(2, '0');
+  const [Y, Mo, D] = cfg.date.split('-').map(n => parseInt(n, 10));
+  const [sh, sm] = cfg.start.split(':').map(n => parseInt(n, 10));
+  const [eh, em] = cfg.end.split(':').map(n => parseInt(n, 10));
+  const gdates = `${Y}${pad(Mo)}${pad(D)}T${pad(sh)}${pad(sm)}00/${Y}${pad(Mo)}${pad(D)}T${pad(eh)}${pad(em)}00`;
+  const gcal = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(cfg.name)}&dates=${gdates}&location=${encodeURIComponent(cfg.location)}&details=${encodeURIComponent(cfg.logistics)}&ctz=America/Chicago`;
+  const html = `<div style="font-family:Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1A2418">`
+    + `<div style="background:#3e4f6e;padding:16px 22px;border-radius:8px 8px 0 0"><div style="color:#d5b069;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.14em">Parents for Missouri Public Schools</div></div>`
+    + `<div style="border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px;padding:22px">`
+    + `<p style="font-size:16px;margin:0 0 14px">${greeting}</p>`
+    + `<p style="font-size:15px;line-height:1.6;margin:0 0 16px">When you RSVP'd for the <strong>${escapeHtml(cfg.name)}</strong>, we promised to email you as soon as the location was confirmed. It is:</p>`
+    + `<div style="background:#f3f4f6;border-radius:8px;padding:16px 18px;margin:0 0 16px">`
+    + `<div style="font-size:16px;margin:0 0 8px">📍 <strong>${escapeHtml(cfg.location)}</strong></div>`
+    + `<div style="font-size:15px;margin:0 0 8px">📅 <strong>${escapeHtml(cfg.dateLabel)}</strong></div>`
+    + `<div style="font-size:14px;color:#555;line-height:1.5">${escapeHtml(cfg.logistics)}</div></div>`
+    + `<p style="font-size:14px;line-height:1.6;margin:0 0 12px">An updated calendar invite is attached — open it and your calendar will correct itself. Or:</p>`
+    + `<div style="margin:0 0 16px"><a href="${gcal}" style="display:inline-block;background:#d5b069;color:#1A2418;font-weight:700;text-decoration:none;padding:10px 18px;border-radius:6px;font-size:14px">Add to Google Calendar</a></div>`
+    + `<p style="font-size:14px;line-height:1.6;margin:0 0 12px">We can't wait to see you there.</p>`
+    + `<p style="font-size:13px;color:#888;line-height:1.5;margin:14px 0 0">Questions? Just reply to this email. Vote NO on Amendment 5 to protect Missouri public school funding. Vote Tuesday, August 4.</p>`
+    + `<p style="font-size:11px;color:#aaa;line-height:1.4;margin:16px 0 0;font-family:Helvetica,Arial,sans-serif">Paid for by Parents for Missouri Public Schools, Ellen Glover, Treasurer</p>`
+    + `</div></div>`;
+  // SEQUENCE:1 + same UID = calendar clients treat this as an update to the original invite.
+  const ics = buildLaunchIcs(cfg, toEmail, firstName).replace('SEQUENCE:0', 'SEQUENCE:1');
+  const payload = { from: FROM_CONFIRM, to: [toEmail], reply_to: 'groundwork@civicpowerlab.us', subject: `Location confirmed — ${cfg.name}`, html,
+    attachments: [{ filename: 'invite.ics', content: btoa(unescape(encodeURIComponent(ics))), content_type: 'text/calendar; charset=utf-8; method=REQUEST' }] };
+  try {
+    const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { 'Authorization': `Bearer ${env.RESEND_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    return r.ok;
+  } catch (e) { return false; }
+}
+
+// One-shot venue-announcement blast for a launch's existing RSVPs.
+// GET  /admin/send-venue-update?key=EXPORT_KEY&launch=<rsvp_launch value>&dry=1  → preview list
+// POST /admin/send-venue-update?key=EXPORT_KEY&launch=...                        → send for real
+async function adminSendVenueUpdate(request, env, urlObj) {
+  if (urlObj.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+  const launch = urlObj.searchParams.get('launch') || '';
+  if (!launchConfig(launch)) return json({ error: 'unknown launch (no launchConfig match)' }, 400);
+  const dry = urlObj.searchParams.get('dry') === '1' || request.method === 'GET';
+  const evEsc = launch.replace(/'/g, "\\'");
+  const q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',{rsvp_launch}='${evEsc}')`)}&pageSize=100&fields%5B%5D=contact`;
+  const res = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+  const seen = new Set(); const recipients = [];
+  for (const r of (res.records || [])) {
+    const cid = (r.fields.contact || [])[0];
+    if (!cid) continue;
+    const c = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
+    const email = String(c.fields.email || '').trim().toLowerCase();
+    if (!email || seen.has(email)) continue;
+    seen.add(email);
+    recipients.push({ email, first: c.fields.first || '' });
+  }
+  if (dry) return json({ dry_run: true, launch, count: recipients.length, recipients });
+  let sent = 0; const failed = [];
+  for (const p of recipients) {
+    const ok = await sendVenueUpdate(env, p.email, p.first, launch);
+    if (ok) sent++; else failed.push(p.email);
+  }
+  return json({ ok: true, launch, sent, failed });
+}
+
 async function sendConfirmationEmail(env, toEmail, firstName, contactId, organizer, eventKey) {
   const date = todayCT();
   const safeName = firstName ? firstName : '';
@@ -5479,7 +5551,7 @@ function drawMap(){
       var map=L.map("a5map",{scrollWheelZoom:false}).setView([38.45,-92.6],7);
       L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
         {attribution:"&copy; OpenStreetMap &copy; CARTO",maxZoom:17}).addTo(map);
-      var C={attended:"#2F5E3D",committed:"#C99633",signed:"#3E4F6E"};
+      var C={attended:"#2F5E3D",committed:"#C99633",signed:"#B25048"};
       var bounds=[];
       d.points.forEach(function(p){
         var lvl=p.attended>0?"attended":(p.committed>0?"committed":"signed");
