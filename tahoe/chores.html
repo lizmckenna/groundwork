@@ -191,11 +191,60 @@
             ? (done
                 ? `<span class="done-stamp">✓ Done</span>`
                 : `<button class="btn coral" data-person="${safePerson}" data-chore="${chore}">I did it</button>`)
-            : `<span class="pill muted">Open</span>`}
+            : `<button class="btn ghost" data-signup-role="${chore}">Sign me up</button>`}
         </div>`;
     }
 
+    // ---- Name picker for "Sign me up" ----
+    function openNamePicker(role) {
+      const existing = document.getElementById("name-picker");
+      if (existing) existing.remove();
+
+      const present = data.people
+        .filter(p => (p.days || []).includes(todayDay.short))
+        .map(p => p.name)
+        .sort((a, b) => a.localeCompare(b));
+      const remembered = localStorage.getItem("tahoe:me") || "";
+
+      const overlay = document.createElement("div");
+      overlay.id = "name-picker";
+      overlay.style.cssText = "position:fixed;inset:0;background:rgba(13,59,92,0.45);z-index:70;display:flex;align-items:flex-end;justify-content:center;";
+      overlay.innerHTML = `
+        <div style="background:white;border-radius:28px 28px 0 0;padding:24px 20px calc(24px + env(safe-area-inset-bottom));width:100%;max-width:720px;box-shadow:0 -16px 40px rgba(13,59,92,0.25);">
+          <h3 style="margin-bottom:4px;">Who's taking ${role}?</h3>
+          <p style="font-size:0.92rem;margin-bottom:14px;">Pick your name — it goes straight into the family sheet.</p>
+          <select id="name-picker-select" style="width:100%;font-size:1.1rem;padding:14px;border-radius:12px;border:2px solid var(--tahoe-sky);font-family:inherit;background:white;color:var(--ink);">
+            <option value="">Choose your name…</option>
+            ${present.map(n => `<option value="${n.replace(/"/g, "&quot;")}" ${n === remembered ? "selected" : ""}>${n}</option>`).join("")}
+          </select>
+          <div style="display:flex;gap:10px;margin-top:16px;">
+            <button class="btn" id="name-picker-confirm" style="flex:1;">Sign me up</button>
+            <button class="btn ghost" id="name-picker-cancel">Cancel</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+      overlay.querySelector("#name-picker-cancel").addEventListener("click", () => overlay.remove());
+      overlay.querySelector("#name-picker-confirm").addEventListener("click", async () => {
+        const name = overlay.querySelector("#name-picker-select").value;
+        if (!name) return;
+        localStorage.setItem("tahoe:me", name);
+        overlay.remove();
+        const res = await window.TAHOE_DATA.signUp({ person: name, date: todayIso, role });
+        if (res.ok) {
+          data = await window.TAHOE_DATA.fetchAll();
+          renderAll();
+          showToast(`${name} is on ${role}. Thank you!`);
+        } else {
+          showToast("Couldn't reach the sheet — try again in a minute.");
+        }
+      });
+    }
+
     document.getElementById("today-grid").addEventListener("click", async (e) => {
+      const signupBtn = e.target.closest("button[data-signup-role]");
+      if (signupBtn) { openNamePicker(signupBtn.dataset.signupRole); return; }
       const btn = e.target.closest("button[data-person]");
       if (!btn) return;
       const person = btn.dataset.person;

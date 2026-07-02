@@ -119,6 +119,13 @@
 
     { date: "2026-07-22", kind: "chore", role: "Set dinner tables",     person: "Leo" },
     { date: "2026-07-22", kind: "chore", role: "Beach/grounds clean-up", person: "Leo" },
+    { date: "2026-07-22", kind: "chore", role: "Dish washer emptier",   person: "Patty" },
+    { date: "2026-07-22", kind: "chore", role: "Kitchen clean-up",      person: "Aaron" },
+    { date: "2026-07-22", kind: "chore", role: "Kitchen clean-up",      person: "" },
+    { date: "2026-07-22", kind: "chore", role: "Trash czar",            person: "" },
+    { date: "2026-07-22", kind: "help",  role: "Salad",                 person: "Liz" },
+    { date: "2026-07-22", kind: "help",  role: "Dessert",               person: "" },
+    { date: "2026-07-22", kind: "chore", role: "House tidying",         person: "" },
   ];
 
   // ---------- Chore completions (the heatmap data) ----------
@@ -189,15 +196,23 @@
   // Public API
   // ===================================================================
 
-  async function fetchAll() {
-    const params = new URLSearchParams(window.location.search);
-    const forceMock = params.get("mock") === "1";
-    const url = (window.TAHOE_CONFIG && window.TAHOE_CONFIG.appsScriptUrl) || "";
+  // True when the site is running on sample data (?mock=1, no URL configured,
+  // or the live fetch failed). Writes must also stay in mock mode then, so a
+  // tap updates the local sample data instead of POSTing into the void.
+  let mockMode = false;
 
-    if (forceMock || !url) {
+  function useMock() {
+    const params = new URLSearchParams(window.location.search);
+    const url = (window.TAHOE_CONFIG && window.TAHOE_CONFIG.appsScriptUrl) || "";
+    return params.get("mock") === "1" || !url || mockMode;
+  }
+
+  async function fetchAll() {
+    if (useMock()) {
+      mockMode = true;
       return mockBundle();
     }
-
+    const url = window.TAHOE_CONFIG.appsScriptUrl;
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error("bad status " + res.status);
@@ -206,6 +221,7 @@
       return data;
     } catch (err) {
       console.warn("Tahoe: live fetch failed, falling back to mock data.", err);
+      mockMode = true;
       const bundle = mockBundle();
       bundle.mockReason = "live-fetch-failed";
       return bundle;
@@ -239,7 +255,7 @@
     localStorage.setItem(key, new Date().toISOString());
 
     const payload = { action: "complete", person, date, chore, at: new Date().toISOString() };
-    if (!url) {
+    if (useMock()) {
       MOCK_COMPLETIONS.push(payload);
       return { ok: true, mock: true };
     }
@@ -258,15 +274,35 @@
     }
   }
 
+  // Claim an open chore slot — writes the name into the signup grid.
+  async function signUp({ person, date, role }) {
+    const url = (window.TAHOE_CONFIG && window.TAHOE_CONFIG.appsScriptUrl) || "";
+    if (useMock()) {
+      const slot = CHORE_SLOTS.find(s => s.date === date && s.role === role && !s.person);
+      if (slot) slot.person = person;
+      return { ok: true, mock: true };
+    }
+    try {
+      await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "signup", person, date, role }),
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: "network" };
+    }
+  }
+
   // Undo a chore done within the last 30s (best-effort)
   function undoDone({ person, date, chore }) {
     const key = `tahoe:done:${person}:${date}:${chore}`;
     localStorage.removeItem(key);
     const url = (window.TAHOE_CONFIG && window.TAHOE_CONFIG.appsScriptUrl) || "";
-    if (!url) {
+    if (useMock()) {
       const idx = MOCK_COMPLETIONS.findIndex(c => c.person === person && c.date === date && c.chore === chore);
       if (idx >= 0) MOCK_COMPLETIONS.splice(idx, 1);
-      return { ok: true, mock: true };
+      return Promise.resolve({ ok: true, mock: true });
     }
     return fetch(url, {
       method: "POST",
@@ -292,5 +328,5 @@
     return hits;
   }
 
-  window.TAHOE_DATA = { fetchAll, markDone, undoDone, scanAllergens };
+  window.TAHOE_DATA = { fetchAll, markDone, undoDone, signUp, scanAllergens };
 })();

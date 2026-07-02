@@ -63,6 +63,23 @@ function doPost(e) {
 
   if (data.action === "complete") {
     sheet.appendRow([data.at || new Date().toISOString(), data.person, data.date, data.chore, data.device || ""]);
+  } else if (data.action === "signup") {
+    // Write the person's name into the meals & chores signup grid.
+    // Fills the first empty row matching this role on this date (some roles,
+    // like Kitchen clean-up, have several rows).
+    const mc = ss.getSheetByName(SHEET_MEALSCHORES);
+    const dates = ["2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-25","2026-07-26"];
+    const dayIdx = dates.indexOf(data.date);
+    if (mc && dayIdx >= 0) {
+      const col = 4 + dayIdx; // D..J
+      const roles = mc.getRange(7, 3, 14, 1).getValues(); // C7:C20
+      for (let r = 0; r < roles.length; r++) {
+        if (roles[r][0].toString().trim() === (data.role || "").toString().trim()) {
+          const cell = mc.getRange(7 + r, col);
+          if (!cell.getValue()) { cell.setValue(data.person); break; }
+        }
+      }
+    }
   } else if (data.action === "undo") {
     // remove the most recent matching row
     const rows = sheet.getDataRange().getValues();
