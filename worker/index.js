@@ -288,6 +288,7 @@ export default {
       if (url.pathname === '/amendment5-signup' && request.method === 'POST') return await amendment5Signup(request, env);
       if (url.pathname === '/training-signup' && request.method === 'POST') return await trainingSignup(request, env);
       if (url.pathname === '/launch-rsvp' && request.method === 'POST') return await launchRsvp(request, env);
+      if (url.pathname === '/ingest/s2w' && request.method === 'POST') return await ingestS2W(request, env);
       if (url.pathname === '/event-checkin' && request.method === 'POST') return await eventCheckin(request, env);
       if (url.pathname === '/event-roster-public' && request.method === 'GET') return await eventRosterPublic(env, url);
       if (url.pathname === '/remind-signup' && request.method === 'POST') return await remindSignup(request, env);
@@ -2070,6 +2071,84 @@ async function buildEventRoster(env, event) {
   }
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
+}
+
+
+// =========================================================================
+// /ingest/s2w — Scale to Win daily import (TMC posts yesterday's leads from
+// the Organizing Lab BQ export). Token-gated (S2W_INGEST_KEY secret). Accepts
+// {leads:[...]} or a single lead object; tolerant of extra fields. Dedupe by
+// email then phone (same rules as every intake); geo-routes new contacts via
+// zip/city; logs one contact_log row per lead with outcome + transcript link.
+// Idempotent: re-posting the same batch matches existing contacts and skips
+// duplicate log rows via s2w de-dupe note key.
+// =========================================================================
+async function ingestS2W(request, env) {
+  const key = request.headers.get('X-Ingest-Key') || '';
+  if (!env.S2W_INGEST_KEY || key !== env.S2W_INGEST_KEY) return json({ error: 'forbidden' }, 403);
+  let body = null;
+  try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+  const leads = Array.isArray(body) ? body : Array.isArray(body.leads) ? body.leads : [body];
+  if (!leads.length) return json({ ok: true, created: 0, matched: 0, skipped: 0 });
+  if (leads.length > 500) return json({ error: 'max 500 leads per request' }, 400);
+  const clean = s => String(s == null ? '' : s).trim();
+  let created = 0, matched = 0, skipped = 0; const errors = [];
+  for (const lead of leads) {
+    try {
+      const first = clean(lead.first || lead.first_name), last = clean(lead.last || lead.last_name);
+      const email = clean(lead.email).toLowerCase();
+      const phone = clean(lead.phone || lead.phone_number).replace(/\D/g, '').slice(-10);
+      if (!first && !last && !email && !phone) { skipped++; continue; }
+      if (!email && !phone) { skipped++; errors.push(`no email/phone: ${first} ${last}`); continue; }
+      // dedupe: email, then phone
+      let cid = null;
+      if (email) {
+        const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+        if (r.records.length) cid = r.records[0].id;
+      }
+      if (!cid && phone.length === 10) {
+        const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${phone}'`)}&maxRecords=1`);
+        if (r.records.length) cid = r.records[0].id;
+      }
+      const s2wId = clean(lead.s2w_id || lead.s2w_contact_id || lead.contact_id);
+      const srcBits = ['scale to win'];
+      if (clean(lead.source || lead.campaign)) srcBits.push(clean(lead.source || lead.campaign));
+      if (s2wId) srcBits.push(`s2w:${s2wId}`);
+      if (cid) {
+        matched++;
+      } else {
+        const zip = clean(lead.zip).slice(0, 5);
+        const city = clean(lead.city);
+        const county = zipToCounty(zip) || '';
+        const fields = { first, last, leader_ladder: 'Prospect', source: srcBits.join(' · ') };
+        if (email) fields.email = email;
+        if (phone) fields.phone = phone;
+        if (clean(lead.street || lead.street_address)) fields.street_address = clean(lead.street || lead.street_address);
+        if (city) fields.city = city;
+        if (zip) fields.zip = zip;
+        if (county) fields.county = county;
+        const orgId = deriveOrganizerId({ county, city, zip }) || LANEE_ID;   // S2W O2O is LaNee's program; default un-geocodable leads to her
+        fields.assigned_organizer = [orgId];
+        const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+        cid = c.records[0].id; created++;
+      }
+      // one log row per (contact, s2w batch item) — skip if an identical S2W note already exists
+      const outcome = clean(lead.outcome || lead.result || lead.disposition);
+      const transcript = clean(lead.transcript_url || lead.transcript);
+      const noteKey = `S2W import${s2wId ? ` ${s2wId}` : ''}${outcome ? ` · ${outcome}` : ''}`;
+      const dupQ = await at(env, `/${BASE}/${CONTACT_LOG_TBL}?filterByFormula=${encodeURIComponent(`AND({notes}='${noteKey.replace(/'/g, "\\'")}',FIND('${cid}',ARRAYJOIN({contact})))`)}&maxRecords=1`);
+      if (!dupQ.records.length) {
+        await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
+          Summary: `${todayCT()} — S2W: ${first} ${last}${outcome ? ` (${outcome})` : ''}`,
+          date: todayCT(), method: 'Text', result: outcome || 'S2W lead',
+          notes: noteKey + (transcript ? ` | transcript: ${transcript}` : ''),
+          contact: [cid],
+        } }], typecast: true }) });
+      }
+    } catch (e) { errors.push(String(e.message || e).slice(0, 120)); }
+  }
+  await invalidateReadCaches(env);
+  return json({ ok: true, received: leads.length, created, matched, skipped, errors: errors.slice(0, 10) });
 }
 
 async function launchRsvp(request, env) {
