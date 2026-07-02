@@ -893,6 +893,83 @@ export default {
         await invalidateReadCaches(env);
         return json({ updated, matched: updates.length, blank_total: rows.length, errors });
       }
+      if (url.pathname === '/pilot/webhook/register' && request.method === 'POST') {
+        // Register a tracker-sheet webhook URL for an event. Idempotent — no
+        // secret required (URLs are unguessable Apps-Script deployment tokens),
+        // but we lightly rate-limit and cap the list.
+        const body = await request.json().catch(() => ({}));
+        const ev = String(body.event || '').trim();
+        const hookUrl = String(body.url || '').trim();
+        if (!ev || !hookUrl.startsWith('https://script.google.com/'))
+          return json({ error: 'need {event, url} where url is a script.google.com Web App URL' }, 400);
+        const cur = await loadWebhooks(env, ev);
+        if (cur.length >= 20) return json({ error: 'too many hooks for this event' }, 429);
+        const next = await saveWebhooks(env, ev, cur.concat([hookUrl]));
+        return json({ ok: true, event: ev, count: next.length, url: hookUrl });
+      }
+      if (url.pathname === '/pilot/webhook/list' && request.method === 'GET') {
+        const ev = url.searchParams.get('event') || '';
+        const cur = await loadWebhooks(env, ev);
+        return json({ ok: true, event: ev, count: cur.length, urls: cur });
+      }
+      if (url.pathname === '/pilot/webhook/remove' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const ev = String(body.event || '').trim();
+        const hookUrl = String(body.url || '').trim();
+        if (!ev) return json({ error: 'need {event, url?}' }, 400);
+        if (!hookUrl) {                                    // clear all for event
+          await env.KV_BINDING.delete(`webhook:${ev}`);
+          return json({ ok: true, event: ev, cleared: true });
+        }
+        const cur = await loadWebhooks(env, ev);
+        const next = await saveWebhooks(env, ev, cur.filter(u => u !== hookUrl));
+        return json({ ok: true, event: ev, count: next.length });
+      }
+      if (url.pathname === '/pilot/webhook/replay' && request.method === 'POST') {
+        // Backfill a newly-registered sheet with existing RSVPs for an event.
+        // No admin key: any registered webhook URL for the event can trigger
+        // its own replay by including itself in `url` — worker only pushes to
+        // that URL, not the whole fanout list, so it can't be abused to spam.
+        const body = await request.json().catch(() => ({}));
+        const ev = String(body.event || '').trim();
+        const hookUrl = String(body.url || '').trim();
+        if (!ev || !hookUrl) return json({ error: 'need {event, url}' }, 400);
+        const registered = await loadWebhooks(env, ev);
+        if (!registered.includes(hookUrl)) return json({ error: 'url not registered for this event' }, 403);
+        const evEsc = ev.replace(/'/g, "\\'");
+        // Pull every RSVP contact_log row for this event, then push each to just this URL.
+        const q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',{rsvp_launch}='${evEsc}')`)}&pageSize=100`;
+        const res = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+        const rows = res.records || [];
+        let pushed = 0;
+        for (const r of rows) {
+          const contactIds = r.fields.contact || [];
+          if (!contactIds.length) continue;
+          const cRes = await at(env, `/${BASE}/${CONTACTS_TBL}/${contactIds[0]}`);
+          const cf = cRes.fields || {};
+          const payload = {
+            event: ev,
+            first: cf.first || '', last: cf.last || '',
+            email: cf.email || '', phone: cf.phone || '',
+            role: (Array.isArray(cf.role) ? cf.role.join(', ') : (cf.role || '')),
+            school: cf.school || '', district: cf.district || '',
+            notes: r.fields.notes || '',
+            rsvp_pizza: r.fields.rsvp_pizza || '', rsvp_childcare: r.fields.rsvp_childcare || '',
+            childcare_kids: r.fields.rsvp_childcare_kids || '',
+            accessibility: r.fields.rsvp_accessibility || '',
+            created_new: false, replay: true,
+            ts: Date.now(),
+          };
+          try {
+            await fetch(hookUrl, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload), signal: AbortSignal.timeout(8000),
+            });
+            pushed++;
+          } catch (e) { /* skip */ }
+        }
+        return json({ ok: true, event: ev, pushed, total: rows.length });
+      }
       if (url.pathname === '/admin/set-zoom-link' && request.method === 'POST') {
         // Per-event Zoom/registration link, stored in KV — no redeploy.
         const k = request.headers.get('X-Admin-Key');
@@ -2120,7 +2197,63 @@ async function launchRsvp(request, env) {
   } catch (e) { /* non-fatal — contact + events_signed_up already capture the RSVP */ }
 
   await invalidateReadCaches(env);
+
+  // Fire webhooks (fanout to registered tracker sheets) so they update in real
+  // time instead of polling. Any failure is logged and swallowed — the RSVP is
+  // already durably stored in Airtable, and the safety-net poll will backfill.
+  try {
+    await fireWebhooks(env, rsvpLaunch, {
+      event: rsvpLaunch,
+      first: cFirst, last: cLast, email, phone,
+      role: (clean(body.role) || ''),
+      school: (clean(body.school) || ''),
+      district: (clean(body.district) || ''),
+      notes: (typeof notes === 'string' ? notes : ''),
+      rsvp_pizza: pz || 'No', rsvp_childcare: cc || 'No',
+      childcare_kids: clean(body.childcare_kids) || '',
+      accessibility: clean(body.accessibility) || '',
+      created_new: !!createdNew,
+      ts: Date.now(),
+    });
+  } catch (e) { /* non-fatal */ }
+
   return json({ ok: true, contact_id: contactId, created_new: createdNew, launch });
+}
+
+// =========================================================================
+// Webhook fanout — tracker sheets register their Apps-Script Web App URL and
+// get a POST for every new/updated RSVP for their event. Zero-polling → no
+// UrlFetch quota, near-real-time updates, robust to Google Sheets rate limits.
+// KV layout: `webhook:{event}` → JSON array of URLs (strings).
+// =========================================================================
+async function loadWebhooks(env, event) {
+  try {
+    const s = await env.KV_BINDING.get(`webhook:${event}`);
+    if (!s) return [];
+    const arr = JSON.parse(s);
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+async function saveWebhooks(env, event, urls) {
+  const dedup = Array.from(new Set(urls.filter(u => typeof u === 'string' && u.startsWith('http'))));
+  if (dedup.length === 0) await env.KV_BINDING.delete(`webhook:${event}`);
+  else await env.KV_BINDING.put(`webhook:${event}`, JSON.stringify(dedup));
+  return dedup;
+}
+async function fireWebhooks(env, event, payload) {
+  const urls = await loadWebhooks(env, event);
+  if (!urls.length) return;
+  const body = JSON.stringify(payload);
+  await Promise.all(urls.map(async (u) => {
+    try {
+      await fetch(u, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: AbortSignal.timeout(8000),
+      });
+    } catch (e) { /* non-fatal — safety-net poll will pick it up */ }
+  }));
 }
 
 // =========================================================================
