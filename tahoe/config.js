@@ -10,11 +10,29 @@ window.TAHOE_CONFIG = {
   // mid-reunion so you can see what the page will look like during the week.
   demoTodayOverride: "2026-07-22",
 
-  // Reunion dates
+  // Reunion dates (checkout Monday 7/27)
   startDate: "2026-07-20",
   endDate: "2026-07-26",
   location: "Four Ring Road, Teece House",
   locationCity: "Lake Tahoe",
+
+  // Food allergies & diets — shown on Home and the Help-out page.
+  // Written so a kid can read it. Keep person names matching the roster.
+  dietary: [
+    { person: "Clara",       emoji: "🌰", label: "ALL tree nuts",           detail: "Including walnuts, pecans, pistachios, and Brazil nuts. No exceptions." },
+    { person: "Rhys",        emoji: "🌰", label: "Tree nuts (walnuts OK)",  detail: "Allergic to most tree nuts — walnuts are the one exception." },
+    { person: "Aaron",       emoji: "🌾", label: "Wheat + soy (severe)",    detail: "Any kind of wheat, and soy. He checks carefully — make ingredients easy to find out." },
+    { person: "Danielle B.", emoji: "🌱", label: "Vegan",                   detail: "No meat, dairy, or eggs." },
+  ],
+  dietaryNote: "Gluten-free and vegan dishes (including desserts) arrive Wednesday. Cooks: tell the table what's in your dish — the grown-ups know to ask, the kids may not.",
+
+  // Keywords the site scans menu text for, to auto-flag likely allergens.
+  // Better safe than sorry: these are heads-ups, not verdicts — always ask the cook.
+  allergenKeywords: {
+    "tree nuts": ["nut", "almond", "pecan", "cashew", "pistachio", "hazelnut", "walnut", "praline", "marzipan", "pesto", "nutella", "baklava"],
+    "wheat":     ["wheat", "flour", "bread", "pasta", "lasagn", "noodle", "pizza", "cake", "cookie", "pie", "breaded", "cracker", "roll", "bun", "tortilla", "couscous", "orzo"],
+    "soy":       ["soy", "tofu", "edamame", "miso", "teriyaki", "tempeh"],
+  },
 
   // Days of the reunion, in order
   days: [

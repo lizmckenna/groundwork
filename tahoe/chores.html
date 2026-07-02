@@ -22,6 +22,17 @@
 
   <section class="section">
     <div class="section-title">
+      <h2>🧑‍🍳 Feeding the crew?</h2>
+    </div>
+    <div class="card cream">
+      <p style="margin-bottom: 12px; color: var(--ink);"><strong>Tell the table what's in your dish.</strong> The grown-ups know to ask — the kids may not.</p>
+      <div id="cook-dietary" style="display: flex; flex-direction: column; gap: 10px;"></div>
+      <p id="cook-note" style="margin-top: 14px; font-size: 0.92rem; border-top: 1px solid var(--line); padding-top: 12px;"></p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-title">
       <h2 id="today-heading">Today's signups</h2>
     </div>
     <div id="today-grid" class="signup-list">Loading…</div>
@@ -119,6 +130,18 @@
     document.getElementById("today-heading").textContent =
       `Today — ${todayDay.label} ${todayDay.short}${inReunion ? "" : data.mock ? " (preview)" : ""}`;
 
+    // Cook's dietary card
+    document.getElementById("cook-dietary").innerHTML = (cfg.dietary || []).map(d => `
+      <div style="display: flex; gap: 10px; align-items: baseline;">
+        <span style="font-size: 1.2rem; flex: 0 0 auto;">${d.emoji}</span>
+        <div style="font-size: 0.98rem;">
+          <strong>${d.person}</strong> — ${d.label}.
+          <span style="color: var(--ink-soft);">${d.detail}</span>
+        </div>
+      </div>
+    `).join("");
+    document.getElementById("cook-note").textContent = cfg.dietaryNote || "";
+
     function renderToday() {
       const slots = data.choreSlots.filter(s => s.date === todayIso);
       const dinner = data.dinnerLeads[todayIso];
@@ -133,9 +156,11 @@
 
       if (dinner && dinner.leads) {
         const done = completedToday.has(`${dinner.leads}::Dinner lead`);
+        const hits = window.TAHOE_DATA.scanAllergens(dinner.menu);
+        const allergenStr = hits.length ? " · ⚠️ " + hits.map(h => h.label).join(", ") : "";
         items.push(renderRow({
           label: "🍽️ Dinner lead",
-          detail: dinner.leads + (dinner.menu ? ` · ${dinner.menu}` : ""),
+          detail: dinner.leads + (dinner.menu ? ` · ${dinner.menu}` : "") + allergenStr,
           person: dinner.leads,
           chore: "Dinner lead",
           done,

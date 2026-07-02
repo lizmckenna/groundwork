@@ -10,68 +10,76 @@
   const ALL_DAYS = ["7/20","7/21","7/22","7/23","7/24","7/25","7/26"];
   const A = ALL_DAYS;
 
-  const MOCK_PEOPLE = [
-    // Adults
-    { name: "Martha",    role: "adult", days: A },
-    { name: "Sue",       role: "adult", days: A },
-    { name: "Michael",   role: "adult", days: A },
-    { name: "Sheri",     role: "adult", days: ["7/22","7/23","7/24","7/25"], dayVisitor: true, lodgingNote: "AirBnB" },
-    { name: "Andrew",    role: "adult", days: ["7/22","7/23","7/24","7/25"], dayVisitor: true, lodgingNote: "AirBnB" },
-    { name: "Marlene",   role: "adult", days: A },
-    { name: "Peter",     role: "adult", days: A },
-    { name: "Laura D",   role: "adult", days: A },
-    { name: "DOUB",      role: "adult", days: A },
-    { name: "Bob",       role: "adult", days: A },
-    { name: "Patty",     role: "adult", days: A },
-    { name: "Eileen",    role: "adult", days: A },
-    { name: "Jess",      role: "adult", days: A },
-    { name: "Jeni",      role: "adult", days: ["7/20","7/21","7/22","7/23","7/24"] },
-    { name: "Ryan",      role: "adult", days: A },
-    { name: "Sarah",     role: "adult", days: A },
-    { name: "Aaron",     role: "adult", days: A },
-    { name: "Brooke",    role: "adult", days: A },
-    { name: "Danii",     role: "adult", days: A },
-    { name: "Nadia",     role: "adult", days: A },
-    { name: "Kevin",     role: "adult", days: A },
-    { name: "Patrick",   role: "adult", days: A },
-    { name: "Liz",       role: "adult", days: A },
-    { name: "Alexandre", role: "adult", days: A },
-    { name: "Drew",      role: "adult", days: A },
-    { name: "Mia",       role: "adult", days: A },
-    { name: "Edwin",     role: "adult", days: A },
-    { name: "Ana",       role: "adult", days: A },
-    { name: "Jeff",      role: "adult", days: A },
-    { name: "Bruce",     role: "adult", days: A },
-    { name: "Erica",     role: "adult", days: A },
-    { name: "Carol",     role: "adult", days: A },
-    { name: "Eben",      role: "adult", days: A },
-    { name: "Edward",    role: "adult", days: A, lodgingNote: "Sheri/Andrew's AirBnB" },
-    { name: "Dan",       role: "adult", days: A },
-    { name: "Sheena",    role: "adult", days: ["7/24","7/25","7/26"], lodgingNote: "AirBnB/hotel nearby" },
+  // Mirrors the "head counts" tab as of 2026-07-02. In live mode this comes
+  // from the Apps Script instead.
+  const MID = ["7/22","7/23","7/24","7/25","7/26"];        // Wed→Sun
+  const MON_FRI = ["7/20","7/21","7/22","7/23","7/24"];
+  const MON_SAT = ["7/20","7/21","7/22","7/23","7/24","7/25"];
 
-    // Kids
-    { name: "Dillon",    role: "kid", days: A },
-    { name: "Mors",      role: "kid", days: A },
-    { name: "Rowan",     role: "kid", days: A },
-    { name: "Rhys",      role: "kid", days: ["7/20","7/21","7/22","7/23"] },
-    { name: "Riley",     role: "kid", days: A },
-    { name: "Asher",     role: "kid", days: A },
-    { name: "Dov",       role: "kid", days: A },
-    { name: "Zaya",      role: "kid", days: A },
-    { name: "Karim",     role: "kid", days: A },
-    { name: "Oscar",     role: "kid", days: A },
-    { name: "Leo",       role: "kid", days: A },
-    { name: "Lana",      role: "kid", days: A },
-    { name: "Emiliano",  role: "kid", days: A },
-    { name: "Zoe",       role: "kid", days: A },
-    { name: "Nick",      role: "kid", days: A },
-    { name: "Theo",      role: "kid", days: A },
-    { name: "Maddox",    role: "kid", days: A },
-    { name: "Sami",      role: "kid", days: A },
-    { name: "Clara",     role: "kid", days: A },
-    { name: "Isaac",     role: "kid", days: A },
-    { name: "Cole C.",   role: "kid", days: A },
-    { name: "Kellan C.", role: "kid", days: A },
+  const MOCK_PEOPLE = [
+    { name: "Martha",      role: "adult", days: A, note: "First night dinner" },
+    { name: "Sue",         role: "adult", days: A },
+    { name: "Michael",     role: "adult", days: A },
+    { name: "Sheri",       role: "adult", days: ["7/22","7/23","7/24","7/25"], dayVisitor: true, lodgingNote: "AirBnB" },
+    { name: "Andrew",      role: "adult", days: ["7/22","7/23","7/24","7/25"], dayVisitor: true, lodgingNote: "AirBnB" },
+    { name: "Marlene",     role: "adult", days: A },
+    { name: "Peter",       role: "adult", days: ["7/21","7/22"], dayVisitor: true },
+    { name: "Laura D",     role: "adult", days: ["7/21","7/22"], dayVisitor: true },
+    { name: "DOUB",        role: "adult", days: ["7/21","7/22","7/23","7/24","7/25"], note: "may stay at Patty's in Reno Tues 7/21" },
+    { name: "Patty",       role: "adult", days: ["7/22"], dayVisitor: true },
+    { name: "Jess",        role: "adult", days: A, dayVisitor: true, note: "TBD if on-site or day visitor" },
+    { name: "Dillon",      role: "kid",   days: A },
+    { name: "Jeni",        role: "adult", days: MON_FRI, dayVisitor: true },
+    { name: "Ryan",        role: "adult", days: A, dayVisitor: true },
+    { name: "Rowan",       role: "kid",   days: A, dayVisitor: true },
+    { name: "Rhys",        role: "kid",   days: MON_FRI, dayVisitor: true },
+    { name: "Riley",       role: "kid",   days: A, dayVisitor: true },
+    { name: "Aaron",       role: "adult", days: MID, dayVisitor: true, lodgingNote: "AirBnB" },
+    { name: "Brooke",      role: "adult", days: MID, dayVisitor: true, lodgingNote: "AirBnB" },
+    { name: "Asher",       role: "kid",   days: MID, dayVisitor: true, lodgingNote: "AirBnB" },
+    { name: "Dov",         role: "kid",   days: MID, dayVisitor: true, lodgingNote: "AirBnB" },
+    { name: "Nadia",       role: "adult", days: A },
+    { name: "Kevin",       role: "adult", days: A },
+    { name: "Zaya",        role: "kid",   days: A },
+    { name: "Karim",       role: "kid",   days: A },
+    { name: "Oscar",       role: "kid",   days: A },
+    { name: "Patrick",     role: "adult", days: [] },
+    { name: "Liz",         role: "adult", days: A },
+    { name: "Alexandre",   role: "adult", days: A },
+    { name: "Leo",         role: "kid",   days: A },
+    { name: "Lana",        role: "kid",   days: A },
+    { name: "Drew",        role: "adult", days: [] },
+    { name: "Mia",         role: "adult", days: [] },
+    { name: "Edwin",       role: "adult", days: [] },
+    { name: "Ana",         role: "adult", days: [] },
+    { name: "Emiliano",    role: "kid",   days: [] },
+    { name: "Zoe",         role: "kid",   days: [] },
+    { name: "Jeff",        role: "adult", days: [], note: "TBD if on-site or day visitor" },
+    { name: "Nick",        role: "kid",   days: [], note: "TBD if on-site or day visitor" },
+    { name: "Theo",        role: "kid",   days: [], note: "TBD if on-site or day visitor" },
+    { name: "Sami",        role: "other", days: [] },
+    { name: "Edward",      role: "adult", days: MON_SAT, dayVisitor: true, note: "tents or Jeni's RV or AirBnB; fly into Reno late 7/20" },
+    { name: "Danielle B.", role: "adult", days: MON_SAT, dayVisitor: true, note: "tents or Jeni's RV or AirBnB; fly into Reno late 7/20" },
+    { name: "Clara",       role: "kid",   days: MON_SAT, dayVisitor: true, note: "tents or Jeni's RV or AirBnB" },
+    { name: "Isaac",       role: "kid",   days: MON_SAT, dayVisitor: true, note: "tents or Jeni's RV or AirBnB" },
+    { name: "Cole C.",     role: "kid",   days: MON_SAT, dayVisitor: true, note: "tents or Jeni's RV or AirBnB" },
+    { name: "Kellan C.",   role: "kid",   days: MON_SAT, dayVisitor: true, note: "tents or Jeni's RV or AirBnB" },
+    { name: "Sheena",      role: "adult", days: ["7/25","7/26"], dayVisitor: true, lodgingNote: "AirBnB/hotel nearby" },
+    { name: "Ted",         role: "adult", days: ["7/25","7/26"], dayVisitor: true, lodgingNote: "AirBnB/hotel nearby" },
+    { name: "Rumi",        role: "kid",   days: ["7/25","7/26"], dayVisitor: true, lodgingNote: "AirBnB/hotel nearby" },
+    { name: "Ori",         role: "kid",   days: ["7/25","7/26"], dayVisitor: true, lodgingNote: "AirBnB/hotel nearby" },
+    { name: "Carol",       role: "adult", days: [], dayVisitor: true },
+    { name: "Neal",        role: "adult", days: [], dayVisitor: true },
+    { name: "Colette",     role: "adult", days: [], dayVisitor: true },
+    { name: "Eric",        role: "other", days: [], dayVisitor: true },
+    { name: "Ella",        role: "kid",   days: [], dayVisitor: true },
+    { name: "Desi",        role: "kid",   days: [], dayVisitor: true },
+    { name: "Bruce",       role: "adult", days: [] },
+    { name: "Erica",       role: "adult", days: [] },
+    { name: "Eileen",      role: "adult", days: [] },
+    { name: "Mara",        role: "adult", days: [] },
+    { name: "Maureen/Colleen", role: "adult", days: [] },
+    { name: "Chris King",  role: "adult", days: [], dayVisitor: true, note: "Truck camper" },
   ];
 
   // ---------- Dinner & chore roster (from "meals & chores" tab) ----------
@@ -123,15 +131,15 @@
     { person: "Liz",    date: "2026-07-20", chore: "Kitchen clean-up", at: "2026-07-20T20:45" },
     { person: "Liz",    date: "2026-07-20", chore: "Trash czar", at: "2026-07-20T21:10" },
     { person: "Alexandre", date: "2026-07-20", chore: "Beach/grounds clean-up", at: "2026-07-20T11:20" },
-    { person: "Patty",  date: "2026-07-20", chore: "Salad", at: "2026-07-20T18:30" },
-    { person: "Bob",    date: "2026-07-20", chore: "Dish washer emptier", at: "2026-07-20T22:00" },
+    { person: "Sue",    date: "2026-07-20", chore: "Salad", at: "2026-07-20T18:30" },
+    { person: "Michael", date: "2026-07-20", chore: "Dish washer emptier", at: "2026-07-20T22:00" },
     { person: "Jeni",   date: "2026-07-20", chore: "House tidying", at: "2026-07-20T15:30" },
 
     // Tue 7/21
     { person: "Liz",    date: "2026-07-21", chore: "Kitchen clean-up", at: "2026-07-21T20:55" },
     { person: "Alexandre", date: "2026-07-21", chore: "Sous chef", at: "2026-07-21T17:00" },
     { person: "Leo",    date: "2026-07-21", chore: "Beach/grounds clean-up", at: "2026-07-21T10:30" },
-    { person: "Patty",  date: "2026-07-21", chore: "Side", at: "2026-07-21T18:20" },
+    { person: "Sue",    date: "2026-07-21", chore: "Side", at: "2026-07-21T18:20" },
     { person: "Marlene", date: "2026-07-21", chore: "House tidying", at: "2026-07-21T14:10" },
     { person: "Ryan",   date: "2026-07-21", chore: "Trash czar", at: "2026-07-21T21:15" },
 
@@ -142,6 +150,7 @@
     { person: "Leo",    date: "2026-07-22", chore: "Set dinner tables", at: "2026-07-22T18:30" },
     { person: "Alexandre", date: "2026-07-22", chore: "Beach/grounds clean-up", at: "2026-07-22T11:00" },
     { person: "Patty",  date: "2026-07-22", chore: "Dish washer emptier", at: "2026-07-22T22:10" },
+    { person: "Aaron",  date: "2026-07-22", chore: "Kitchen clean-up", at: "2026-07-22T21:30" },
   ];
 
   // ---------- Lodging (from "lodging" tab) ----------
@@ -266,5 +275,22 @@
     }).then(() => ({ ok: true }));
   }
 
-  window.TAHOE_DATA = { fetchAll, markDone, undoDone };
+  // Scan free-text (a menu, a dish name) for likely allergens.
+  // Returns e.g. [{ key: "wheat", label: "may contain wheat" }].
+  // Heads-up only — the cook is always the authority.
+  function scanAllergens(text) {
+    const cfg = window.TAHOE_CONFIG || {};
+    const keywords = cfg.allergenKeywords || {};
+    const t = (text || "").toLowerCase();
+    if (!t) return [];
+    const hits = [];
+    Object.keys(keywords).forEach(key => {
+      if (keywords[key].some(k => t.includes(k))) {
+        hits.push({ key, label: "may contain " + key });
+      }
+    });
+    return hits;
+  }
+
+  window.TAHOE_DATA = { fetchAll, markDone, undoDone, scanAllergens };
 })();

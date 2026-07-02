@@ -80,6 +80,9 @@ function doPost(e) {
 
 // ---------- READERS ----------
 
+// Summary rows at the bottom of the head counts tab — not people.
+const TOTALS_ROW_NAMES = ["adults", "kids", "grand total", "day visitor total", "night headcount"];
+
 function readPeople(ss) {
   const sheet = ss.getSheetByName(SHEET_HEADCOUNTS);
   if (!sheet) return [];
@@ -93,18 +96,19 @@ function readPeople(ss) {
     const kid   = !!row[1];
     const name  = (row[2] || "").toString().trim();
     if (!name) return;
+    if (TOTALS_ROW_NAMES.indexOf(name.toLowerCase()) !== -1) return;
     const days = [];
     Object.keys(dayCols).forEach(col => {
-      if (row[col]) days.push(dayCols[col]);
+      if (row[col] === true || row[col] === "TRUE") days.push(dayCols[col]);
     });
-    const dayVisitor = !!row[10];
-    const lodgingNote = (row[11] || "").toString().trim();
+    const dayVisitor = row[10] === true || row[10] === "TRUE";
+    const note = (row[11] || "").toString().trim();
     out.push({
       name,
       role: kid ? "kid" : adult ? "adult" : "other",
       days,
       dayVisitor: dayVisitor || undefined,
-      lodgingNote: lodgingNote || undefined,
+      note: note || undefined,
     });
   });
   return out;

@@ -14,7 +14,7 @@
 
 <header class="topbar">
   <div class="brand">🌲 The McKennas at Tahoe
-    <span class="brand-sub">July 20 – 26, 2026</span>
+    <span class="brand-sub">July 20 – 27, 2026</span>
   </div>
 </header>
 
@@ -68,9 +68,20 @@
         <span style="color: var(--ink-soft); font-size: 0.92rem;" id="today-headcount">—</span>
       </div>
       <h3 style="margin-bottom: 4px;">🍽️ Dinner is on…</h3>
-      <p style="font-size: 1.1rem; color: var(--ink); margin-bottom: 14px;" id="dinner-lead">—</p>
+      <p style="font-size: 1.1rem; color: var(--ink); margin-bottom: 4px;" id="dinner-lead">—</p>
+      <div id="dinner-allergens" style="margin-bottom: 14px;"></div>
       <h3 style="margin-bottom: 4px;">📋 What's happening</h3>
       <div id="today-plan" style="font-size: 1rem; color: var(--ink);"></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-title">
+      <h2>Food flags</h2>
+    </div>
+    <div class="card cream">
+      <div id="dietary-list" style="display: flex; flex-direction: column; gap: 12px;"></div>
+      <p id="dietary-note" style="margin-top: 16px; font-size: 0.95rem; border-top: 1px solid var(--line); padding-top: 12px;"></p>
     </div>
   </section>
 
@@ -185,6 +196,27 @@
         ? lead.leads + (lead.menu ? " — " + lead.menu : "")
         : "Open — sign up in the sheet";
 
+    // Allergen heads-up scanned from tonight's menu text
+    const hits = window.TAHOE_DATA.scanAllergens(lead && lead.menu);
+    document.getElementById("dinner-allergens").innerHTML = hits.length
+      ? hits.map(h => `<span class="pill warm" style="margin-right: 6px;">⚠️ ${h.label}</span>`).join("") +
+        `<div style="font-size: 0.85rem; color: var(--ink-soft); margin-top: 6px;">Auto-flagged from the menu — always check with the cook.</div>`
+      : "";
+
+    // Food flags card
+    const dietEl = document.getElementById("dietary-list");
+    dietEl.innerHTML = (cfg.dietary || []).map(d => `
+      <div style="display: flex; gap: 12px; align-items: baseline;">
+        <span style="font-size: 1.4rem; flex: 0 0 auto;">${d.emoji}</span>
+        <div>
+          <strong style="font-size: 1.05rem;">${d.person}</strong>
+          <span class="pill warm" style="margin-left: 6px;">${d.label}</span>
+          <div style="color: var(--ink-soft); font-size: 0.95rem; margin-top: 2px;">${d.detail}</div>
+        </div>
+      </div>
+    `).join("");
+    document.getElementById("dietary-note").textContent = cfg.dietaryNote || "";
+
     const plan = data.schedule.filter(s => s.date === todayIso);
     const planEl = document.getElementById("today-plan");
     if (plan.length === 0) {
@@ -196,11 +228,12 @@
       }).join("");
     }
 
-    const here = data.people.filter(p => p.days.includes(todayDay.short));
+    const here = data.people.filter(p => (p.days || []).includes(todayDay.short));
     const adults = here.filter(p => p.role === "adult");
     const kids = here.filter(p => p.role === "kid");
+    const sleeping = here.filter(p => !p.dayVisitor);
     document.getElementById("today-headcount").textContent =
-      `${adults.length} grown-ups · ${kids.length} kids`;
+      `${adults.length} grown-ups · ${kids.length} kids · ${sleeping.length} sleeping over`;
   })();
 </script>
 
