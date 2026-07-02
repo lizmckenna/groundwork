@@ -321,6 +321,7 @@ export default {
       if (url.pathname === '/export/scoreboard.csv' && request.method === 'GET') return await scoreboardExportCsv(env, url);
       if (url.pathname === '/export/recruit-chains.csv' && request.method === 'GET') return await recruitChainsExportCsv(env, url);
       if (url.pathname === '/board/data.json' && request.method === 'GET') return await boardData(env, url);
+      if (url.pathname === '/board/map.json' && request.method === 'GET') return await boardMapData(env, url);
       if (url.pathname === '/board/save' && request.method === 'POST') return await boardSave(request, env, url);
       if (url.pathname.startsWith('/board/') && request.method === 'GET') return boardPage(env, url);
       if (url.pathname === '/export/region.csv' && request.method === 'GET') return await regionExportCsv(env, url);
@@ -5038,6 +5039,51 @@ async function boardData(env, urlObj) {
   const commits = await boardCommitTimeline(env);
   return json({ generated: new Date().toISOString(), metrics, goals, donations, history, commits });
 }
+// A5-action map — everyone who has done anything for Amendment 5, aggregated
+// by zip centroid (ZIP_LATLON). Only counts leave the worker: no names, no
+// street addresses. A contact "did something" when they attended an event,
+// made a commitment / booked a 1-1, or signed up for anything. One level per
+// person (deepest engagement wins) so the map totals match human intuition.
+async function boardMapData(env, urlObj) {
+  if (urlObj.searchParams.get('k') !== BOARD_TOKEN) return json({ error: 'forbidden' }, 403);
+  const cached = await cacheGet(env, 'cache:board:map');
+  if (cached) return json(cached);
+  const fields = ['zip', 'events_attended_count', 'events_signed_up', 'amendment5_commitments',
+                  'house_meeting_commitments', 'one_on_one_booked', 'wants_amendment5_updates'];
+  const byZip = {};
+  let total = 0, outside = 0, noZip = 0;
+  let offset = null;
+  do {
+    let q = `?pageSize=100${fields.map(f => `&fields%5B%5D=${encodeURIComponent(f)}`).join('')}`;
+    if (offset) q += `&offset=${encodeURIComponent(offset)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) {
+      const f = r.fields;
+      const attended = (f.events_attended_count || 0) > 0;
+      const committed = !!(String(f.amendment5_commitments || '').trim()
+        || String(f.house_meeting_commitments || '').trim() || f.one_on_one_booked);
+      const signed = (Array.isArray(f.events_signed_up) && f.events_signed_up.length > 0)
+        || !!f.wants_amendment5_updates;
+      if (!attended && !committed && !signed) continue;
+      total++;
+      const zip = String(f.zip || '').trim().slice(0, 5);
+      if (!/^\d{5}$/.test(zip)) { noZip++; continue; }
+      if (!ZIP_LATLON[zip]) { outside++; continue; }
+      const b = byZip[zip] || (byZip[zip] = { attended: 0, committed: 0, signed: 0 });
+      if (attended) b.attended++;
+      else if (committed) b.committed++;
+      else b.signed++;
+    }
+    offset = d.offset;
+  } while (offset);
+  const points = Object.entries(byZip).map(([zip, b]) => {
+    const ll = ZIP_LATLON[zip];
+    return { zip, lat: ll[0], lng: ll[1], place: ll[2] || '', ...b, total: b.attended + b.committed + b.signed };
+  }).sort((a, b) => b.total - a.total);
+  const payload = { generated: new Date().toISOString(), total, no_zip: noZip, outside, points };
+  await cachePut(env, 'cache:board:map', payload, 300);
+  return json(payload);
+}
 async function boardSave(request, env, urlObj) {
   if (urlObj.searchParams.get('k') !== BOARD_TOKEN) return json({ error: 'forbidden' }, 403);
   let body = {}; try { body = await request.json(); } catch {}
@@ -5196,6 +5242,15 @@ const BOARD_HTML = `<!DOCTYPE html>
       </div>
       <div class="legend" id="legend"></div>
       <div id="chart"></div>
+    </div>
+
+    <div class="trend-wrap">
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+        <h3 style="margin:0;font-size:19px;font-weight:700;font-family:'Archivo Narrow'">Where the movement is</h3>
+        <span class="sub" style="margin:0;color:var(--muted);font-size:13px" id="mapNote">Loading the map…</span>
+      </div>
+      <div class="legend" id="mapLegend"></div>
+      <div id="a5map" style="height:460px;border-radius:12px;margin-top:8px;border:1px solid var(--line);background:#f4f2e8"></div>
     </div>
 
     <div class="sec-title">All metrics</div>
@@ -5397,7 +5452,7 @@ function stamp(){
 function load(){
   fetch("/board/data.json?k="+encodeURIComponent(TOKEN)+"&t="+Date.now())
     .then(function(r){ if(!r.ok) throw new Error("auth"); return r.json(); })
-    .then(function(j){ DATA=j; document.getElementById("loading").style.display="none"; document.getElementById("app").style.display="block"; render(); stamp(); })
+    .then(function(j){ DATA=j; document.getElementById("loading").style.display="none"; document.getElementById("app").style.display="block"; render(); stamp(); loadMap(); })
     .catch(function(){ document.getElementById("loading").innerHTML="Could not load — check the link, or refresh in a minute."; });
 }
 document.getElementById("editBtn").addEventListener("click",function(){setEdit(true);});
@@ -5405,6 +5460,50 @@ document.getElementById("cancelBtn").addEventListener("click",function(){setEdit
 document.getElementById("saveBtn").addEventListener("click",save);
 countdown(); load();
 setInterval(function(){ if(!EDIT) load(); }, 240000);
+
+// ---- A5 action map: everyone who has done anything, dot per zip ----
+var MAP_DRAWN=false;
+function loadMap(){
+  if(MAP_DRAWN) return; MAP_DRAWN=true;
+  var css=document.createElement("link"); css.rel="stylesheet";
+  css.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"; document.head.appendChild(css);
+  var s=document.createElement("script"); s.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+  s.onload=drawMap; s.onerror=function(){ mapFail(); };
+  document.head.appendChild(s);
+}
+function mapFail(){ document.getElementById("mapNote").textContent="Map could not load — refresh to retry."; MAP_DRAWN=false; }
+function drawMap(){
+  fetch("/board/map.json?k="+encodeURIComponent(TOKEN)+"&t="+Date.now())
+    .then(function(r){ if(!r.ok) throw new Error("auth"); return r.json(); })
+    .then(function(d){
+      var map=L.map("a5map",{scrollWheelZoom:false}).setView([38.45,-92.6],7);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+        {attribution:"&copy; OpenStreetMap &copy; CARTO",maxZoom:17}).addTo(map);
+      var C={attended:"#2F5E3D",committed:"#C99633",signed:"#3E4F6E"};
+      var bounds=[];
+      d.points.forEach(function(p){
+        var lvl=p.attended>0?"attended":(p.committed>0?"committed":"signed");
+        var rad=5+Math.sqrt(p.total)*3.4;
+        bounds.push([p.lat,p.lng]);
+        L.circleMarker([p.lat,p.lng],{radius:rad,color:"#1A2418",weight:1,fillColor:C[lvl],fillOpacity:.72}).addTo(map)
+          .bindPopup("<b>"+(p.place||p.zip)+"</b> &middot; "+p.zip+"<br>"+
+            "<b>"+p.total+"</b> taking action<br>"+
+            p.attended+" attended &middot; "+p.committed+" committed &middot; "+p.signed+" signed up");
+      });
+      if(bounds.length>1) map.fitBounds(bounds,{padding:[28,28],maxZoom:10});
+      var extras=[];
+      if(d.outside) extras.push(d.outside+" outside the MO/KC map area");
+      if(d.no_zip) extras.push(d.no_zip+" without a zip on file");
+      document.getElementById("mapNote").textContent=
+        d.total+" people have taken action for A5"+(extras.length?" ("+extras.join(", ")+")":"");
+      document.getElementById("mapLegend").innerHTML=
+        "<span><i style='background:"+C.attended+"'></i>Attended an event</span>"+
+        "<span><i style='background:"+C.committed+"'></i>Made a commitment</span>"+
+        "<span><i style='background:"+C.signed+"'></i>Signed up</span>"+
+        "<span style='opacity:.65'>Bigger dot = more people &middot; click a dot for the breakdown</span>";
+    })
+    .catch(function(){ mapFail(); });
+}
 </script>
 </body>
 </html>`;
