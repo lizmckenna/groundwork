@@ -3780,7 +3780,7 @@ const LAUNCH_EVENTS = {
   kc: {
     name: 'Kansas City No on 5 Regional Campaign Launch',
     date: '2026-07-09', start: '17:30', end: '19:30', dateLabel: 'Thursday, July 9 · 5:30 PM CT',
-    location: 'Kansas City — location to be announced. We will email all RSVPs as soon as it is confirmed.',
+    location: 'Trinity United Methodist Church, 620 E Armour Blvd, Kansas City, MO 64109',
     logistics: 'Program 5:30–7:30 PM. Pizza and childcare available with RSVP.',
   },
   teacher: {
