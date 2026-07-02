@@ -2116,8 +2116,17 @@ async function ingestS2W(request, env) {
       const srcBits = ['scale to win'];
       if (clean(lead.source || lead.campaign)) srcBits.push(clean(lead.source || lead.campaign));
       if (s2wId) srcBits.push(`s2w:${s2wId}`);
+      const outcome = clean(lead.outcome || lead.result || lead.disposition);
+      const transcript = clean(lead.transcript_url || lead.transcript);
       if (cid) {
         matched++;
+        // keep the latest S2W outcome/transcript visible on the contact row
+        const stamp = {};
+        if (outcome) stamp.s2w_outcome = outcome;
+        if (transcript) stamp.s2w_transcript = transcript;
+        if (Object.keys(stamp).length) {
+          try { await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: stamp, typecast: true }) }); } catch (e) {}
+        }
       } else {
         const zip = clean(lead.zip).slice(0, 5);
         const city = clean(lead.city);
@@ -2131,12 +2140,13 @@ async function ingestS2W(request, env) {
         if (county) fields.county = county;
         const orgId = deriveOrganizerId({ county, city, zip }) || LANEE_ID;   // S2W O2O is LaNee's program; default un-geocodable leads to her
         fields.assigned_organizer = [orgId];
+        if (outcome) fields.s2w_outcome = outcome;
+        if (transcript) fields.s2w_transcript = transcript;
         const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
         cid = c.records[0].id; created++;
       }
       // one log row per (contact, s2w batch item) — skip if an identical S2W note already exists
-      const outcome = clean(lead.outcome || lead.result || lead.disposition);
-      const transcript = clean(lead.transcript_url || lead.transcript);
+      const transcriptText = clean(lead.transcript_text || lead.conversation);
       const noteKey = `S2W import${s2wId ? ` ${s2wId}` : ''}${outcome ? ` · ${outcome}` : ''}`;
       // NB: linked-record fields render as NAMES in formulas, so the contact-id
       // check must happen in code (API field values are record ids).
@@ -2146,7 +2156,7 @@ async function ingestS2W(request, env) {
         await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
           Summary: `${todayCT()} — S2W: ${first} ${last}${outcome ? ` (${outcome})` : ''}`,
           date: todayCT(), method: 'Text', result: outcome || 'S2W lead',
-          notes: noteKey + (transcript ? ` | transcript: ${transcript}` : ''),
+          notes: noteKey + (transcript ? ` | transcript: ${transcript}` : '') + (transcriptText ? `\n\n--- conversation ---\n${transcriptText.slice(0, 90000)}` : ''),
           contact: [cid],
         } }], typecast: true }) });
       }
