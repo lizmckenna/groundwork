@@ -2124,6 +2124,7 @@ async function ingestS2W(request, env) {
         const stamp = {};
         if (outcome) stamp.s2w_outcome = outcome;
         if (transcript) stamp.s2w_transcript = transcript;
+        if (clean(lead.transcript_text || lead.conversation)) stamp.s2w_conversation = clean(lead.transcript_text || lead.conversation).slice(0, 90000);
         if (Object.keys(stamp).length) {
           try { await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: stamp, typecast: true }) }); } catch (e) {}
         }
@@ -2142,6 +2143,7 @@ async function ingestS2W(request, env) {
         fields.assigned_organizer = [orgId];
         if (outcome) fields.s2w_outcome = outcome;
         if (transcript) fields.s2w_transcript = transcript;
+        if (clean(lead.transcript_text || lead.conversation)) fields.s2w_conversation = clean(lead.transcript_text || lead.conversation).slice(0, 90000);
         const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
         cid = c.records[0].id; created++;
       }
