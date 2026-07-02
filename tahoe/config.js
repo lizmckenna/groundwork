@@ -23,6 +23,7 @@ window.TAHOE_CONFIG = {
     { person: "Rhys",        emoji: "🌰", label: "Tree nuts (walnuts OK)",  detail: "Allergic to most tree nuts — walnuts are the one exception." },
     { person: "Aaron",       emoji: "🌾", label: "Wheat + soy (severe)",    detail: "Any kind of wheat, and soy. He checks carefully — make ingredients easy to find out." },
     { person: "Danielle B.", emoji: "🌱", label: "Vegan",                   detail: "No meat, dairy, or eggs." },
+    { person: "Sami",        emoji: "🌱", label: "Vegan",                   detail: "No meat, dairy, or eggs." },
   ],
   dietaryNote: "Gluten-free and vegan dishes (including desserts) arrive Wednesday. Cooks: tell the table what's in your dish — the grown-ups know to ask, the kids may not.",
 
