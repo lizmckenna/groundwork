@@ -2136,7 +2136,7 @@ async function ingestS2W(request, env) {
       const outcome = clean(lead.outcome || lead.result || lead.disposition);
       const transcript = clean(lead.transcript_url || lead.transcript);
       const noteKey = `S2W import${s2wId ? ` ${s2wId}` : ''}${outcome ? ` · ${outcome}` : ''}`;
-      const dupQ = await at(env, `/${BASE}/${CONTACT_LOG_TBL}?filterByFormula=${encodeURIComponent(`AND({notes}='${noteKey.replace(/'/g, "\\'")}',FIND('${cid}',ARRAYJOIN({contact})))`)}&maxRecords=1`);
+      const dupQ = await at(env, `/${BASE}/${CONTACT_LOG_TBL}?filterByFormula=${encodeURIComponent(`AND(FIND('${noteKey.replace(/'/g, "\\'")}',{notes}&'')>0,FIND('${cid}',ARRAYJOIN({contact})))`)}&maxRecords=1`);
       if (!dupQ.records.length) {
         await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
           Summary: `${todayCT()} — S2W: ${first} ${last}${outcome ? ` (${outcome})` : ''}`,
