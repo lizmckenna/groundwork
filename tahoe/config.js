@@ -50,6 +50,12 @@ window.TAHOE_CONFIG = {
   // links both work — the photos page renders each as a "memory book" card.
   photoAlbums: [
     {
+      year: "2026",
+      label: "Tahoe 2026 — add your photos!",
+      url: "https://www.icloud.com/sharedalbum/#B2P5Uzl7VZqBmY",
+      kind: "icloud",
+    },
+    {
       year: "Past years",
       label: "Tahoe family album",
       url: "https://www.icloud.com/sharedalbum/#B2PGY8gBYGeOxv6",
