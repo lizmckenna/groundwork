@@ -16,7 +16,7 @@
  */
 
 const KEY     = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
-const EVENT   = 'St. Louis No on 5 Regional Campaign Launch 7/6';
+const EVENT   = 'St. Louis County Parent Action Meeting 7/6';
 const LEADS   = 'Molly,Stephanie Rittgers,Vanessa Pimblott,Jamie Martin,Christy Cox,Facebook,Other';
 const STATUS  = 'Not started,Texted,Called,Left message,Confirmed coming,No answer,Declined';
 const ATTEND  = 'Scheduled,Self check-in,Attended,No-show,Walk-in,Canceled';
