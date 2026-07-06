@@ -2149,6 +2149,8 @@ async function ingestS2W(request, env) {
       if (s2wId) srcBits.push(`s2w:${s2wId}`);
       const outcome = clean(lead.outcome || lead.result || lead.disposition);
       const transcript = clean(lead.transcript_url || lead.transcript);
+      const tags = (Array.isArray(lead.tags) ? lead.tags : String(lead.tags || '').split(','))
+        .map(x => String(x || '').trim()).filter(Boolean);
       if (cid) {
         matched++;
         // keep the latest S2W outcome/transcript visible on the contact row
@@ -2189,9 +2191,33 @@ async function ingestS2W(request, env) {
         await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
           Summary: `${todayCT()} — S2W: ${first} ${last}${outcome ? ` (${outcome})` : ''}`,
           date: todayCT(), method: 'Text', result: outcome || 'S2W lead',
-          notes: noteKey + (transcript ? ` | transcript: ${transcript}` : '') + (transcriptText ? `\n\n--- conversation ---\n${transcriptText.slice(0, 90000)}` : ''),
+          notes: noteKey + (tags.length ? ` | tags: ${tags.join(', ')}` : '') + (transcript ? ` | transcript: ${transcript}` : '') + (transcriptText ? `\n\n--- conversation ---\n${transcriptText.slice(0, 90000)}` : ''),
           contact: [cid],
         } }], typecast: true }) });
+      }
+      // Tag -> action mapping (kept on OUR side so STW/TMC never change).
+      // 'wants-onboarding' = auto-register for the next Tuesday onboarding:
+      // signup field + events list + confirmation email w/ Zoom link + mirror row.
+      // Add more tags here as the team defines them.
+      for (const tag of tags) {
+        if (tag.toLowerCase() !== 'wants-onboarding') continue;
+        try {
+          const evKey = nextOnboardingKey(todayCT());
+          const meta = EVENT_META[evKey];
+          if (!meta || !meta.signupField) break;
+          const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
+          if (cur.fields[meta.signupField] === 'Signed up') break;   // already registered — don't re-email
+          let evs = cur.fields.events_signed_up || [];
+          if (!evs.includes(meta.attendEvent)) evs = evs.concat([meta.attendEvent]);
+          await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: { [meta.signupField]: 'Signed up', events_signed_up: evs }, typecast: true }) });
+          await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
+            Summary: `${todayCT()} — S2W tag signup: ${meta.attendEvent} (${first} ${last})`,
+            date: todayCT(), method: 'Event attendance', result: 'Signed up', event: meta.attendEvent,
+            notes: `registered via S2W tag wants-onboarding`, contact: [cid],
+          } }], typecast: true }) });
+          if (email) { try { await sendConfirmationEmail(env, email, first, cid, null, evKey); } catch (e) {} }
+          await mirrorWriteThrough(env, cid, meta.attendEvent, 'Registered');
+        } catch (e) { errors.push('tag action: ' + String(e.message || e).slice(0, 100)); }
       }
     } catch (e) { errors.push(String(e.message || e).slice(0, 120)); }
   }
