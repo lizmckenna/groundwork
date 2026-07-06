@@ -3733,6 +3733,15 @@ const EMAIL_EVENTS = {
     signoff_name: 'Ellen Schwartze', // Ellen leads the 6/30 makeup, so she signs its confirmation
     zoom_link: null, // live link is in KV (zoomlink:6_30); this stays null so KV is the single source
   },
+  'online_7_14': {
+    subject: `You're in — How to Amplify No on 5 in Online Spaces · Tue 7/14 7 PM CT`,
+    preview: 'How to Amplify No on 5 in Online Spaces · Tue July 14 · 7:00 PM CT · Zoom',
+    eyebrow: 'Online Spaces Training · No on 5',
+    intro_event: '<strong>How to Amplify No on 5 in Online Spaces</strong> training',
+    big_date_html: 'Tue, July 14<br/>7:00-8:00 PM CT',
+    sign_off_date: 'July 14th',
+    zoom_link: null, // live link is in KV (zoomlink:online_7_14); stays null so KV is the single source
+  },
 };
 
 // Generated confirmation-email copy for events (trainings) without a
