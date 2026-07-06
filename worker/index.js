@@ -379,6 +379,7 @@ export default {
         return json({ event: evKey, zoomlink_resolved: link, button_would_render: !!link,
           email_subject: evObj.subject || '',
           email_signoff_name: evObj.signoff_name || 'LaNeé Bridewell (default)',
+          email_reply_to: evObj.signoff_reply_to || 'lanee4kckids@gmail.com (default)',
           email_body_date: evObj.big_date_html || '',
           ics_location: L.find(l => l.startsWith('LOCATION')) || '(no ics)',
           ics_method: L.find(l => l.startsWith('METHOD')) || '',
@@ -3764,6 +3765,8 @@ const EMAIL_EVENTS = {
     intro_event: '<strong>How to Amplify No on 5 in Online Spaces</strong> training',
     big_date_html: 'Tue, July 14<br/>7:00-8:00 PM CT',
     sign_off_date: 'July 14th',
+    signoff_name: 'Jamie Martin', // Jamie leads the online spaces training, so she signs its confirmation
+    signoff_reply_to: 'docjamieb@gmail.com',
     zoom_link: null, // live link is in KV (zoomlink:online_7_14); stays null so KV is the single source
   },
 };
@@ -4065,11 +4068,12 @@ async function sendConfirmationEmail(env, toEmail, firstName, contactId, organiz
   const safeName = firstName ? firstName : '';
   const greetingComma = safeName ? `, ${escapeHtml(safeName)}` : '';
   const profile = ORGANIZER_PROFILE[String(organizer || '').toLowerCase()] || ORGANIZER_PROFILE['lanee'];
-  const replyTo = profile.reply_to;
+  let replyTo = profile.reply_to;
   let signoffName = profile.name;
   const signoffGroup = profile.group;
   const ev = { ...(EMAIL_EVENTS[String(eventKey || '5_26')] || autoEmailEvent(String(eventKey || '5_26')) || EMAIL_EVENTS['5_26']) };
   if (ev.signoff_name) signoffName = ev.signoff_name;   // per-event signer (e.g., Ellen leads 6/30)
+  if (ev.signoff_reply_to) replyTo = ev.signoff_reply_to;   // per-event reply-to (e.g., Jamie leads online_7_14)
   // Per-event link override (set by /admin/set-zoom-link, no redeploy needed).
   try {
     const kvLink = await env.KV_BINDING.get(`zoomlink:${String(eventKey || '5_26')}`);
