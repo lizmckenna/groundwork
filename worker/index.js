@@ -2261,6 +2261,7 @@ async function launchRsvp(request, env) {
   if (cEmail) baseFields.email = cEmail;
   if (cPhone) baseFields.phone = cPhone;
   if (cZip) baseFields.zip = cZip;
+  { const _c = zipToCounty(String(cZip||'').slice(0,5)) || districtToCounty(body.district); if (_c) baseFields.county = _c; }
   if (clean(body.street_address)) baseFields.street_address = clean(body.street_address);
   if (clean(body.city)) baseFields.city = clean(body.city);
   if (clean(body.district)) baseFields.district = clean(body.district);
@@ -2269,7 +2270,7 @@ async function launchRsvp(request, env) {
   // string makes the create fail, so we keep "Recruited by: …" in the log notes only.
   if (connection.length) baseFields.role = connection.join(', ');
 
-  const organizerId = deriveOrganizerId({ city: clean(body.city), zip: cZip });
+  const organizerId = deriveOrganizerId({ city: clean(body.city), zip: cZip, district: clean(body.district) });
 
   let contactId = null;
   let createdNew = false;
