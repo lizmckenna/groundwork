@@ -6024,6 +6024,16 @@ async function regionExportCsv(env, urlObj) {
       off = d.offset;
     } while (off);
   }
+  // Parent Power Camp attendance (both 6/13 camps) — warmest leads flag for the call sheets
+  const ppcSet = new Set();
+  off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',FIND('Parent Power Camp',{rsvp_launch}&'')>0)`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=result`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) if (isAtt(r.fields.result)) (r.fields.contact || []).forEach(id => ppcSet.add(id));
+    off = d.offset;
+  } while (off);
   // bucket=needs-data → launch attendees who can't be routed (no usable county/city/district)
   const bucket = (urlObj.searchParams.get('bucket') || '').toLowerCase();
   const junkDist = d => { const s = String(d || '').toLowerCase().replace(/[’']/g, '').trim(); return !s || /^(i\s*dont\s*know|dont\s*know|unknown|n\/?a|none|tbd|\?+)$/.test(s); };
@@ -6046,6 +6056,7 @@ async function regionExportCsv(env, urlObj) {
       amplifier: seed(/amplif/), house_mtg: seed(/house meeting|host/), school_board: seed(/school board/),
       canvass: seed(/canvass/), regional_team: seed(/regional team/),
       attended_launch: launchSet.has(r.id) ? 'Yes' : '',
+      ppc: ppcSet.has(r.id) ? 'Yes' : '',
       amp_training: ampFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
       hm_training: hmFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
       gotv_rsvp: '',
@@ -6080,7 +6091,8 @@ async function regionExportCsv(env, urlObj) {
     ['Email', 'email'], ['Phone', 'phone'], ['Address', 'address'], ['City', 'city'], ['Zip', 'zip'], ['School', 'school'],
     ['District', 'district'], ['County', 'county'], ['Amplifier', 'amplifier'], ['House Mtg', 'house_mtg'],
     ['School Board', 'school_board'], ['Canvass', 'canvass'], ['Regional Team', 'regional_team'],
-    ['Attended Launch', 'attended_launch'], ['Amp Training', 'amp_training'], ['HM Training', 'hm_training'], ['GOTV RSVP', 'gotv_rsvp']];
+    ['Attended Launch', 'attended_launch'], ['Amp Training', 'amp_training'], ['HM Training', 'hm_training'], ['GOTV RSVP', 'gotv_rsvp'],
+    ['Attended Power Camp', 'ppc']];   // appended LAST — sheet scripts map feed columns by position
   const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const out = [cols.map(c => c[0]).join(',')];
   for (const r of rows) out.push(cols.map(c => esc(r[c[1]])).join(','));
