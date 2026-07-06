@@ -1770,6 +1770,7 @@ async function amendment5Signup(request, env) {
     try { await sendConfirmationEmail(env, cEmail, cFirst, contactId, isElleng ? 'ellen glover' : null, eventKey); confirmation_email_sent = true; } catch (e) {}
   }
   await invalidateReadCaches(env);
+  await mirrorWriteThrough(env, contactId, eventName, 'Registered');
   return json({ ok: true, contact_id: contactId, commitments_logged: commitments.length, event: eventName, confirmation_email_sent });
 }
 
@@ -1924,6 +1925,7 @@ async function trainingSignup(request, env) {
     for (const k of keys) { try { await sendConfirmationEmail(env, cEmail, cFirst, contactId, null, k); confirmation_email_sent = true; } catch (e) {} }
   }
   await invalidateReadCaches(env);
+  for (const evName of events) { await mirrorWriteThrough(env, contactId, String(evName), 'Registered'); }
   return json({ ok: true, contact_id: contactId, events_logged: events.length, events, confirmation_email_sent });
 }
 
@@ -2039,6 +2041,7 @@ async function eventCheckin(request, env) {
     }
   }
   await env.KV_BINDING.delete('cache:events-overview:v8').catch(() => null);
+  await mirrorWriteThrough(env, cid, event, 'Showed up');
   return json({ ok: true, checked_in: true, already, walk_in: walkIn, name: cFirst });
 }
 
@@ -2356,6 +2359,7 @@ async function launchRsvp(request, env) {
     });
   } catch (e) { /* non-fatal */ }
 
+  await mirrorWriteThrough(env, contactId, rsvpLaunch, 'Registered');
   return json({ ok: true, contact_id: contactId, created_new: createdNew, launch, confirmation_email_sent });
 }
 
@@ -5837,6 +5841,46 @@ async function syncAttendanceMirror(env) {
   for (let i = 0; i < creates.length; i += 10) await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}`, { method: 'POST', body: JSON.stringify({ records: creates.slice(i, i + 10), typecast: true }) });
   for (let i = 0; i < updList.length; i += 10) await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: updList.slice(i, i + 10), typecast: true }) });
   return { events_created: missingEvents.length, rows_created: creates.length, rows_updated: updList.length };
+}
+
+// Write-through: create/upgrade the event_attendance mirror row the moment a
+// signup or check-in happens, so the Airtable grids are instant for new
+// activity. Fully non-fatal — the hourly sweep is the safety net, and both
+// paths are idempotent against each other (same contact+event = same row).
+async function mirrorWriteThrough(env, contactId, eventName, status) {
+  try {
+    if (!contactId || !eventName) return;
+    // Map training attendEvent labels ("House Meeting Training 7/16") to the
+    // mirror's event names ("HM Training 7/16"); launches pass through as-is.
+    const metaMatch = Object.values(EVENT_META).find(m => m.attendEvent === eventName || mirrorEventName(m) === eventName);
+    const name = metaMatch ? mirrorEventName(metaMatch) : String(eventName).trim();
+    const esc = name.replace(/'/g, "\\'");
+    // resolve (or create) the event record
+    let evId = null;
+    const q = await at(env, `/${BASE}/${EVENTS_TBL}?filterByFormula=${encodeURIComponent(`{Name}='${esc}'`)}&maxRecords=1`);
+    if (q.records.length) evId = q.records[0].id;
+    else {
+      const { date, typ } = mirrorLaunchDef(name);
+      const f = { Name: name, type: typ };
+      if (date) f.date = date;
+      const c = await at(env, `/${BASE}/${EVENTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: f }], typecast: true }) });
+      evId = c.records[0].id;
+    }
+    // existing mirror row for this contact+event? (paginate — big events exceed one page)
+    let hit = null, off = null;
+    do {
+      let qq = `?filterByFormula=${encodeURIComponent(`FIND('${esc}',{Attendance Record}&'')>0`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=attended`;
+      if (off) qq += `&offset=${off}`;
+      const d = await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}${qq}`);
+      hit = (d.records || []).find(r => (r.fields.contact || []).includes(contactId)) || hit;
+      off = hit ? null : d.offset;
+    } while (off);
+    if (!hit) {
+      await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: { contact: [contactId], event: [evId], attended: status } }], typecast: true }) });
+    } else if ((MIRROR_RANK[status] || 0) > (MIRROR_RANK[hit.fields.attended] || 0)) {
+      await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}/${hit.id}`, { method: 'PATCH', body: JSON.stringify({ fields: { attended: status }, typecast: true }) });
+    }
+  } catch (e) { /* non-fatal — hourly syncAttendanceMirror reconciles */ }
 }
 
 // =========================================================================
