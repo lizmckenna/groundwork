@@ -193,14 +193,14 @@
     const lead = data.dinnerLeads[todayIso];
     document.getElementById("dinner-lead").textContent =
       lead && lead.leads
-        ? lead.leads + (lead.menu ? " — " + lead.menu : "")
-        : "Open — sign up in the sheet";
+        ? lead.leads + (lead.menu ? ": " + lead.menu : "")
+        : "Open. Sign up in the sheet";
 
     // Allergen heads-up scanned from tonight's menu text
     const hits = window.TAHOE_DATA.scanAllergens(lead && lead.menu);
     document.getElementById("dinner-allergens").innerHTML = hits.length
       ? hits.map(h => `<span class="pill warm" style="margin-right: 6px;">⚠️ ${h.label}</span>`).join("") +
-        `<div style="font-size: 0.85rem; color: var(--ink-soft); margin-top: 6px;">Auto-flagged from the menu — always check with the cook.</div>`
+        `<div style="font-size: 0.85rem; color: var(--ink-soft); margin-top: 6px;">Auto-flagged from the menu. Always check with the cook.</div>`
       : "";
 
     // Food flags card
@@ -220,7 +220,7 @@
     const plan = data.schedule.filter(s => s.date === todayIso);
     const planEl = document.getElementById("today-plan");
     if (plan.length === 0) {
-      planEl.textContent = "No plans set — go to the lake.";
+      planEl.textContent = "No plans set. Go to the lake.";
     } else {
       planEl.innerHTML = plan.map(s => {
         const t = s.time === "all day" ? "All day" : s.time;

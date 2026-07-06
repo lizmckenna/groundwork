@@ -25,7 +25,7 @@
       <h2>🧑‍🍳 Feeding the crew?</h2>
     </div>
     <div class="card cream">
-      <p style="margin-bottom: 12px; color: var(--ink);"><strong>Tell the table what's in your dish.</strong> The grown-ups know to ask — the kids may not.</p>
+      <p style="margin-bottom: 12px; color: var(--ink);"><strong>Tell the table what's in your dish.</strong> The grown-ups know to ask, the kids may not.</p>
       <div id="cook-dietary" style="display: flex; flex-direction: column; gap: 10px;"></div>
       <p id="cook-note" style="margin-top: 14px; font-size: 0.92rem; border-top: 1px solid var(--line); padding-top: 12px;"></p>
     </div>
@@ -128,14 +128,14 @@
     const todayDay = cfg.days.find(d => d.date === todayIso) || cfg.days[0];
 
     document.getElementById("today-heading").textContent =
-      `Today — ${todayDay.label} ${todayDay.short}${inReunion ? "" : data.mock ? " (preview)" : ""}`;
+      `Today: ${todayDay.label} ${todayDay.short}${inReunion ? "" : data.mock ? " (preview)" : ""}`;
 
     // Cook's dietary card
     document.getElementById("cook-dietary").innerHTML = (cfg.dietary || []).map(d => `
       <div style="display: flex; gap: 10px; align-items: baseline;">
         <span style="font-size: 1.2rem; flex: 0 0 auto;">${d.emoji}</span>
         <div style="font-size: 0.98rem;">
-          <strong>${d.person}</strong> — ${d.label}.
+          <strong>${d.person}</strong>: ${d.label}.
           <span style="color: var(--ink-soft);">${d.detail}</span>
         </div>
       </div>
@@ -212,7 +212,7 @@
       overlay.innerHTML = `
         <div style="background:white;border-radius:28px 28px 0 0;padding:24px 20px calc(24px + env(safe-area-inset-bottom));width:100%;max-width:720px;box-shadow:0 -16px 40px rgba(13,59,92,0.25);">
           <h3 style="margin-bottom:4px;">Who's taking ${role}?</h3>
-          <p style="font-size:0.92rem;margin-bottom:14px;">Pick your name — it goes straight into the family sheet.</p>
+          <p style="font-size:0.92rem;margin-bottom:14px;">Pick your name. It goes straight into the family sheet.</p>
           <select id="name-picker-select" style="width:100%;font-size:1.1rem;padding:14px;border-radius:12px;border:2px solid var(--tahoe-sky);font-family:inherit;background:white;color:var(--ink);">
             <option value="">Choose your name…</option>
             ${present.map(n => `<option value="${n.replace(/"/g, "&quot;")}" ${n === remembered ? "selected" : ""}>${n}</option>`).join("")}
@@ -237,7 +237,7 @@
           renderAll();
           showToast(`${name} is on ${role}. Thank you!`);
         } else {
-          showToast("Couldn't reach the sheet — try again in a minute.");
+          showToast("Couldn't reach the sheet. Try again in a minute.");
         }
       });
     }
@@ -357,7 +357,7 @@
             <div class="count">${row.count}</div>
           </div>`;
       }).join("");
-      document.getElementById("leaderboard").innerHTML = html || `<div class="card">No chores done yet — be first!</div>`;
+      document.getElementById("leaderboard").innerHTML = html || `<div class="card">No chores done yet. Be first!</div>`;
     }
 
     function renderKids() {

@@ -20,12 +20,12 @@ window.TAHOE_CONFIG = {
   // Written so a kid can read it. Keep person names matching the roster.
   dietary: [
     { person: "Clara",       emoji: "🌰", label: "ALL tree nuts",           detail: "Including walnuts, pecans, pistachios, and Brazil nuts. No exceptions." },
-    { person: "Rhys",        emoji: "🌰", label: "Tree nuts (walnuts OK)",  detail: "Allergic to most tree nuts — walnuts are the one exception." },
-    { person: "Aaron",       emoji: "🌾", label: "Wheat + soy (severe)",    detail: "Any kind of wheat, and soy. He checks carefully — make ingredients easy to find out." },
+    { person: "Rhys",        emoji: "🌰", label: "Tree nuts (walnuts OK)",  detail: "Allergic to most tree nuts. Walnuts are the one exception." },
+    { person: "Aaron",       emoji: "🌾", label: "Wheat + soy (severe)",    detail: "Any kind of wheat, and soy. He checks carefully, so make ingredients easy to find." },
     { person: "Danielle B.", emoji: "🌱", label: "Vegan",                   detail: "No meat, dairy, or eggs." },
     { person: "Sami",        emoji: "🌱", label: "Vegan",                   detail: "No meat, dairy, or eggs." },
   ],
-  dietaryNote: "Gluten-free and vegan dishes (including desserts) arrive Wednesday. Cooks: tell the table what's in your dish — the grown-ups know to ask, the kids may not.",
+  dietaryNote: "Gluten-free and vegan dishes (including desserts) arrive Wednesday. Cooks: tell the table what's in your dish. The grown-ups know to ask, the kids may not.",
 
   // Keywords the site scans menu text for, to auto-flag likely allergens.
   // Better safe than sorry: these are heads-ups, not verdicts — always ask the cook.
@@ -51,7 +51,7 @@ window.TAHOE_CONFIG = {
   photoAlbums: [
     {
       year: "2026",
-      label: "Tahoe 2026 — add your photos!",
+      label: "Tahoe 2026: add your photos!",
       url: "https://www.icloud.com/sharedalbum/#B2P5Uzl7VZqBmY",
       kind: "icloud",
     },
