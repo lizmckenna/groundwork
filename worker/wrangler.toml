@@ -4,7 +4,7 @@ compatibility_date = "2025-01-01"
 keep_vars = true
 
 [triggers]
-crons = ["0 14 * * *"]   # daily 9am CT — pre-event signup-pipeline self-test (canary)
+crons = ["0 14 * * *", "0 * * * *"]   # daily 9am CT full run; hourly = attendance-mirror sync only   # daily 9am CT — pre-event signup-pipeline self-test (canary)
 
 [[kv_namespaces]]
 binding = "KV_BINDING"

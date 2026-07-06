@@ -1253,6 +1253,8 @@ export default {
   // Cron: pre-event signup-pipeline self-test. Signs up a synthetic user ~36h before
   // each event and emails an alert if the confirmation or the record fails to land.
   async scheduled(event, env, ctx) {
+    // Hourly cron: only the attendance-mirror sync (keeps event_attendance grids fresh).
+    if (event.cron === '0 * * * *') { ctx.waitUntil(syncAttendanceMirror(env).catch(() => {})); return; }
     ctx.waitUntil(runSignupCanary(env).catch(() => {}));
     // Daily board snapshot -> the master-tracker trend line.
     ctx.waitUntil((async () => {
