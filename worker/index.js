@@ -140,13 +140,35 @@ function zipToDistrict(zip) {
   const z = String(zip || '').trim().slice(0, 5);
   return ZIP_DISTRICT[z] || null;
 }
-function deriveOrganizerId({ county, city, zip }) {
+// School district -> county fallback, for signups with no zip (organizers
+// registering call-backs know the district — it's required on launch forms —
+// but often not the zip). Substring match, lowercase.
+const DISTRICT_COUNTY_HINTS = [
+  [['kcps', 'kansas city public', 'kansas city 33', 'center', 'hickman mills', 'blue springs', 'independence', "lee's summit", 'lees summit', 'raytown', 'grandview', 'grain valley', 'oak grove', 'fort osage', 'raymore'], 'Jackson County, MO'],
+  [['nkc', 'north kansas city', 'liberty', 'smithville', 'kearney', 'excelsior'], 'Clay County, MO'],
+  [['park hill', 'platte city'], 'Platte County, MO'],
+  [['francis howell', 'wentzville', 'zumwalt', 'orchard farm', 'st. charles'], 'St. Charles County, MO'],
+  [['slps', 'st. louis public', 'riverview gardens', 'jennings', 'normandy', 'ferguson', 'florissant', 'hazelwood', 'pattonville', 'ritenour', 'university city', 'rockwood', 'parkway', 'kirkwood', 'webster groves', 'ladue', 'clayton', 'lindbergh', 'mehlville', 'bayless', 'hancock place', 'maplewood', 'brentwood', 'affton', 'valley park'], 'St. Louis County, MO'],
+  [['st. joseph', 'st joseph', 'mid-buchanan'], 'Buchanan County, MO'],
+  [['columbia'], 'Boone County, MO'],
+];
+function districtToCounty(district) {
+  const d = String(district || '').toLowerCase().trim();
+  if (!d) return null;
+  for (const [hints, county] of DISTRICT_COUNTY_HINTS) if (hints.some(h => d.includes(h))) return county;
+  return null;
+}
+function deriveOrganizerId({ county, city, zip, district }) {
   // 1. Use supplied county if present
   let c = (county || '').toLowerCase();
   // 2. If no county, try to derive from zip
   if (!c) {
     const derived = zipToCounty(zip);
     if (derived) c = derived.toLowerCase();
+  }
+  if (!c) {
+    const dc = districtToCounty(district);
+    if (dc) c = dc.toLowerCase();
   }
   if (c && LANEE_COUNTIES.some(x => c.includes(x))) return LANEE_ID;
   const ci = (city || '').toLowerCase();
@@ -1535,7 +1557,7 @@ async function houseMeetingSignup(request, env) {
   }
 
   // Organizer assignment via county → city → zip cascade
-  const organizerId = deriveOrganizerId({ city, zip });
+  const organizerId = deriveOrganizerId({ city, zip, district });
 
   let contactId;
   const baseFields = {
@@ -1671,10 +1693,10 @@ async function amendment5Signup(request, env) {
   // Organizer assignment via county → city → zip cascade.
   // Override: commitment-form completers in Ellen Glover's counties are hers
   // (Clay, Platte, Buchanan, Clinton — her ask 6/22). Applies to new + existing.
-  const derivedCounty = zipToCounty(String(zip || '').trim().slice(0, 5)) || '';
+  const derivedCounty = zipToCounty(String(zip || '').trim().slice(0, 5)) || districtToCounty(district) || '';
   const cmtCounty = derivedCounty.toLowerCase();
   const isElleng = !!cmtCounty && ELLENG_COUNTIES.some(x => cmtCounty.includes(x));
-  const organizerId = isElleng ? ELLENG_ID : deriveOrganizerId({ city, zip });
+  const organizerId = isElleng ? ELLENG_ID : deriveOrganizerId({ city, zip, district });
 
   // Attribute to the NEXT upcoming onboarding (was hardcoded to the now-past 6/9).
   const today = todayCT();
@@ -1828,7 +1850,7 @@ async function trainingSignup(request, env) {
   }
 
   // Organizer assignment via existing cascade
-  const organizerId = deriveOrganizerId({ zip: cZip });
+  const organizerId = deriveOrganizerId({ zip: cZip, district: body.district });
 
   const today = todayCT();
 
@@ -1855,6 +1877,7 @@ async function trainingSignup(request, env) {
   if (cEmail) baseFields.email = cEmail;
   if (cPhone) baseFields.phone = cPhone;
   if (cZip) { baseFields.zip = cZip; const _c = zipToCounty(String(cZip).slice(0, 5)); if (_c) baseFields.county = _c; }   // derive county so turf routing works (was missing on this path)
+  if (!baseFields.county) { const _dc = districtToCounty(body.district); if (_dc) baseFields.county = _dc; }   // no zip? district still places them in a county
   if (cRecruiter) baseFields.recruited_by = cRecruiter;
   // If the user signed up for the 6/9 Emergency Meeting through this form,
   // also flip signup_6_9_status so they appear in the 6/9 Event Tracking tab
