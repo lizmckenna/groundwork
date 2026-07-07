@@ -4526,6 +4526,13 @@ async function confirmLog(request, env) {
         body: JSON.stringify({ fields: { [meta.confirmField]: status }, typecast: true }),
       });
     } catch (e) { /* field may not exist yet — non-fatal */ }
+    // Mirror the funnel status to the event_attendance mirror row's `reminder_status`
+    // column so Airtable grid views (like Liz's per-event grids) show it immediately.
+    // Rank-based upgrade means Confirmed won't clobber a later Cancelled, etc.
+    if (REMIND_RANK[status]) {
+      try { await mirrorSetReminderStatus(env, contact_id, mirrorEventName(meta), status); }
+      catch (e) { /* non-fatal — hourly sync fills any gaps */ }
+    }
   }
   // Cross-event invite from a confirm tab ("can't make this one → sign up for
   // the next onboarding"). Generic: next_signup = { event: '7_7', value: 'Signed up' }.
@@ -5816,6 +5823,8 @@ async function recruitChainsExportCsv(env, urlObj) {
 // so manual team rows (Border Star etc.) are untouched.
 // =========================================================================
 const MIRROR_RANK = { 'Registered': 1, 'No show': 2, 'Showed up': 3 };
+// reminder_status funnel ranks — Cancelled > Confirmed > Reminder sent. Higher wins.
+const REMIND_RANK = { 'Reminder sent': 1, 'Confirmed': 2, 'Cancelled': 3 };
 function mirrorEventName(meta) {
   return meta.type === 'amp' ? meta.label.replace(/^Amplifier /, 'Amplifier Training ') : meta.label;
 }
@@ -5893,12 +5902,12 @@ async function syncAttendanceMirror(env) {
     for (const r of d.records) evByName[r.fields.Name] = r.id;
   }
 
-  // 4b. confirmation calls (result Confirmed/Cancelled) -> reminder_status on the mirror row.
-  // Cancelled outranks Confirmed (it's the later state).
-  const remind = {}; // 'cid|evid' -> 'Confirmed'|'Cancelled'
+  // 4b. confirmation-flow results (Reminder sent / Confirmed / Cancelled) -> reminder_status on the mirror row.
+  // Rank order: Cancelled outranks Confirmed outranks Reminder sent (each is a "later" state in the funnel).
+  const remind = {}; // 'cid|evid' -> 'Reminder sent'|'Confirmed'|'Cancelled'
   off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`OR({result}='Confirmed',{result}='Cancelled')`)}&pageSize=100&fields%5B%5D=result&fields%5B%5D=event&fields%5B%5D=rsvp_launch&fields%5B%5D=contact`;
+    let q = `?filterByFormula=${encodeURIComponent(`OR({result}='Reminder sent',{result}='Confirmed',{result}='Cancelled')`)}&pageSize=100&fields%5B%5D=result&fields%5B%5D=event&fields%5B%5D=rsvp_launch&fields%5B%5D=contact`;
     if (off) q += `&offset=${off}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
     for (const r of d.records) {
@@ -5914,7 +5923,7 @@ async function syncAttendanceMirror(env) {
       const evid = evByName[name];
       for (const cid of (f.contact || [])) {
         const k = cid + '|' + evid;
-        if (f.result === 'Cancelled' || !remind[k]) remind[k] = f.result;
+        if ((REMIND_RANK[f.result] || 0) > (REMIND_RANK[remind[k]] || 0)) remind[k] = f.result;
       }
     }
     off = d.offset;
@@ -5949,10 +5958,16 @@ async function syncAttendanceMirror(env) {
       (updates[cur.id] = updates[cur.id] || {}).attended = status;
     }
   }
-  // reminder_status fills only where the mirror cell is empty — never overwrites a manual value.
+  // reminder_status fills only where mirror cell is empty OR the new value ranks higher
+  // in the funnel (Cancelled > Confirmed > Reminder sent). We treat non-tracked strings
+  // (manual entries the team typed) as rank 0 — so anything from the sync will overwrite
+  // untypeable/unknown values, but Confirmed won't clobber a Cancelled that already synced.
   for (const [mk, res] of Object.entries(remind)) {
     const cur = have[mk];
-    if (cur && !cur.remind) (updates[cur.id] = updates[cur.id] || {}).reminder_status = res;
+    if (!cur) continue;
+    const curRank = REMIND_RANK[cur.remind] || 0;
+    const newRank = REMIND_RANK[res] || 0;
+    if (!cur.remind || newRank > curRank) (updates[cur.id] = updates[cur.id] || {}).reminder_status = res;
   }
   const updList = Object.entries(updates).map(([id, fields]) => ({ id, fields }));
   for (let i = 0; i < creates.length; i += 10) await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}`, { method: 'POST', body: JSON.stringify({ records: creates.slice(i, i + 10), typecast: true }) });
@@ -5996,6 +6011,55 @@ async function mirrorWriteThrough(env, contactId, eventName, status) {
       await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: { contact: [contactId], event: [evId], attended: status } }], typecast: true }) });
     } else if ((MIRROR_RANK[status] || 0) > (MIRROR_RANK[hit.fields.attended] || 0)) {
       await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}/${hit.id}`, { method: 'PATCH', body: JSON.stringify({ fields: { attended: status }, typecast: true }) });
+    }
+  } catch (e) { /* non-fatal — hourly syncAttendanceMirror reconciles */ }
+}
+
+// Write-through: set `reminder_status` on the event_attendance mirror row for
+// (contact, event) — creates the row if missing so Liz's per-event grid views
+// show LaNee's "Reminder sent" / "Confirmed" / "Cancelled" the moment she saves.
+// Rank-based (Cancelled > Confirmed > Reminder sent) — a later stronger status
+// upgrades the cell but a stronger status already in place isn't downgraded.
+// Fully non-fatal; the hourly sync is the safety net.
+async function mirrorSetReminderStatus(env, contactId, eventName, newStatus) {
+  try {
+    if (!contactId || !eventName || !REMIND_RANK[newStatus]) return;
+    const esc = String(eventName).trim().replace(/'/g, "\\'");
+    // resolve (or create) the event record
+    let evId = null;
+    const q = await at(env, `/${BASE}/${EVENTS_TBL}?filterByFormula=${encodeURIComponent(`{Name}='${esc}'`)}&maxRecords=1`);
+    if (q.records.length) evId = q.records[0].id;
+    else {
+      const { date, typ } = mirrorLaunchDef(eventName);
+      const f = { Name: eventName, type: typ };
+      if (date) f.date = date;
+      const c = await at(env, `/${BASE}/${EVENTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: f }], typecast: true }) });
+      evId = c.records[0].id;
+    }
+    // Find the existing mirror row for this (contact, event) — paginate for big events.
+    let hit = null, off = null;
+    do {
+      let qq = `?filterByFormula=${encodeURIComponent(`FIND('${esc}',{Attendance Record}&'')>0`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=reminder_status`;
+      if (off) qq += `&offset=${off}`;
+      const d = await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}${qq}`);
+      hit = (d.records || []).find(r => (r.fields.contact || []).includes(contactId)) || hit;
+      off = hit ? null : d.offset;
+    } while (off);
+    if (!hit) {
+      await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}`, {
+        method: 'POST',
+        body: JSON.stringify({ records: [{ fields: { contact: [contactId], event: [evId], reminder_status: newStatus } }], typecast: true })
+      });
+      return;
+    }
+    const curStatus = hit.fields.reminder_status || '';
+    const curRank = REMIND_RANK[curStatus] || 0;
+    const newRank = REMIND_RANK[newStatus] || 0;
+    if (!curStatus || newRank > curRank) {
+      await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}/${hit.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: { reminder_status: newStatus }, typecast: true })
+      });
     }
   } catch (e) { /* non-fatal — hourly syncAttendanceMirror reconciles */ }
 }
