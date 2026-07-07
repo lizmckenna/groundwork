@@ -65,7 +65,9 @@ function setUp() {
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'onAttendanceEdit') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('onAttendanceEdit').forSpreadsheet(ss).onEdit().create();
 
-  refreshVoices();
+  // Initial pull. If the daily urlfetch quota is exhausted this throws; swallow it
+  // so the structure/triggers still finish — rows fill in on the next cycle after reset.
+  try { refreshVoices(); } catch (e) {}
   SpreadsheetApp.getUi().alert('Set up. RSVPs refresh every 5 minutes. Assigned-to / Reminder / Notes are yours and survive refreshes. Marking the Attendance column writes back to the database.');
 }
 
@@ -110,7 +112,9 @@ function refreshVoices() {
   // 2. Fetch — BAIL OUT without touching the sheet if anything is wrong.
   const url = WORKER + '/export/training-roster.csv?t=' + encodeURIComponent(TOKEN) +
               '&event=' + encodeURIComponent(EVENT) + '&t2=' + Date.now();
-  const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  let resp;
+  try { resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true }); }
+  catch (e) { return; }                                                    // urlfetch quota exhausted / network error -> never wipe, retry next cycle
   if (resp.getResponseCode() !== 200) return;
   const rows = Utilities.parseCsv(resp.getContentText());
   if (rows.length < 2) return;                                               // header-only -> never wipe
