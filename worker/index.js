@@ -1899,7 +1899,9 @@ async function trainingSignup(request, env) {
   if (cZip) { baseFields.zip = cZip; const _c = zipToCounty(String(cZip).slice(0, 5)); if (_c) baseFields.county = _c; }   // derive county so turf routing works (was missing on this path)
   if (!baseFields.county) { const _dc = districtToCounty(body.district); if (_dc) baseFields.county = _dc; }   // no zip? district still places them in a county
   if (body.district) baseFields.district = String(body.district).trim();   // persist the district/town the form collected (was only used for routing) so per-event rosters show it
-  if (cRecruiter) baseFields.recruited_by = cRecruiter;
+  // NB: recruited_by is a linked-record field on contacts (the recruitment-substrate
+  // graph). Writing a plain name string makes the create 422 and loses the whole
+  // signup, so we keep "Recruited by: …" in the log notes only (same as /launch-rsvp).
   // If the user signed up for the 6/9 Emergency Meeting through this form,
   // also flip signup_6_9_status so they appear in the 6/9 Event Tracking tab
   // (mirrors the homepage /signup flow).
@@ -1927,15 +1929,29 @@ async function trainingSignup(request, env) {
       });
     } catch (e) { /* non-fatal — continue with log creation */ }
   } else {
-    const fields = { ...baseFields, leader_ladder: 'Prospect', assigned_organizer: [organizerId] };
-    const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
-      method: 'POST',
-      body: JSON.stringify({ records: [{ fields }], typecast: true })
-    });
-    contactId = created.records[0].id;
+    try {
+      const fields = { ...baseFields, leader_ladder: 'Prospect', assigned_organizer: [organizerId] };
+      const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+        method: 'POST',
+        body: JSON.stringify({ records: [{ fields }], typecast: true })
+      });
+      contactId = created.records[0].id;
+    } catch (e) {
+      // Last-resort retry with only essential fields so a bad optional value can
+      // never lose the signup (mirrors /launch-rsvp).
+      const minFields = { first: cFirst, last: cLast, source: baseFields.source, events_signed_up: mergedEvents, leader_ladder: 'Prospect' };
+      if (cEmail) minFields.email = cEmail;
+      if (cPhone) minFields.phone = cPhone;
+      const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, {
+        method: 'POST',
+        body: JSON.stringify({ records: [{ fields: minFields }], typecast: true })
+      });
+      contactId = created.records[0].id;
+    }
   }
 
-  // One contact_log row per training selected
+  // One contact_log row per training selected. Recruiter name lives here (not in
+  // the linked recruited_by field) so a free-text name can't fail the signup.
   const logRecords = events.map(evName => ({
     fields: {
       Summary: `${today} — training signup: ${evName}`,
@@ -1944,7 +1960,7 @@ async function trainingSignup(request, env) {
       result: 'Signed up',
       event: evName,
       contact: [contactId],
-      notes: source ? `Source: ${source}` : 'Training signup form',
+      notes: [source ? `Source: ${source}` : 'Training signup form', cRecruiter ? `Recruited by: ${cRecruiter}` : ''].filter(Boolean).join(' | '),
     }
   }));
 
