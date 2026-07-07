@@ -6665,10 +6665,14 @@ async function contactsExportCsv(env, urlObj) {
 // Idempotent: Attended/Walk-in ensures one 'Event attendance' row exists for that
 // person+launch; anything else removes it. The events dashboard counts these rows.
 async function sheetAttendance(request, env) {
-  if (!env.EXPORT_KEY || new URL(request.url).searchParams.get('key') !== env.EXPORT_KEY)
-    return new Response('forbidden', { status: 403 });
   const body = await request.json().catch(() => null);
   if (!body || !body.event || !Array.isArray(body.marks)) return json({ error: 'bad request' }, 400);
+  // Auth: master EXPORT_KEY, OR the event's scoped roster token — so a volunteer's
+  // tracker can write attendance back without ever holding the master key.
+  const provided = new URL(request.url).searchParams.get('key') || '';
+  let authed = env.EXPORT_KEY && provided === env.EXPORT_KEY;
+  if (!authed && provided) { const scoped = await env.KV_BINDING.get(`roster-token:${body.event}`); authed = scoped && provided === scoped; }
+  if (!authed) return new Response('forbidden', { status: 403 });
   const event = String(body.event);
   const evEsc = event.replace(/'/g, "\\'");
 
