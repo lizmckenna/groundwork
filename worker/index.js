@@ -1899,6 +1899,7 @@ async function trainingSignup(request, env) {
   if (cZip) { baseFields.zip = cZip; const _c = zipToCounty(String(cZip).slice(0, 5)); if (_c) baseFields.county = _c; }   // derive county so turf routing works (was missing on this path)
   if (!baseFields.county) { const _dc = districtToCounty(body.district); if (_dc) baseFields.county = _dc; }   // no zip? district still places them in a county
   if (body.district) baseFields.district = String(body.district).trim();   // persist the district/town the form collected (was only used for routing) so per-event rosters show it
+  if (body.school) baseFields.school = String(body.school).trim();   // per-event roster shows school alongside district
   // NB: recruited_by is a linked-record field on contacts (the recruitment-substrate
   // graph). Writing a plain name string makes the create 422 and loses the whole
   // signup, so we keep "Recruited by: …" in the log notes only (same as /launch-rsvp).
@@ -6542,17 +6543,17 @@ async function trainingRosterCsv(env, urlObj) {
   for (let i = 0; i < order.length; i += 40) {
     const chunk = order.slice(i, i + 40);
     const formula = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
-    const q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone&fields%5B%5D=district`;
+    const q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone&fields%5B%5D=district&fields%5B%5D=school`;
     const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
     for (const r of d.records) det[r.id] = r.fields;
   }
   const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [['First', 'Last', 'Email', 'Phone', 'District', 'Registered'].join(',')];
+  const lines = [['First', 'Last', 'Email', 'Phone', 'District', 'School', 'Registered'].join(',')];
   for (const cid of order) {
     const f = det[cid] || {};
     const fn = String(f.first || ''), ln = String(f.last || '');
     if (/^(test|smoke|sample|audit|final|demo|pipeline|canary)\b/i.test(fn) || /test|smoke|example|gwcanary/i.test(String(f.email || ''))) continue;   // hide QA rows from the organizer's Sheet
-    lines.push([f.first, f.last, f.email, f.phone, f.district, rdate[cid]].map(esc).join(','));
+    lines.push([f.first, f.last, f.email, f.phone, f.district, f.school, rdate[cid]].map(esc).join(','));
   }
   return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
 }

@@ -1,8 +1,8 @@
 // ============================================================================
 //  Voices for Small Schools Amplifier Training 7/19 — live RSVP tracker
 //  Paste into Extensions → Apps Script, Save, then run setUp() once.
-//  A "🔄 Groundwork" menu appears on reload; RSVPs refresh every minute.
-//  Attendance you mark in column I writes back to the Groundwork database.
+//  A "🔄 Groundwork" menu appears on reload; RSVPs refresh every 5 minutes.
+//  Attendance you mark in the Attendance column writes back to the Groundwork database.
 // ============================================================================
 const TOKEN = 'voices719-ca4a6651924de818';                                  // scoped to THIS event only — never the master key
 const EVENT = 'Voices for Small Schools Amplifier Training 7/19';
@@ -10,7 +10,7 @@ const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
 const TAB = 'RSVPs (live)';
 
 const TITLE = 'Voices for Small Schools · 7/19 · 7 PM CT — RSVP Tracker';
-const DATA_COLS = 6;              // First, Last, Email, Phone, District, Registered
+const DATA_COLS = 7;              // First, Last, Email, Phone, District, School, Registered
 const EMAIL_COL = 3;             // column C
 const BANNER = 1, HDR = 2, FIRST = 3;   // row 1 banner, row 2 header, data from row 3
 
@@ -56,16 +56,17 @@ function setUp() {
   applyPills(sh);
   setColumnWidths(sh);
 
-  // Minute refresh.
+  // Refresh every 5 minutes. (Every-minute across several trackers blows the
+  // Apps Script daily urlfetch quota — "Service invoked too many times".)
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'refreshVoices') ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger('refreshVoices').timeBased().everyMinutes(1).create();
+  ScriptApp.newTrigger('refreshVoices').timeBased().everyMinutes(5).create();
 
   // Attendance write-back.
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'onAttendanceEdit') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('onAttendanceEdit').forSpreadsheet(ss).onEdit().create();
 
   refreshVoices();
-  SpreadsheetApp.getUi().alert('Set up. RSVPs refresh every minute. Assigned-to / Reminder / Notes are yours and survive refreshes. Marking Attendance (column I) writes back to the database.');
+  SpreadsheetApp.getUi().alert('Set up. RSVPs refresh every 5 minutes. Assigned-to / Reminder / Notes are yours and survive refreshes. Marking the Attendance column writes back to the database.');
 }
 
 // Colored "pills" via conditional formatting on the Reminder + Attendance columns.
@@ -85,7 +86,7 @@ function applyPills(sh) {
 }
 
 function setColumnWidths(sh) {
-  const w = [90, 90, 210, 120, 150, 90, 100, 130, 100, 220];
+  const w = [90, 90, 210, 120, 150, 150, 90, 100, 130, 100, 220];
   for (let i = 0; i < w.length; i++) sh.setColumnWidth(i + 1, w[i]);
 }
 
