@@ -6707,7 +6707,10 @@ async function sheetAttendance(request, env) {
   const existing = {};
   let off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
+    // result='Attended' is essential: training signups ALSO use method='Event attendance'
+    // (result='Signed up'). Without this, a No-show mark would delete the person's
+    // signup row and drop them from the roster, and an Attended mark would no-op.
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{result}='Attended',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
     if (off) q += `&offset=${encodeURIComponent(off)}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
     for (const r of d.records) { const cid = (r.fields.contact || [])[0]; if (cid && !existing[cid]) existing[cid] = r.id; }
