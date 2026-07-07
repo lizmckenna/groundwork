@@ -87,6 +87,13 @@ const EVENT_META = {
   'amp_7_21': { type: 'amp', date: '2026-07-21', time: '6:30pm CT', label: 'Amplifier 7/21', confirmEvent: 'Confirm Amp 7/21', attendEvent: 'Amplifier Training 7/21', confirmField: 'confirm_amp_7_21_status', attendField: 'attendance_amp_7_21_status', signupField: 'signup_amp_7_21_status', confirmTag: 'amp 7/21 confirm', attendTag: 'amplifier 7/21' },
   // Internal-only training (not listed on the website; unlisted signup page at /trainings/online-amplifier/)
   'online_7_14': { type: 'amp', date: '2026-07-14', time: '7:00pm CT', label: 'Online Spaces 7/14', confirmEvent: 'Confirm Online Spaces 7/14', attendEvent: 'How to Amplify No on 5 in Online Spaces 7/14', confirmField: 'confirm_online_7_14_status', attendField: 'attendance_online_7_14_status', signupField: 'signup_online_7_14_status', confirmTag: 'online spaces 7/14 confirm', attendTag: 'online spaces 7/14' },
+  // Voices for Small Schools of Missouri — rural/small-schools amplifier training (Laci). Unlisted page at /trainings/voices-small-schools/.
+  // type 'makeup' (NOT 'amp') on purpose: no per-event Airtable status fields exist and the PAT can't create them, so
+  // null signup/attend/confirm fields would inject `null` into the amp field-mapping queries. As 'makeup' it stays out of
+  // that machinery (allMetaEvents remaps makeup->onboarding, which the amp/hm/camp filters skip). RSVPs are tracked via
+  // events_signed_up + contact_log + the event_attendance mirror (write-through fires on signup). Confirmation email + ICS
+  // are fully controlled by EMAIL_EVENTS['amp_7_19'] + KV zoomlink:amp_7_19. icsTitle overrides the makeup ICS default.
+  'amp_7_19': { type: 'makeup', date: '2026-07-19', time: '7:00pm CT', label: 'Voices for Small Schools 7/19', confirmEvent: 'Confirm Voices 7/19', attendEvent: 'Voices for Small Schools Amplifier Training 7/19', confirmField: null, attendField: null, signupField: null, confirmTag: 'voices 7/19 confirm', attendTag: 'voices small schools 7/19', icsTitle: 'Voices for Small Schools Amplifier Training (Parents for Missouri Public Schools)' },
   // Know Your Neighbor (KC) — Kathryn owns reminders per the PMOPS flow (6/11 email)
   'kyn_6_23': { type: 'kyn', inPerson: true, date: '2026-06-23', time: '3:00pm CT',  label: 'Know Your Neighbor 6/23', confirmEvent: 'Confirm KYN 6/23', attendEvent: 'Know Your Neighbor 6/23', confirmField: 'confirm_kyn_6_23_status', attendField: 'attendance_kyn_6_23_status', signupField: 'signup_kyn_6_23_status', confirmTag: 'kyn 6/23 confirm', attendTag: 'kyn 6/23' },
   'kyn_7_25': { type: 'kyn', inPerson: true, date: '2026-07-25', time: '10:00am CT', label: 'Know Your Neighbor 7/25', confirmEvent: 'Confirm KYN 7/25', attendEvent: 'Know Your Neighbor 7/25', confirmField: 'confirm_kyn_7_25_status', attendField: 'attendance_kyn_7_25_status', signupField: 'signup_kyn_7_25_status', confirmTag: 'kyn 7/25 confirm', attendTag: 'kyn 7/25' },
@@ -3795,6 +3802,15 @@ const EMAIL_EVENTS = {
     signoff_reply_to: 'docjamieb@gmail.com',
     zoom_link: null, // live link is in KV (zoomlink:online_7_14); stays null so KV is the single source
   },
+  'amp_7_19': {
+    subject: `You're in — Voices for Small Schools Amplifier Training · Sun 7/19 7 PM CT`,
+    preview: 'Voices for Small Schools of Missouri Amplifier Training · Sun July 19 · 7:00 PM CT · Zoom',
+    eyebrow: 'Amplifier Training · Small & Rural Schools',
+    intro_event: '<strong>Voices for Small Schools of Missouri Amplifier Training</strong>',
+    big_date_html: 'Sun, July 19<br/>7:00-8:00 PM CT',
+    sign_off_date: 'July 19th',
+    zoom_link: null, // live link is in KV (zoomlink:amp_7_19); stays null so KV is the single source
+  },
 };
 
 // Generated confirmation-email copy for events (trainings) without a
@@ -3854,7 +3870,9 @@ function buildEventIcs(eventKey, ev, attendeeEmail, attendeeName, method) {
   const start = `${Y}${pad(Mo)}${pad(D)}T${pad(h)}${pad(m)}00`;
   const end = `${Y}${pad(Mo)}${pad(D)}T${pad(eh)}${pad(em)}00`;
   const link = (ev && ev.zoom_link) || '';
-  const summary = ['onboarding', 'legacy', 'makeup'].includes(meta.type)
+  const summary = meta.icsTitle
+    ? meta.icsTitle
+    : ['onboarding', 'legacy', 'makeup'].includes(meta.type)
     ? 'No on 5 Onboarding (Parents for Missouri Public Schools)'
     : `${meta.label} (Parents for Missouri Public Schools)`;
   const loc = meta.inPerson ? (link || 'In person (details by email)') : (link ? 'Zoom' : 'Zoom (link by email)');
