@@ -362,6 +362,10 @@ export default {
       if (url.pathname === '/sheet-add-organizer' && request.method === 'POST') return await sheetAddOrganizer(request, env);
       if (url.pathname === '/export/organizers.csv' && request.method === 'GET') return await organizersExportCsv(env, url);
       if (url.pathname === '/export/signups.csv' && request.method === 'GET') return await signupsExportCsv(env, url);
+      // Per-event training roster for a volunteer's Google Sheet (live IMPORTDATA feed).
+      // Auth: master EXPORT_KEY, OR a per-event scoped token (t=) so an organizer can
+      // hold the feed link without the master key — leaking t exposes only this roster.
+      if (url.pathname === '/export/training-roster.csv' && request.method === 'GET') return await trainingRosterCsv(env, url);
       // Sheet → Airtable write-back for HM follow-up columns (status, 1-1, notes), by contact id.
       if (url.pathname === '/sheet-hm-followup' && request.method === 'POST') return await sheetHmFollowup(request, env);
       // Sheet → Airtable attendance write-back for launches (gated by EXPORT_KEY,
@@ -402,6 +406,14 @@ export default {
         if (!ev || !link) return json({ error: 'event+link required' }, 400);
         await env.KV_BINDING.put(`zoomlink:${ev}`, link);     // write through the binding the worker reads
         const readback = await env.KV_BINDING.get(`zoomlink:${ev}`);
+        return json({ set: ev, readback });
+      }
+      if (url.pathname === '/admin/kv-set-roster-token' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+        const ev = url.searchParams.get('event'); const token = url.searchParams.get('token');
+        if (!ev || !token) return json({ error: 'event+token required' }, 400);
+        await env.KV_BINDING.put(`roster-token:${ev}`, token);   // scoped token that unlocks only this event's roster CSV
+        const readback = await env.KV_BINDING.get(`roster-token:${ev}`);
         return json({ set: ev, readback });
       }
       if (url.pathname === '/admin/auto-register' && request.method === 'POST') {
@@ -1886,6 +1898,7 @@ async function trainingSignup(request, env) {
   if (cPhone) baseFields.phone = cPhone;
   if (cZip) { baseFields.zip = cZip; const _c = zipToCounty(String(cZip).slice(0, 5)); if (_c) baseFields.county = _c; }   // derive county so turf routing works (was missing on this path)
   if (!baseFields.county) { const _dc = districtToCounty(body.district); if (_dc) baseFields.county = _dc; }   // no zip? district still places them in a county
+  if (body.district) baseFields.district = String(body.district).trim();   // persist the district/town the form collected (was only used for routing) so per-event rosters show it
   if (cRecruiter) baseFields.recruited_by = cRecruiter;
   // If the user signed up for the 6/9 Emergency Meeting through this form,
   // also flip signup_6_9_status so they appear in the 6/9 Event Tracking tab
@@ -6478,6 +6491,54 @@ async function signupsExportCsv(env, urlObj) {
   const out = [cols.join(',')];
   for (const r of rows) out.push([r.first, r.last, r.email, r.phone, r.zip, r.event, r.source, r.date].map(esc).join(','));
   return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Per-event training roster (First, Last, Email, Phone, District, Registered),
+// append-only by signup date so each person keeps the same row and a volunteer's
+// manual Reminder/Confirmed/Attended columns in the Sheet stay aligned as new
+// RSVPs land at the bottom. Training signups log method='Event attendance',
+// result='Signed up' (not 'Event RSVP'), so this matches that shape. Auth is
+// the master EXPORT_KEY or a per-event scoped token (KV roster-token:<event>).
+async function trainingRosterCsv(env, urlObj) {
+  const event = (urlObj.searchParams.get('event') || '').trim();
+  if (!event) return new Response('event required', { status: 400 });
+  const t = urlObj.searchParams.get('t') || '';
+  const key = urlObj.searchParams.get('key') || '';
+  let ok = env.EXPORT_KEY && key === env.EXPORT_KEY;
+  if (!ok && t) { const scoped = await env.KV_BINDING.get(`roster-token:${event}`); ok = scoped && t === scoped; }
+  if (!ok) return new Response('forbidden', { status: 403 });
+  const evEsc = event.replace(/'/g, "\\'");
+  const order = []; const seen = new Set(); const rdate = {};
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{result}='Signed up',{event}='${evEsc}')`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=date`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      const cid = (r.fields.contact || [])[0];
+      if (!cid || seen.has(cid)) continue;
+      seen.add(cid); order.push(cid); rdate[cid] = r.fields.date || '';
+    }
+    off = d.offset;
+  } while (off);
+  order.sort((a, b) => String(rdate[a]).localeCompare(String(rdate[b])));   // append-only: rows never reorder
+  const det = {};
+  for (let i = 0; i < order.length; i += 40) {
+    const chunk = order.slice(i, i + 40);
+    const formula = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+    const q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone&fields%5B%5D=district`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) det[r.id] = r.fields;
+  }
+  const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [['First', 'Last', 'Email', 'Phone', 'District', 'Registered'].join(',')];
+  for (const cid of order) {
+    const f = det[cid] || {};
+    const fn = String(f.first || ''), ln = String(f.last || '');
+    if (/^(test|smoke|sample|audit|final|demo|pipeline|canary)\b/i.test(fn) || /test|smoke|example|gwcanary/i.test(String(f.email || ''))) continue;   // hide QA rows from the organizer's Sheet
+    lines.push([f.first, f.last, f.email, f.phone, f.district, rdate[cid]].map(esc).join(','));
+  }
+  return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
 }
 
 async function rsvpExportCsv(env, urlObj) {
