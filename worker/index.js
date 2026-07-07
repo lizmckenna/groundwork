@@ -3809,6 +3809,8 @@ const EMAIL_EVENTS = {
     intro_event: '<strong>Voices for Small Schools of Missouri Amplifier Training</strong>',
     big_date_html: 'Sun, July 19<br/>7:00-8:00 PM CT',
     sign_off_date: 'July 19th',
+    signoff_name: 'Laci Horn', // Laci leads the Voices for Small Schools training, so she signs its confirmation
+    signoff_reply_to: 'lacihorn8@gmail.com',
     zoom_link: null, // live link is in KV (zoomlink:amp_7_19); stays null so KV is the single source
   },
 };
