@@ -28,9 +28,9 @@ function setUp(){
   sh.setRowHeight(1,44);
   sh.setFrozenRows(2);
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction()==='refreshAMP') ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger('refreshAMP').timeBased().everyMinutes(1).create();
+  ScriptApp.newTrigger('refreshAMP').timeBased().everyMinutes(5).create();   // 5-min, not 1-min: every-minute across trackers blows the daily urlfetch quota
   refreshAMP();
-  ss.toast('Amplifier tracker is live. Refreshes every minute.', 'Groundwork', 5);
+  ss.toast('Amplifier tracker is live. Refreshes every 5 minutes.', 'Groundwork', 5);
 }
 
 function refreshAMP(){

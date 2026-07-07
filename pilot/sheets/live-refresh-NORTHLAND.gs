@@ -15,9 +15,9 @@ function setUp(){
   sh.getRange(2,M_START+1,400,1).setDataValidation(dv(LEADS));
   sh.getRange(2,M_START+2,400,1).setDataValidation(dv(STATUS));
   ScriptApp.getProjectTriggers().forEach(t=>{if(t.getHandlerFunction()==='refreshRSVPs')ScriptApp.deleteTrigger(t);});
-  ScriptApp.newTrigger('refreshRSVPs').timeBased().everyMinutes(1).create();
+  ScriptApp.newTrigger('refreshRSVPs').timeBased().everyMinutes(5).create();   // 5-min, not 1-min: every-minute across trackers blows the daily urlfetch quota
   refreshRSVPs();
-  SpreadsheetApp.getUi().alert('Set: live refresh + Claimed by / Reminder columns that survive refreshes.');
+  SpreadsheetApp.getUi().alert('Set: live refresh (every 5 minutes) + Claimed by / Reminder columns that survive refreshes.');
 }
 function refreshRSVPs(){
   const sh=SpreadsheetApp.getActive().getSheetByName(TAB); if(!sh)return;
@@ -74,9 +74,9 @@ function writeStats(){
 
 function installStats(){
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction()==='writeStats') ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger('writeStats').timeBased().everyMinutes(1).create();
+  ScriptApp.newTrigger('writeStats').timeBased().everyMinutes(5).create();    // 5-min, not 1-min: every-minute across trackers blows the daily urlfetch quota
   writeStats();
-  SpreadsheetApp.getUi().alert('Pizza + childcare counts added to the Goals tab, refreshing every minute. Your RSVP list and all claims were not touched.');
+  SpreadsheetApp.getUi().alert('Pizza + childcare counts added to the Goals tab, refreshing every 5 minutes. Your RSVP list and all claims were not touched.');
 }
 
 function addAttendance(){
