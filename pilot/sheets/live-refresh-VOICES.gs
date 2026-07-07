@@ -1,0 +1,148 @@
+// ============================================================================
+//  Voices for Small Schools Amplifier Training 7/19 — live RSVP tracker
+//  Paste into Extensions → Apps Script, Save, then run setUp() once.
+//  A "🔄 Groundwork" menu appears on reload; RSVPs refresh every minute.
+//  Attendance you mark in column I writes back to the Groundwork database.
+// ============================================================================
+const TOKEN = 'voices719-ca4a6651924de818';                                  // scoped to THIS event only — never the master key
+const EVENT = 'Voices for Small Schools Amplifier Training 7/19';
+const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
+const TAB = 'RSVPs (live)';
+
+const TITLE = 'Voices for Small Schools · 7/19 · 7 PM CT — RSVP Tracker';
+const DATA_COLS = 6;              // First, Last, Email, Phone, District, Registered
+const EMAIL_COL = 3;             // column C
+const BANNER = 1, HDR = 2, FIRST = 3;   // row 1 banner, row 2 header, data from row 3
+
+const MANUAL = ['Assigned to', 'Reminder status', 'Attendance', 'Notes'];
+const M_START = DATA_COLS + 1;   // column G
+const N = MANUAL.length;
+const ATT_COL = M_START + 2;     // column I — Attendance
+
+const ASSIGNEES = ['Laci Horn', 'Molly', 'Liz'];                             // pick one, or type any other name
+const REMINDERS = ['Not started', 'Texted', 'Called', 'Left message', 'Confirmed', 'No answer', 'Declined'];
+const ATTEND    = ['Attended', 'No-show'];
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('🔄 Groundwork')
+    .addItem('Refresh RSVPs now', 'refreshVoices')
+    .addItem('Set up / repair tracker', 'setUp')
+    .addToUi();
+}
+
+function setUp() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(TAB);
+  if (!sh) sh = ss.insertSheet(TAB);
+  const width = DATA_COLS + N;   // A..J
+
+  // Banner row.
+  sh.getRange(BANNER, 1, 1, width).merge()
+    .setValue(TITLE).setFontColor('#FFFFFF').setBackground('#2F5E3D')
+    .setFontWeight('bold').setFontSize(13).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  sh.setRowHeight(BANNER, 34);
+
+  // Header row: data headers filled by refresh; manual headers here.
+  sh.getRange(HDR, M_START, 1, N).setValues([MANUAL]);
+  sh.getRange(HDR, 1, 1, width).setFontWeight('bold').setBackground('#DDE7DE').setVerticalAlignment('middle');
+  sh.setFrozenRows(HDR);
+
+  // Dropdowns (allow-invalid so you can type a name/status that isn't listed).
+  const dv = v => SpreadsheetApp.newDataValidation().requireValueInList(v, true).setAllowInvalid(true).build();
+  sh.getRange(FIRST, M_START,     500, 1).setDataValidation(dv(ASSIGNEES));   // Assigned to
+  sh.getRange(FIRST, M_START + 1, 500, 1).setDataValidation(dv(REMINDERS));   // Reminder status
+  sh.getRange(FIRST, ATT_COL,     500, 1).setDataValidation(dv(ATTEND));      // Attendance
+
+  applyPills(sh);
+  setColumnWidths(sh);
+
+  // Minute refresh.
+  ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'refreshVoices') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('refreshVoices').timeBased().everyMinutes(1).create();
+
+  // Attendance write-back.
+  ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'onAttendanceEdit') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('onAttendanceEdit').forSpreadsheet(ss).onEdit().create();
+
+  refreshVoices();
+  SpreadsheetApp.getUi().alert('Set up. RSVPs refresh every minute. Assigned-to / Reminder / Notes are yours and survive refreshes. Marking Attendance (column I) writes back to the database.');
+}
+
+// Colored "pills" via conditional formatting on the Reminder + Attendance columns.
+function applyPills(sh) {
+  const green = '#CDEBD6', rose = '#F3D3D1', amber = '#FBE2BE', grey = '#E7E7E1';
+  const rng = c => sh.getRange(FIRST, c, 500, 1);
+  const rule = (c, text, bg, fg) => SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo(text).setBackground(bg).setFontColor(fg || '#1A2418').setRanges([rng(c)]).build();
+  const rules = [
+    rule(M_START + 1, 'Confirmed', green), rule(M_START + 1, 'Declined', rose),
+    rule(M_START + 1, 'No answer', rose),  rule(M_START + 1, 'Texted', amber),
+    rule(M_START + 1, 'Called', amber),    rule(M_START + 1, 'Left message', amber),
+    rule(M_START + 1, 'Not started', grey),
+    rule(ATT_COL, 'Attended', green),      rule(ATT_COL, 'No-show', rose),
+  ];
+  sh.setConditionalFormatRules(rules);
+}
+
+function setColumnWidths(sh) {
+  const w = [90, 90, 210, 120, 150, 90, 100, 130, 100, 220];
+  for (let i = 0; i < w.length; i++) sh.setColumnWidth(i + 1, w[i]);
+}
+
+function refreshVoices() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(TAB); if (!sh) return;
+  const last = sh.getLastRow();
+  const byEmail = {}, byNP = {};
+  const npKey = (f, l, p) => String(f || '').trim().toLowerCase() + '|' + String(l || '').trim().toLowerCase() + '|' + String(p || '').replace(/\D/g, '').slice(-10);
+
+  // 1. Save the manual columns FIRST, keyed by email and by name+phone (fallback).
+  if (last >= FIRST) {
+    const d = sh.getRange(FIRST, 1, last - HDR, DATA_COLS).getValues();
+    const m = sh.getRange(FIRST, M_START, last - HDR, N).getValues();
+    for (let i = 0; i < d.length; i++) {
+      if (!m[i].some(v => v !== '')) continue;
+      const k = String(d[i][EMAIL_COL - 1] || '').trim().toLowerCase(); if (k) byEmail[k] = m[i];
+      byNP[npKey(d[i][0], d[i][1], d[i][3])] = m[i];
+    }
+  }
+
+  // 2. Fetch — BAIL OUT without touching the sheet if anything is wrong.
+  const url = WORKER + '/export/training-roster.csv?t=' + encodeURIComponent(TOKEN) +
+              '&event=' + encodeURIComponent(EVENT) + '&t2=' + Date.now();
+  const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (resp.getResponseCode() !== 200) return;
+  const rows = Utilities.parseCsv(resp.getContentText());
+  if (rows.length < 2) return;                                               // header-only -> never wipe
+  const hdr = rows[0].map(h => String(h).toLowerCase());
+  if (hdr.indexOf('email') === -1 && hdr.indexOf('first') === -1) return;    // not our CSV -> never wipe
+  const body = rows.slice(1); if (!body.length) return;
+
+  // 3. Safe to rewrite the DATA columns (manual columns untouched below).
+  if (last >= FIRST) sh.getRange(FIRST, 1, last - HDR, DATA_COLS).clearContent();
+  sh.getRange(HDR, 1, 1, DATA_COLS).setValues([rows[0].slice(0, DATA_COLS)]).setFontWeight('bold');
+  sh.getRange(FIRST, 1, body.length, DATA_COLS).setValues(body.map(r => r.slice(0, DATA_COLS)));
+
+  // 4. Restore the manual columns onto the matching rows.
+  sh.getRange(FIRST, M_START, body.length, N).setValues(body.map(r => {
+    const em = String(r[2] || '').trim().toLowerCase();
+    return byEmail[em] || byNP[npKey(r[0], r[1], r[3])] || new Array(N).fill('');
+  }));
+}
+
+// Marking Attendance (column I) posts back to the database.
+function onAttendanceEdit(e) {
+  if (!e || !e.range) return;
+  const sh = e.range.getSheet();
+  if (sh.getName() !== TAB) return;
+  if (e.range.getColumn() > ATT_COL || e.range.getLastColumn() < ATT_COL) return;
+  const r0 = Math.max(e.range.getRow(), FIRST), r1 = e.range.getLastRow();
+  const marks = [];
+  for (let r = r0; r <= r1; r++) {
+    const email = String(sh.getRange(r, EMAIL_COL).getValue() || '').trim();
+    if (!email) continue;
+    marks.push({ email: email, status: String(sh.getRange(r, ATT_COL).getValue() || '').trim() });
+  }
+  if (!marks.length) return;
+  UrlFetchApp.fetch(WORKER + '/sheet-attendance?key=' + encodeURIComponent(TOKEN),
+    { method: 'post', contentType: 'application/json', payload: JSON.stringify({ event: EVENT, marks: marks }), muteHttpExceptions: true });
+}
