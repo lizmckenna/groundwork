@@ -349,6 +349,105 @@ export default {
         if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
         return json(await syncAttendanceMirror(env));
       }
+      // Reroute confirmees for a given event: for anyone signed up whose assigned_organizer
+      // is NOT LaNeé or Stephanie (parent-leader / unassigned), derive the correct organizer
+      // from geo and reassign. Dry-run by default; add &apply=1 to actually write.
+      if (url.pathname === '/admin/reroute-confirmees' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const ev = url.searchParams.get('event') || '7_7';
+        const apply = url.searchParams.get('apply') === '1';
+        const meta = eventMeta(ev);
+        const signupClause = meta.signupField
+          ? `{${meta.signupField}}='Signed up'`
+          : `{last_attempt_result}='Signed up'`;
+        const rows = [];
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(signupClause)}&pageSize=100&fields%5B%5D=Name&fields%5B%5D=assigned_organizer&fields%5B%5D=city&fields%5B%5D=county&fields%5B%5D=zip&fields%5B%5D=district`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        const targets = [];
+        for (const r of rows) {
+          const raw = r.fields.assigned_organizer;
+          const linked = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+          const orgIds = linked.map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+          const isLanee = orgIds.includes(LANEE_ID);
+          const isSteph = orgIds.includes(STEPHANIE_ID);
+          if (isLanee || isSteph) continue;
+          const derived = deriveOrganizerId({
+            county: r.fields.county, city: r.fields.city, zip: r.fields.zip, district: r.fields.district,
+          }) || STEPHANIE_ID;
+          targets.push({
+            id: r.id, name: r.fields.Name || '(no name)',
+            from: orgIds.map(id => ORGANIZER_NAME_BY_ID[id] || id).join(', ') || '(unassigned)',
+            to: ORGANIZER_NAME_BY_ID[derived] || derived,
+            to_id: derived,
+            city: r.fields.city || '', county: r.fields.county || '', zip: r.fields.zip || '',
+          });
+        }
+        if (apply && targets.length) {
+          for (let i = 0; i < targets.length; i += 10) {
+            const batch = targets.slice(i, i + 10).map(t => ({
+              id: t.id,
+              fields: { assigned_organizer: [t.to_id] },
+            }));
+            await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+          }
+          await invalidateReadCaches(env);
+        }
+        return json({ event: ev, dry_run: !apply, count: targets.length, targets });
+      }
+      // Confirm-queue split by organizer for a given event. Reports counts + any
+      // overlap between LaNeé and Stephanie (should always be zero — routing is
+      // exclusive by the assigned_organizer field).
+      if (url.pathname === '/admin/event-split' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const ev = url.searchParams.get('event') || '7_7';
+        const meta = eventMeta(ev);
+        const signupClause = meta.signupField
+          ? `{${meta.signupField}}='Signed up'`
+          : `{last_attempt_result}='Signed up'`;
+        const rows = [];
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(signupClause)}&pageSize=100&fields%5B%5D=Name&fields%5B%5D=assigned_organizer`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        // assigned_organizer may be a linked-record array OR a string (lookup field).
+        const counts = { lanee: [], stephanie: [], other: [], unassigned: [] };
+        for (const r of rows) {
+          const raw = r.fields.assigned_organizer;
+          const linked = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+          const orgIds = linked.map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+          const orgNames = orgIds.map(id => ORGANIZER_NAME_BY_ID[id] || id);
+          const name = r.fields.Name || '(no name)';
+          const isLanee = orgIds.includes(LANEE_ID) || orgNames.some(n => String(n).toLowerCase().includes('lane'));
+          const isSteph = orgIds.includes(STEPHANIE_ID) || orgNames.some(n => String(n).toLowerCase().includes('rittgers') || String(n).toLowerCase().includes('stephanie'));
+          if (!orgIds.length) counts.unassigned.push(name);
+          else if (isLanee) counts.lanee.push(name);
+          else if (isSteph) counts.stephanie.push(name);
+          else counts.other.push(`${name} → ${orgNames.join(', ')}`);
+        }
+        const laneeSet = new Set(counts.lanee);
+        const overlap = counts.stephanie.filter(n => laneeSet.has(n));
+        return json({
+          event: ev, total: rows.length,
+          lanee: counts.lanee.length,
+          stephanie: counts.stephanie.length,
+          other_count: counts.other.length,
+          unassigned_count: counts.unassigned.length,
+          overlap: overlap.length,
+          overlap_names: overlap,
+          other: counts.other,
+          unassigned: counts.unassigned,
+        });
+      }
       if (url.pathname === '/export/scoreboard.csv' && request.method === 'GET') return await scoreboardExportCsv(env, url);
       if (url.pathname === '/export/recruit-chains.csv' && request.method === 'GET') return await recruitChainsExportCsv(env, url);
       if (url.pathname === '/board/data.json' && request.method === 'GET') return await boardData(env, url);
@@ -4297,6 +4396,9 @@ ${calButtonsHtml}
 
   // Log against the EVENT'S confirm tag (was hardcoded to 'Confirm 5/26',
   // which meant 6/9+ zoom sends never showed as email_sent on their tabs).
+  // Result is 'Zoom link sent' — a distinct value from the manual confirmation funnel
+  // (Reminder sent / Confirmed / Cancelled) so the attendance-mirror sync doesn't
+  // conflate an automated Zoom send with a hand-sent reminder LaNeé actually made.
   await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
     method: 'POST',
     body: JSON.stringify({
@@ -4305,7 +4407,7 @@ ${calButtonsHtml}
           Summary: `${date} — Email (auto Zoom confirm)`,
           date,
           method: 'Email',
-          result: 'Reminder sent',
+          result: 'Zoom link sent',
           event: eventMeta(String(eventKey || '5_26')).confirmEvent,
           contact: [contactId],
           notes: 'Auto-sent Zoom confirmation on signup',
@@ -5902,12 +6004,19 @@ async function syncAttendanceMirror(env) {
     for (const r of d.records) evByName[r.fields.Name] = r.id;
   }
 
-  // 4b. confirmation-flow results (Reminder sent / Confirmed / Cancelled) -> reminder_status on the mirror row.
-  // Rank order: Cancelled outranks Confirmed outranks Reminder sent (each is a "later" state in the funnel).
-  const remind = {}; // 'cid|evid' -> 'Reminder sent'|'Confirmed'|'Cancelled'
+  // 4b. Confirmation-flow signals -> attendance-mirror columns:
+  //   - reminder_status: manual funnel value (Reminder sent / Confirmed / Cancelled).
+  //     Rank: Cancelled > Confirmed > Reminder sent. Auto-Zoom-sent rows are excluded
+  //     (their result is 'Zoom link sent', so they don't hit this branch anyway; the
+  //     `notes` filter is a belt-and-suspenders check for the old auto-log rows that
+  //     stored 'Reminder sent' before the July fix).
+  //   - zoom_link_sent: 'Yes' if the auto-Zoom confirmation email fired for this
+  //     (contact, event) — helps distinguish "we sent the link" from "LaNeé texted".
+  const remind = {};      // 'cid|evid' -> 'Reminder sent'|'Confirmed'|'Cancelled'
+  const zoomSent = {};    // 'cid|evid' -> true if the auto-Zoom email has fired
   off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`OR({result}='Reminder sent',{result}='Confirmed',{result}='Cancelled')`)}&pageSize=100&fields%5B%5D=result&fields%5B%5D=event&fields%5B%5D=rsvp_launch&fields%5B%5D=contact`;
+    let q = `?filterByFormula=${encodeURIComponent(`OR({result}='Reminder sent',{result}='Confirmed',{result}='Cancelled',{result}='Zoom link sent')`)}&pageSize=100&fields%5B%5D=result&fields%5B%5D=event&fields%5B%5D=rsvp_launch&fields%5B%5D=contact&fields%5B%5D=notes`;
     if (off) q += `&offset=${off}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
     for (const r of d.records) {
@@ -5921,24 +6030,32 @@ async function syncAttendanceMirror(env) {
       else { const ln = (rl || evLabel).replace(/^confirm\s+/i, '').trim(); if (evByName[ln]) name = ln; }
       if (!name) continue;
       const evid = evByName[name];
+      const isAuto = String(f.notes || '').includes('Auto-sent');
       for (const cid of (f.contact || [])) {
         const k = cid + '|' + evid;
+        // Auto-sent rows (or explicitly 'Zoom link sent') feed only zoom_link_sent.
+        if (isAuto || f.result === 'Zoom link sent') { zoomSent[k] = true; continue; }
         if ((REMIND_RANK[f.result] || 0) > (REMIND_RANK[remind[k]] || 0)) remind[k] = f.result;
       }
     }
     off = d.offset;
   } while (off);
 
-  // 5. existing mirror rows -> create missing / upgrade status / fill reminder_status
-  const have = {}; // 'cid|evid' -> {id, status, remind}
+  // 5. existing mirror rows -> create missing / upgrade status / fill reminder_status / fill zoom_link_sent
+  const have = {}; // 'cid|evid' -> {id, status, remind, zoom}
   off = null;
   do {
-    let q = `?pageSize=100&fields%5B%5D=contact&fields%5B%5D=event&fields%5B%5D=attended&fields%5B%5D=reminder_status`;
+    let q = `?pageSize=100&fields%5B%5D=contact&fields%5B%5D=event&fields%5B%5D=attended&fields%5B%5D=reminder_status&fields%5B%5D=zoom_link_sent`;
     if (off) q += `&offset=${off}`;
     const d = await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}${q}`);
     for (const r of d.records) {
       const c = (r.fields.contact || [])[0], e = (r.fields.event || [])[0];
-      if (c && e) have[c + '|' + e] = { id: r.id, status: r.fields.attended || '', remind: r.fields.reminder_status || '' };
+      if (c && e) have[c + '|' + e] = {
+        id: r.id,
+        status: r.fields.attended || '',
+        remind: r.fields.reminder_status || '',
+        zoom: r.fields.zoom_link_sent || '',
+      };
     }
     off = d.offset;
   } while (off);
@@ -5953,21 +6070,33 @@ async function syncAttendanceMirror(env) {
     if (!cur) {
       const f = { contact: [cid], event: [evid], attended: status };
       if (remind[mk]) f.reminder_status = remind[mk];
+      if (zoomSent[mk]) f.zoom_link_sent = 'Yes';
       creates.push({ fields: f });
     } else if ((MIRROR_RANK[status] || 0) > (MIRROR_RANK[cur.status] || 0)) {
       (updates[cur.id] = updates[cur.id] || {}).attended = status;
     }
   }
-  // reminder_status fills only where mirror cell is empty OR the new value ranks higher
-  // in the funnel (Cancelled > Confirmed > Reminder sent). We treat non-tracked strings
-  // (manual entries the team typed) as rank 0 — so anything from the sync will overwrite
-  // untypeable/unknown values, but Confirmed won't clobber a Cancelled that already synced.
-  for (const [mk, res] of Object.entries(remind)) {
+  // reminder_status: rank-based upgrade (Cancelled > Confirmed > Reminder sent).
+  // Also CLEAR reminder_status when the mirror cell holds a funnel value but no manual
+  // signal remains in contact_log — this scrubs rows the pre-fix auto-log had populated.
+  for (const mk of Object.keys(have)) {
     const cur = have[mk];
-    if (!cur) continue;
-    const curRank = REMIND_RANK[cur.remind] || 0;
-    const newRank = REMIND_RANK[res] || 0;
-    if (!cur.remind || newRank > curRank) (updates[cur.id] = updates[cur.id] || {}).reminder_status = res;
+    const newVal = remind[mk] || null;
+    const curInFunnel = !!REMIND_RANK[cur.remind];
+    if (newVal) {
+      const curRank = REMIND_RANK[cur.remind] || 0;
+      const newRank = REMIND_RANK[newVal] || 0;
+      if (!cur.remind || newRank > curRank) (updates[cur.id] = updates[cur.id] || {}).reminder_status = newVal;
+    } else if (curInFunnel) {
+      // Pre-fix rows had auto-Zoom sends logged as 'Reminder sent'. Clear those so the
+      // column reflects only manual work going forward.
+      (updates[cur.id] = updates[cur.id] || {}).reminder_status = '';
+    }
+  }
+  // zoom_link_sent: 'Yes' if the auto-Zoom email fired. Never downgrades.
+  for (const [mk, sent] of Object.entries(zoomSent)) {
+    const cur = have[mk];
+    if (cur && sent && cur.zoom !== 'Yes') (updates[cur.id] = updates[cur.id] || {}).zoom_link_sent = 'Yes';
   }
   const updList = Object.entries(updates).map(([id, fields]) => ({ id, fields }));
   for (let i = 0; i < creates.length; i += 10) await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}`, { method: 'POST', body: JSON.stringify({ records: creates.slice(i, i + 10), typecast: true }) });
@@ -6589,16 +6718,18 @@ async function trainingRosterCsv(env, urlObj) {
   if (!ok && t) { const scoped = await env.KV_BINDING.get(`roster-token:${event}`); ok = scoped && t === scoped; }
   if (!ok) return new Response('forbidden', { status: 403 });
   const evEsc = event.replace(/'/g, "\\'");
-  const order = []; const seen = new Set(); const rdate = {};
+  const order = []; const seen = new Set(); const rdate = {}; const recruited = {};
   let off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{result}='Signed up',{event}='${evEsc}')`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=date`;
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{result}='Signed up',{event}='${evEsc}')`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=date&fields%5B%5D=notes`;
     if (off) q += `&offset=${encodeURIComponent(off)}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
     for (const r of d.records) {
       const cid = (r.fields.contact || [])[0];
       if (!cid || seen.has(cid)) continue;
       seen.add(cid); order.push(cid); rdate[cid] = r.fields.date || '';
+      const m = String(r.fields.notes || '').match(/Recruited by:\s*([^|]+)/);   // self-reported "who told you" — stored in the signup log notes
+      recruited[cid] = m ? m[1].trim() : '';
     }
     off = d.offset;
   } while (off);
@@ -6612,12 +6743,12 @@ async function trainingRosterCsv(env, urlObj) {
     for (const r of d.records) det[r.id] = r.fields;
   }
   const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [['First', 'Last', 'Email', 'Phone', 'District', 'School', 'Registered'].join(',')];
+  const lines = [['First', 'Last', 'Email', 'Phone', 'District', 'School', 'Registered', 'Who told you about this training?'].join(',')];
   for (const cid of order) {
     const f = det[cid] || {};
     const fn = String(f.first || ''), ln = String(f.last || '');
     if (/^(test|smoke|sample|audit|final|demo|pipeline|canary)\b/i.test(fn) || /test|smoke|example|gwcanary/i.test(String(f.email || ''))) continue;   // hide QA rows from the organizer's Sheet
-    lines.push([f.first, f.last, f.email, f.phone, f.district, f.school, rdate[cid]].map(esc).join(','));
+    lines.push([f.first, f.last, f.email, f.phone, f.district, f.school, rdate[cid], recruited[cid]].map(esc).join(','));
   }
   return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
 }
