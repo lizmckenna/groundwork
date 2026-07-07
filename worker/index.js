@@ -3928,7 +3928,9 @@ function calendarLinks(eventKey, ev) {
   const su = new Date(Date.UTC(Y, Mo - 1, D, h + off, m));
   const eu = new Date(Date.UTC(Y, Mo - 1, D, h + off, m + dur));
   const isoZ = d => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00Z`;
-  const title = ['onboarding', 'legacy', 'makeup'].includes(meta.type)
+  const title = meta.icsTitle
+    ? meta.icsTitle
+    : ['onboarding', 'legacy', 'makeup'].includes(meta.type)
     ? 'No on 5 Onboarding (Parents for Missouri Public Schools)'
     : `${meta.label} (Parents for Missouri Public Schools)`;
   const link = (ev && ev.zoom_link) || '';
