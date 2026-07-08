@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Working in Airtable · A guide for LaNeé, Stephanie & Kathryn</title>
+<title>Working in Airtable · A guide for fellows and organizers</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
@@ -183,7 +183,7 @@ code, .formula{
     <a href="#list">Find your list</a>
     <a href="#log">Log a call or text</a>
     <a href="#retire">Retire a contact</a>
-    <a href="#onetoone">Schedule a 1:1</a>
+    <a href="#onetoone">Log a 1-on-1</a>
     <a href="#cheat">Cheat sheet</a>
   </div>
 
@@ -375,43 +375,40 @@ code, .formula{
     <div class="note"><b>Why we don't delete:</b> the whole point of the base is to remember context. If someone calls back in six months around a different campaign moment, you want to know "we already talked to her, here's what she said." Deleting destroys that. Flagging preserves it AND keeps them out of your daily call queue.</div>
   </section>
 
-  <!-- SECTION 4 — 1:1 scheduling -->
+  <!-- SECTION 4 — 1:1 form -->
   <section class="s-onetoone" id="onetoone">
-    <h2><span class="num">4</span>Track a scheduled 1:1</h2>
-    <p class="section-sub">Same pattern as a regular call log, but with one or two extra fields. We don't have a dedicated "1:1" object yet — use this convention until Groundwork has one.</p>
+    <h2><span class="num">4</span>Log a 1-on-1</h2>
+    <p class="section-sub">There's now a dedicated form for this — no more digging into contact_log rows. Fill it out right after the conversation while it's fresh.</p>
 
     <div class="step">
-      <div class="step-label">When you schedule it</div>
-      <h3>Log it like any conversation, but be explicit in notes</h3>
-      <div class="example">
-        <div class="ex-label">Example: scheduling a 1:1 with someone who came to 5/26</div>
-        <dl class="kv">
-          <dt>date</dt><dd>2026-05-28 (date you scheduled it, not date of 1:1)</dd>
-          <dt>method</dt><dd>Call</dd>
-          <dt>result</dt><dd>Conversation</dd>
-          <dt>event</dt><dd class="optional">leave blank</dd>
-          <dt>notes</dt><dd><b>1:1 scheduled for Thu June 5 at 7pm CT, Zoom (I'll send link).</b> She wants to talk about resolution at her school board.</dd>
-        </dl>
-      </div>
-      <p>The pattern: start the notes with <b>"1:1 scheduled for [day, date, time]"</b>. That makes it searchable later — you can filter for "1:1 scheduled" in notes and instantly see all your upcoming 1:1s.</p>
+      <div class="step-label">Where</div>
+      <h3><a href="https://parents4mopublicschools.org/1-on-1/" target="_blank" rel="noopener" style="color:var(--rose);font-weight:800;text-decoration:none;border-bottom:2px solid var(--rose);">parents4mopublicschools.org/1-on-1/</a></h3>
+      <p>Bookmark it on your phone. Please don't post the URL publicly — it's for fellows and organizers only.</p>
     </div>
 
     <div class="step">
-      <div class="step-label">When the 1:1 happens</div>
-      <h3>Log a second row — what came out of it</h3>
-      <div class="example">
-        <div class="ex-label">Example: after the 1:1</div>
-        <dl class="kv">
-          <dt>date</dt><dd>2026-06-05 (date of the actual 1:1)</dd>
-          <dt>method</dt><dd>Other</dd>
-          <dt>result</dt><dd>Conversation</dd>
-          <dt>event</dt><dd>1:1 meeting</dd>
-          <dt>notes</dt><dd>Met for 40 min. She's drafting a board resolution + asked for talking points. Committed to host a house meeting in July. Next step: send her the toolkit + check in next Friday.</dd>
-        </dl>
-      </div>
+      <div class="step-label">How it works</div>
+      <h3>Three steps, ~90 seconds total</h3>
+      <ol style="margin:8px 0 0 22px;padding:0;line-height:1.65">
+        <li><b>Pick your name</b> from the top dropdown — so we know who had the 1-on-1.</li>
+        <li><b>Search for the person</b> you met with. Autocomplete pulls from the database. If they're already there, click their row and the form skips to the content. If not, click <b>"＋ Add them as a new contact"</b> and fill in as much as you know (name, email, phone, city, zip — the more the better).</li>
+        <li><b>Answer the 1-on-1 questions</b>: their self-interest, what they committed to (pick as many as apply), notes, and your next step.</li>
+      </ol>
     </div>
 
-    <div class="note"><b>Better solution coming:</b> Groundwork will add a dedicated 1:1 type with a date picker and follow-up reminders. Until then, the notes-field convention is the simplest way to keep things visible.</div>
+    <div class="step">
+      <div class="step-label">What happens after you submit</div>
+      <h3>The form does five things at once</h3>
+      <ol style="margin:8px 0 0 22px;padding:0;line-height:1.65">
+        <li><b>Creates a row in the <code>one_on_ones</code> table</b> linked to the contact.</li>
+        <li><b>Dedupes carefully</b>: if the person is already in the database under a slightly different name, we match on email → phone → exact first+last (single-match only). No duplicates.</li>
+        <li><b>Writes back to the contact:</b> "Host house meeting" sets <code>house_meeting_date</code>. "Recruit others" sets <code>wants_to_volunteer</code>. "Amplifier training" sets <code>amplifier_status</code>. All commitments go into <code>amendment5_commitments</code> so the dashboards see them.</li>
+        <li><b>Logs a <code>contact_log</code> row</b> so the person's history reads chronologically alongside their call/text history.</li>
+        <li><b>Auto-routes the contact</b> (if it's a new one) to LaNeé or Stephanie based on their zip / county / city.</li>
+      </ol>
+    </div>
+
+    <div class="note"><b>What to capture — the important ones:</b> <b>self-interest</b> ("their why" — what's actually driving them, in their words) and <b>commitments</b> (what they said "yes" to). Everything else is nice-to-have. If you have 30 seconds, do those two and hit submit.</div>
   </section>
 
   <!-- SECTION 5 — Cheat sheet -->
@@ -450,14 +447,14 @@ code, .formula{
             <td>signup_6_9_status = "Signed up"</td>
           </tr>
           <tr>
-            <td><b>Schedule a 1:1</b></td>
-            <td>Add a new Contact Log row</td>
-            <td>notes starts with "1:1 scheduled for [day/time]"</td>
+            <td><b>Log a 1-on-1</b></td>
+            <td>The form: parents4mopublicschools.org/1-on-1/</td>
+            <td>Pick your name, search for the person, answer the questions, submit.</td>
           </tr>
           <tr>
-            <td><b>See all my upcoming 1:1s</b></td>
-            <td>Contact Log table</td>
-            <td>Filter: notes contains "1:1 scheduled"</td>
+            <td><b>See all 1-on-1s</b></td>
+            <td><code>one_on_ones</code> table in Airtable</td>
+            <td>Filter by <code>fellow_who_had_it</code> to see yours.</td>
           </tr>
           <tr>
             <td><b>Skip someone (they asked to stop)</b></td>
