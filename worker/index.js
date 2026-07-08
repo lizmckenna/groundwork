@@ -514,6 +514,218 @@ export default {
       // same key the turnout Sheets already carry). Leads mark Attended/No-show in
       // the Sheet; this upserts the 'Event attendance' rows the dashboard counts.
       if (url.pathname === '/sheet-attendance' && request.method === 'POST') return await sheetAttendance(request, env);
+      // Probe: for a given fellow, list every contact_log row on contacts they
+      // own, so we can eyeball which are 1:1s regardless of notes phrasing.
+      if (url.pathname === '/admin/list-fellow-logs' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const fname = (url.searchParams.get('fellow') || '').toLowerCase().trim();
+        const fid = Object.entries(ORGANIZER_NAME_BY_ID).find(([, n]) => n.toLowerCase() === fname)?.[0];
+        if (!fid) return json({ error: 'unknown fellow' }, 400);
+        const fullName = ORGANIZER_NAME_BY_ID[fid];
+        // Linked-record fields render as their primary-field display name in
+        // formula ARRAYJOIN, not the record ID. So filter by name string.
+        const contactIds = [];
+        let off = null;
+        do {
+          const fesc = fullName.replace(/'/g, "\\'");
+          let q = `?filterByFormula=${encodeURIComponent(`OR(FIND('${fesc}',{assigned_organizer}&'')>0,FIND('${fesc}',{organized_by}&'')>0,FIND('${fesc}',{relational_owner}&'')>0,FIND('${fesc}',{owns_relationship_with}&'')>0)`)}&pageSize=100&fields%5B%5D=Name`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          for (const r of p.records) contactIds.push({ id: r.id, name: r.fields.Name || '' });
+          off = p.offset;
+        } while (off);
+        // For each contact, fetch its contact_log rows
+        const logs = [];
+        for (const c of contactIds) {
+          try {
+            const q = `?filterByFormula=${encodeURIComponent(`FIND('${c.id}',ARRAYJOIN({contact}))>0`)}&pageSize=100&fields%5B%5D=date&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=notes&fields%5B%5D=event&fields%5B%5D=Summary`;
+            const p = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+            for (const r of p.records) logs.push({
+              log_id: r.id, contact_id: c.id, contact_name: c.name,
+              date: r.fields.date || '', method: r.fields.method || '',
+              result: r.fields.result || '', event: r.fields.event || '',
+              summary: r.fields.Summary || '',
+              notes: (r.fields.notes || '').slice(0, 300),
+            });
+          } catch (e) {}
+        }
+        return json({
+          fellow: fname, contacts_owned: contactIds.length,
+          logs_total: logs.length,
+          logs: logs.sort((a, b) => (b.date || '').localeCompare(a.date || '')),
+        });
+      }
+      // One-time: rename the "who led it" field on the one_on_ones table.
+      // Handles any legacy names (fellow_who_had_it, led_by) → person.
+      if (url.pathname === '/admin/rename-1on1-field' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const target = url.searchParams.get('to') || 'person';
+        const meta = await at(env, `/meta/bases/${BASE}/tables`);
+        const tbl = (meta.tables || []).find(t => t.id === ONE_ON_ONES_TBL);
+        if (!tbl) return json({ error: 'one_on_ones table not found' }, 404);
+        const field = tbl.fields.find(f => ['fellow_who_had_it', 'led_by', 'person'].includes(f.name));
+        if (!field) return json({ status: 'no matching field' });
+        if (field.name === target) return json({ status: 'already_named', field_id: field.id });
+        await at(env, `/meta/bases/${BASE}/tables/${ONE_ON_ONES_TBL}/fields/${field.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: target }),
+        });
+        return json({ status: 'renamed', from: field.name, to: target, field_id: field.id });
+      }
+      // Rollback: delete any one_on_ones rows tagged as migrated from contact_log.
+      if (url.pathname === '/admin/rollback-1on1-migration' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const apply = url.searchParams.get('apply') === '1';
+        const rows = [];
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`FIND('migrated from contact_log',{source}&'')>0`)}&pageSize=100&fields%5B%5D=source&fields%5B%5D=date&fields%5B%5D=contact`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${ONE_ON_ONES_TBL}${q}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        if (apply && rows.length) {
+          for (let i = 0; i < rows.length; i += 10) {
+            const params = new URLSearchParams();
+            for (const r of rows.slice(i, i + 10)) params.append('records[]', r.id);
+            await at(env, `/${BASE}/${ONE_ON_ONES_TBL}?${params.toString()}`, { method: 'DELETE' });
+          }
+        }
+        return json({ dry_run: !apply, count: rows.length, deleted: apply ? rows.length : 0 });
+      }
+      // One-time migration: port already-logged 1-on-1s from contact_log into the
+      // new one_on_ones table. Matches either the "1:1 scheduled" notes convention
+      // (per the old Airtable guide) OR contact_log rows with event='1:1 meeting'.
+      // Optional &fellow=<name> restricts to contacts assigned to that fellow.
+      // Idempotent — skips any (contact, date) pair already present in one_on_ones.
+      if (url.pathname === '/admin/migrate-1on1s-from-log' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const apply = url.searchParams.get('apply') === '1';
+        const fellowFilter = (url.searchParams.get('fellow') || '').toLowerCase().trim();
+        const fellowIdFilter = Object.entries(ORGANIZER_NAME_BY_ID)
+          .find(([, n]) => n.toLowerCase() === fellowFilter)?.[0] || null;
+        // Fetch matching log rows
+        const filter = `OR(FIND('1:1 scheduled',{notes}&'')>0,FIND('1-on-1',{notes}&'')>0,FIND('1:1 meeting',{event}&'')>0,FIND('1:1 with',{Summary}&'')>0,FIND('1:1 conversation',{notes}&'')>0)`;
+        const logs = [];
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100&fields%5B%5D=Summary&fields%5B%5D=date&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=notes&fields%5B%5D=event&fields%5B%5D=contact`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+          logs.push(...p.records);
+          off = p.offset;
+        } while (off);
+        // Fetch existing one_on_ones so we can dedupe on (contact, date)
+        const existing = new Set();
+        off = null;
+        do {
+          let q = `?pageSize=100&fields%5B%5D=contact&fields%5B%5D=date`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${ONE_ON_ONES_TBL}${q}`);
+          for (const r of p.records) {
+            const cid = (r.fields.contact || [])[0];
+            const d = r.fields.date || '';
+            if (cid && d) existing.add(`${cid}|${d}`);
+          }
+          off = p.offset;
+        } while (off);
+        // For each log row, resolve fellow name (from last-attempt or assigned_organizer)
+        // and try to pull commitment hints from notes.
+        const contactCache = new Map();
+        const getAssignedFellow = async (cid) => {
+          if (contactCache.has(cid)) return contactCache.get(cid);
+          try {
+            const r = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
+            // Try every linked-organizer field the base uses.
+            const collectIds = (raw) => {
+              const linked = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+              return linked.map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+            };
+            const orgIds = [
+              ...collectIds(r.fields.assigned_organizer),
+              ...collectIds(r.fields.organized_by),
+              ...collectIds(r.fields.relational_owner),
+              ...collectIds(r.fields.owns_relationship_with),
+            ];
+            const orgName = orgIds.map(id => ORGANIZER_NAME_BY_ID[id] || null).filter(Boolean)[0]
+              || String(r.fields.last_attempt_by || '').trim()
+              || null;
+            const info = { orgIds: [...new Set(orgIds)], orgName };
+            contactCache.set(cid, info);
+            return info;
+          } catch (e) { contactCache.set(cid, { orgIds: [], orgName: null }); return { orgIds: [], orgName: null }; }
+        };
+        const detectCommitments = (notes) => {
+          const s = String(notes || '').toLowerCase();
+          const hits = [];
+          if (/house meeting/.test(s)) hits.push('Host house meeting');
+          if (/amplifi/.test(s)) hits.push('Amplifier training');
+          if (/onboarding|attend.*(6\/|7\/)/.test(s)) hits.push('Attend next onboarding');
+          if (/recruit|bring|refer/.test(s)) hits.push('Recruit others');
+          if (/board|resolution|pta/.test(s)) hits.push('Talk to board or PTA');
+          if (/donate|donation|actblue/.test(s)) hits.push('Donate');
+          if (/volunteer|help/.test(s) && !hits.length) hits.push('Volunteer at event');
+          return hits;
+        };
+        const targets = [];
+        const filteredOut = { by_fellow: 0, already_migrated: 0, no_date: 0 };
+        for (const r of logs) {
+          const cid = (r.fields.contact || [])[0];
+          if (!cid) continue;
+          const d = r.fields.date || '';
+          if (!d) { filteredOut.no_date++; continue; }
+          const key = `${cid}|${d}`;
+          if (existing.has(key)) { filteredOut.already_migrated++; continue; }
+          const info = await getAssignedFellow(cid);
+          if (fellowIdFilter && !info.orgIds.includes(fellowIdFilter)) {
+            filteredOut.by_fellow++;
+            continue;
+          }
+          const commitments = detectCommitments(r.fields.notes);
+          targets.push({
+            log_id: r.id,
+            contact_id: cid,
+            date: d,
+            fellow_ids: info.orgIds,
+            fellow_name: info.orgName,
+            summary: r.fields.Summary || '',
+            notes: r.fields.notes || '',
+            detected_commitments: commitments,
+          });
+          existing.add(key);
+        }
+        if (apply && targets.length) {
+          const batchSize = 10;
+          for (let i = 0; i < targets.length; i += batchSize) {
+            const batch = targets.slice(i, i + batchSize).map(t => ({
+              fields: {
+                Summary: `${t.date} — ${t.fellow_name || 'fellow'} × contact (imported)`,
+                contact: [t.contact_id],
+                person: t.fellow_ids.length ? [t.fellow_ids[0]] : undefined,
+                date: t.date,
+                notes: t.notes,
+                commitments: t.detected_commitments,
+                source: 'migrated from contact_log',
+              },
+            }));
+            // Strip undefined values before send
+            for (const rec of batch) {
+              for (const k of Object.keys(rec.fields)) if (rec.fields[k] === undefined) delete rec.fields[k];
+            }
+            await at(env, `/${BASE}/${ONE_ON_ONES_TBL}`, { method: 'POST', body: JSON.stringify({ records: batch, typecast: true }) });
+          }
+        }
+        return json({
+          dry_run: !apply,
+          fellow_filter: fellowFilter || '(no filter)',
+          fellow_id_resolved: fellowIdFilter,
+          logs_scanned: logs.length,
+          candidates_found: targets.length,
+          filtered_out: filteredOut,
+          preview: targets.slice(0, 20),
+        });
+      }
       // One-time: create the one_on_ones Airtable table if it doesn't exist yet.
       // Idempotent — returns the existing table's id if it's already there.
       if (url.pathname === '/admin/create-1on1-table' && request.method === 'GET') {
@@ -5128,10 +5340,31 @@ async function searchContactPublic(request, env, url) {
   })));
 }
 
-// Public: list active fellows for the "who had this 1-on-1?" dropdown.
+// Public: list active fellows for the "who had this 1-on-1?" dropdown. Pulls
+// live from the organizers Airtable table (with a 60-second KV cache) so new
+// fellows show up in the form within a minute of being added.
 async function listFellowsPublic(env) {
-  return json(Object.entries(ORGANIZER_NAME_BY_ID).map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name)));
+  const cacheKey = 'cache:fellows-public';
+  try {
+    const cached = await env.KV_BINDING.get(cacheKey);
+    if (cached) return new Response(cached, { headers: { 'content-type': 'application/json' } });
+  } catch {}
+  const rows = [];
+  let off = null;
+  do {
+    let q = `?pageSize=100&fields%5B%5D=Name`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const p = await at(env, `/${BASE}/${ORGANIZERS_TBL}${q}`);
+    rows.push(...p.records);
+    off = p.offset;
+  } while (off);
+  const fellows = rows
+    .filter(r => (r.fields.Name || '').trim())
+    .map(r => ({ id: r.id, name: String(r.fields.Name).trim() }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const body = JSON.stringify(fellows);
+  try { await env.KV_BINDING.put(cacheKey, body, { expirationTtl: 60 }); } catch {}
+  return new Response(body, { headers: { 'content-type': 'application/json' } });
 }
 
 // Public: log a 1-on-1. Dedupes on email→phone→name, creates or links the
@@ -5200,7 +5433,7 @@ async function log1on1(request, env) {
     contact: [cid],
     date: dateStr,
   };
-  if (fellow_id) fields1on1.fellow_who_had_it = [fellow_id];
+  if (fellow_id) fields1on1.person = [fellow_id];
   if (clean(self_interest)) fields1on1.self_interest = clean(self_interest);
   if (clean(notes)) fields1on1.notes = clean(notes);
   if (clean(next_step)) fields1on1.next_step = clean(next_step);
