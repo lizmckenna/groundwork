@@ -4124,9 +4124,9 @@ const LAUNCH_EVENTS = {
   },
   stc: {
     name: 'St. Charles County Parent Action Meeting',
-    date: '2026-07-11', start: '11:00', end: '12:30', dateLabel: 'Saturday, July 11 · 11:00 AM CT',
-    location: 'Weldon Spring Site Interpretive Center, 7295 MO-94, St Charles, MO 63304',
-    logistics: 'Refreshments and community from 11:00 AM, program 11:30 AM–12:30 PM. Childcare available with RSVP.',
+    date: '2026-07-15', start: '18:00', end: '19:30', dateLabel: 'Wednesday, July 15 · 6:00 PM CT',
+    location: 'Middendorf-Kredell Library, 2750 Hwy K, O\'Fallon, MO 63368',
+    logistics: 'Pizza and community from 6:00 PM. Childcare available with RSVP.',
   },
   kc: {
     name: 'Kansas City No on 5 Regional Campaign Launch',

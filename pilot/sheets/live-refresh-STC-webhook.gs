@@ -1,5 +1,5 @@
 /**
- * Groundwork live turnout tracker — ST. CHARLES launch (Sat 7/11).
+ * Groundwork live turnout tracker — ST. CHARLES launch (Wed 7/15).
  * PUSH-DRIVEN version: worker POSTs to this sheet on every new RSVP.
  * Safety-net poll runs once/hour (well under the UrlFetch daily quota).
  *
@@ -16,7 +16,7 @@
  */
 
 const KEY     = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
-const EVENT   = 'St. Charles County Parent Action Meeting 7/11';
+const EVENT   = 'St. Charles County Parent Action Meeting 7/15';
 const LEADS   = 'Molly,Stephanie Rittgers,Facebook,Other';
 const STATUS  = 'Not started,Texted,Called,Left message,Confirmed coming,No answer,Declined';
 const ATTEND  = 'Scheduled,Self check-in,Attended,No-show,Walk-in,Canceled';
