@@ -28,7 +28,7 @@ const M_START = DATA_COLS + 1;   // column I
 const N = MANUAL.length;         // 5
 const ATT_COL = M_START + 3;     // column L — Attendance (4th manual column)
 
-const ASSIGNEES = ['Laci Horn', 'Molly', 'Liz'];                             // pick one, or type any other name
+const ASSIGNEES = ['Laci Horn', 'Molly Fleming'];                            // pick one, or type any other name
 const REMINDERS = ['Not started', 'Texted', 'Called', 'Left message', 'Confirmed', 'No answer', 'Declined'];
 const ATTEND    = ['Attended', 'No-show'];
 
@@ -55,6 +55,11 @@ function setUp() {
   sh.getRange(HDR, M_START, 1, N).setValues([MANUAL]);
   sh.getRange(HDR, 1, 1, width).setFontWeight('bold').setBackground('#DDE7DE').setVerticalAlignment('middle');
   sh.setFrozenRows(HDR);
+
+  // Data columns (A..H) are form-fed and must stay plain text. Strip any stray
+  // validation — older layouts left dropdowns on Registered + "Who told you
+  // about this training?", which should both be open text.
+  sh.getRange(FIRST, 1, 500, DATA_COLS).clearDataValidations();
 
   // Dropdowns (allow-invalid so you can type a name/status that isn't listed).
   // Recruited by (M_START+2) and Notes (M_START+4) are free text — no validation.
