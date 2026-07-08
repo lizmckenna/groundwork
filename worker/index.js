@@ -510,6 +510,302 @@ export default {
       // same key the turnout Sheets already carry). Leads mark Attended/No-show in
       // the Sheet; this upserts the 'Event attendance' rows the dashboard counts.
       if (url.pathname === '/sheet-attendance' && request.method === 'POST') return await sheetAttendance(request, env);
+      // Post-event summary: signups + attendance broken down by assigned organizer
+      // (LaNeé vs Stephanie vs others). Reads current contact state — call any time
+      // after mark-attendance-from-list has run.
+      if (url.pathname === '/admin/event-attendance-by-organizer' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const ev = url.searchParams.get('event') || '7_7';
+        const meta = eventMeta(ev);
+        if (!meta.signupField) return json({ error: `event ${ev} has no signup field` }, 400);
+        const rows = [];
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`{${meta.signupField}}='Signed up'`)}&pageSize=100&fields%5B%5D=Name&fields%5B%5D=assigned_organizer&fields%5B%5D=${encodeURIComponent(meta.attendField)}&fields%5B%5D=${encodeURIComponent(meta.confirmField)}`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        const buckets = {};
+        for (const r of rows) {
+          const raw = r.fields.assigned_organizer;
+          const linked = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+          const orgIds = linked.map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+          let label = '(unassigned)';
+          if (orgIds.includes(LANEE_ID)) label = 'LaNeé';
+          else if (orgIds.includes(STEPHANIE_ID)) label = 'Stephanie';
+          else if (orgIds.length) label = orgIds.map(id => ORGANIZER_NAME_BY_ID[id] || id).join(', ');
+          buckets[label] = buckets[label] || { signed_up: 0, attended: 0, no_show: 0, other: 0,
+            confirmed: 0, confirmed_attended: 0, reminder_sent: 0, reminder_sent_attended: 0,
+            no_confirm_status: 0, no_confirm_attended: 0 };
+          const b = buckets[label];
+          b.signed_up++;
+          const att = String(r.fields[meta.attendField] || '').toLowerCase().trim();
+          const attended = (att === 'attended' || att === 'walk-in');
+          if (attended) b.attended++;
+          else if (att === 'no-show') b.no_show++;
+          else b.other++;
+          const cs = String(r.fields[meta.confirmField] || '').trim();
+          if (cs === 'Confirmed') { b.confirmed++; if (attended) b.confirmed_attended++; }
+          else if (cs === 'Reminder sent') { b.reminder_sent++; if (attended) b.reminder_sent_attended++; }
+          else if (!cs) { b.no_confirm_status++; if (attended) b.no_confirm_attended++; }
+        }
+        const out = Object.entries(buckets).map(([organizer, b]) => ({
+          organizer,
+          signed_up: b.signed_up,
+          attended: b.attended,
+          no_show: b.no_show,
+          uncoded: b.other,
+          show_rate_pct: b.signed_up ? Math.round(b.attended / b.signed_up * 1000) / 10 : 0,
+          confirmed_signed_up: b.confirmed,
+          confirmed_attended: b.confirmed_attended,
+          confirmed_show_rate_pct: b.confirmed ? Math.round(b.confirmed_attended / b.confirmed * 1000) / 10 : null,
+          reminder_signed_up: b.reminder_sent,
+          reminder_attended: b.reminder_sent_attended,
+          reminder_show_rate_pct: b.reminder_sent ? Math.round(b.reminder_sent_attended / b.reminder_sent * 1000) / 10 : null,
+          no_confirm_signed_up: b.no_confirm_status,
+          no_confirm_attended: b.no_confirm_attended,
+        })).sort((a, b) => b.signed_up - a.signed_up);
+        return json({ event: ev, by_organizer: out, total_signed_up: rows.length,
+          total_attended: out.reduce((s, x) => s + x.attended, 0) });
+      }
+      // Cleanup: for a given event, dedupe event_attendance mirror rows keeping
+      // the row with the highest-rank `attended` value per (contact,event) pair.
+      // Prevents duplicates from the July 8 bulk-write bug (where a lookup mistake
+      // caused new rows to be created alongside the existing "Registered" rows).
+      if (url.pathname === '/admin/dedupe-mirror-rows' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const ev = url.searchParams.get('event') || '7_7';
+        const apply = url.searchParams.get('apply') === '1';
+        const meta = eventMeta(ev);
+        const evName = mirrorEventName(meta);
+        const esc = evName.replace(/'/g, "\\'");
+        // Fetch all mirror rows for this event
+        const rows = [];
+        let off = null;
+        do {
+          // reminder_status is optional (some bases have it, some don't); zoom_link_sent
+          // was never added by Liz, so drop it. Just request the fields we need for
+          // survivor scoring — attended rank is the main signal.
+          let q = `?filterByFormula=${encodeURIComponent(`FIND('${esc}',{Attendance Record}&'')>0`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=event&fields%5B%5D=attended`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}${q}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        // Group by contact ID
+        const byContact = {};
+        for (const r of rows) {
+          const cid = (r.fields.contact || [])[0];
+          if (!cid) continue;
+          (byContact[cid] = byContact[cid] || []).push(r);
+        }
+        const toDelete = [];
+        const kept = [];
+        for (const [cid, list] of Object.entries(byContact)) {
+          if (list.length === 1) { kept.push(list[0].id); continue; }
+          // Pick the survivor: highest attended-rank, then any with reminder_status,
+          // then any with zoom_link_sent. Delete the rest.
+          const scored = list.map(r => ({
+            r,
+            score: (MIRROR_RANK[r.fields.attended] || 0),
+          }));
+          scored.sort((a, b) => b.score - a.score);
+          kept.push(scored[0].r.id);
+          for (const s of scored.slice(1)) toDelete.push(s.r.id);
+        }
+        if (apply && toDelete.length) {
+          for (let i = 0; i < toDelete.length; i += 10) {
+            const params = new URLSearchParams();
+            for (const id of toDelete.slice(i, i + 10)) params.append('records[]', id);
+            await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}?${params.toString()}`, { method: 'DELETE' });
+          }
+          await invalidateReadCaches(env);
+        }
+        return json({
+          event: ev,
+          dry_run: !apply,
+          total_mirror_rows: rows.length,
+          unique_contacts: Object.keys(byContact).length,
+          duplicates_found: toDelete.length,
+          kept: kept.length,
+          deleted: apply ? toDelete.length : 0,
+        });
+      }
+      // Bulk-mark attendance for an event from an attendee list (typically Zoom
+      // export). POST body: { event, apply, attendees: [{email,name,duration}...],
+      // ignore_names: [...] }. Matches by email, then by normalized name. Returns
+      // a full analysis: flake rate, walk-ins, and show-rate by confirmation status.
+      if (url.pathname === '/admin/mark-attendance-from-list' && request.method === 'POST') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const body = await request.json().catch(() => ({}));
+        const ev = String(body.event || '7_7');
+        const apply = body.apply === true || body.apply === 1;
+        const attendees = Array.isArray(body.attendees) ? body.attendees : [];
+        // Normalize the ignore list the same way we normalize attendee names, so
+        // "Jake | Hoosier Action" in the list correctly matches its cleaned form "jake".
+        const _cleanForIgnore = (s) => String(s || '').toLowerCase()
+          .replace(/\(.*?\)/g, '').replace(/\|.*$/, '')
+          .replace(/[^\p{L}\s'-]/gu, ' ').replace(/\s+/g, ' ').trim();
+        const ignoreNames = new Set((Array.isArray(body.ignore_names) ? body.ignore_names : [])
+          .flatMap(n => [String(n).toLowerCase().trim(), _cleanForIgnore(n)]));
+        if (!attendees.length) return json({ error: 'attendees required' }, 400);
+        const meta = eventMeta(ev);
+        if (!meta.signupField) return json({ error: `event ${ev} has no signup field` }, 400);
+        // Fetch all signed-up contacts for the event
+        const rows = [];
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`{${meta.signupField}}='Signed up'`)}&pageSize=100&fields%5B%5D=Name&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone&fields%5B%5D=${encodeURIComponent(meta.confirmField)}&fields%5B%5D=${encodeURIComponent(meta.attendField)}`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        const cleanName = (s) => String(s || '')
+          .toLowerCase()
+          .replace(/\(.*?\)/g, '')
+          .replace(/\|.*$/, '')
+          .replace(/[^\p{L}\s'-]/gu, ' ')
+          .replace(/\s+/g, ' ').trim();
+        const cleanEmail = (s) => String(s || '').toLowerCase().trim();
+        const byEmail = new Map();
+        const byName = new Map();
+        for (const r of rows) {
+          const e = cleanEmail(r.fields.email);
+          if (e) byEmail.set(e, r);
+          const nm = cleanName(r.fields.Name || `${r.fields.first || ''} ${r.fields.last || ''}`);
+          if (nm) {
+            if (!byName.has(nm)) byName.set(nm, []);
+            byName.get(nm).push(r);
+          }
+        }
+        const matched = new Set();
+        const walkins = [];
+        const ignored = [];
+        for (const a of attendees) {
+          const nm = cleanName(a.name);
+          const e = cleanEmail(a.email);
+          let hit = null;
+          // Check ignore list BEFORE any name matching so guests/staff never get
+          // fuzzy-matched to a real signed-up person with a shared first name.
+          const nmRaw = String(a.name).toLowerCase().trim();
+          const isIgnored = ignoreNames.has(nm) || ignoreNames.has(nmRaw);
+          if (isIgnored) {
+            ignored.push({ name: a.name, email: a.email, reason: 'ignore_list' });
+            continue;
+          }
+          if (e && byEmail.has(e)) hit = byEmail.get(e);
+          else if (nm && nm.split(' ').length >= 2 && byName.has(nm) && byName.get(nm).length === 1) hit = byName.get(nm)[0];
+          else if (nm && nm.split(' ').length >= 2) {
+            // Require BOTH first + last for fuzzy match. Single-token names would
+            // collide with any Airtable contact sharing that first name.
+            const short = nm.split(' ').slice(0, 2).join(' ');
+            for (const [k, arr] of byName) {
+              if (arr.length === 1 && (k.startsWith(short + ' ') || k === short)) { hit = arr[0]; break; }
+            }
+          }
+          if (hit) { matched.add(hit.id); }
+          else if (false) {
+            ignored.push({ name: a.name, email: a.email, reason: 'ignore_list' });
+          } else {
+            walkins.push({ name: a.name, email: a.email, duration: a.duration || null });
+          }
+        }
+        const attendedIds = [...matched];
+        const noShowIds = rows.filter(r => !matched.has(r.id)).map(r => r.id);
+        let mirrorLog = null;
+        if (apply) {
+          const patchAttField = meta.attendField;
+          const mirrorEv = mirrorEventName(meta);
+          for (let i = 0; i < attendedIds.length; i += 10) {
+            const batch = attendedIds.slice(i, i + 10).map(id => ({ id, fields: { [patchAttField]: 'Attended' } }));
+            await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+          }
+          for (let i = 0; i < noShowIds.length; i += 10) {
+            const batch = noShowIds.slice(i, i + 10).map(id => ({ id, fields: { [patchAttField]: 'No-show' } }));
+            await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+          }
+          // Also write through to the event_attendance mirror so grid views reflect
+          // reality. Mirror uses "Showed up" / "No show" (contacts uses "Attended" /
+          // "No-show"). Surface errors so a broken mirror doesn't fail silently.
+          mirrorLog = { attempted: 0, created: 0, upgraded: 0, unchanged: 0, errors: [] };
+          for (const id of attendedIds) {
+            mirrorLog.attempted++;
+            try {
+              const r = await mirrorWriteThroughInstrumented(env, id, mirrorEv, 'Showed up');
+              mirrorLog[r]++;
+            } catch (e) { mirrorLog.errors.push(`attended ${id}: ${e.message}`); }
+          }
+          for (const id of noShowIds) {
+            mirrorLog.attempted++;
+            try {
+              const r = await mirrorWriteThroughInstrumented(env, id, mirrorEv, 'No show');
+              mirrorLog[r]++;
+            } catch (e) { mirrorLog.errors.push(`noshow ${id}: ${e.message}`); }
+          }
+          // Walk-ins: create a contact and mirror row if we have contact info
+          for (const w of walkins) {
+            if (!w.email && !w.name) continue;
+            try {
+              // Find or create the contact
+              let cid = null;
+              const emailLower = String(w.email || '').toLowerCase().trim();
+              if (emailLower) {
+                const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${emailLower.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+                if (r.records.length) cid = r.records[0].id;
+              }
+              if (!cid) {
+                const parts = String(w.name || '').trim().split(/\s+/);
+                const first = parts[0] || '';
+                const last = parts.slice(1).join(' ') || '';
+                const fields = { first, last, leader_ladder: 'Prospect', source: `walk-in ${ev}` };
+                if (emailLower) fields.email = emailLower;
+                const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+                cid = c.records[0].id;
+              }
+              // Patch attendance status on the contact
+              await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: { [patchAttField]: 'Walk-in' }, typecast: true }) });
+              // Write-through to the mirror as "Showed up" (walk-in is still a show)
+              await mirrorWriteThrough(env, cid, mirrorEv, 'Showed up');
+            } catch (e) { /* per-walk-in errors non-fatal */ }
+          }
+          await invalidateReadCaches(env);
+        }
+        const statusBuckets = {};
+        for (const r of rows) {
+          const cs = String(r.fields[meta.confirmField] || '(no status)').trim() || '(no status)';
+          if (!statusBuckets[cs]) statusBuckets[cs] = { signed_up: 0, attended: 0, no_show: 0 };
+          statusBuckets[cs].signed_up++;
+          if (matched.has(r.id)) statusBuckets[cs].attended++;
+          else statusBuckets[cs].no_show++;
+        }
+        const breakdown = Object.entries(statusBuckets).map(([status, v]) => ({
+          confirm_status: status,
+          signed_up: v.signed_up,
+          attended: v.attended,
+          no_show: v.no_show,
+          show_rate_pct: v.signed_up ? Math.round(v.attended / v.signed_up * 1000) / 10 : 0,
+        })).sort((a, b) => b.signed_up - a.signed_up);
+        const total = rows.length;
+        const attended = attendedIds.length;
+        return json({
+          event: ev,
+          dry_run: !apply,
+          total_signed_up: total,
+          total_attended: attended,
+          total_no_show: total - attended,
+          flake_rate_pct: total ? Math.round((total - attended) / total * 1000) / 10 : 0,
+          show_rate_pct: total ? Math.round(attended / total * 1000) / 10 : 0,
+          by_confirm_status: breakdown,
+          walk_ins: walkins,
+          ignored_from_attendee_list: ignored,
+          matched_attendee_names: rows.filter(r => matched.has(r.id)).map(r => r.fields.Name),
+          no_show_names: rows.filter(r => !matched.has(r.id)).map(r => r.fields.Name),
+          mirror_log: mirrorLog,
+        });
+      }
       // Admin endpoints — gated by X-Admin-Key header instead of session token
       if (url.pathname === '/admin/dedupe-merge' && request.method === 'POST') return await adminDedupeMerge(request, env);
       if (url.pathname === '/admin/contacts-dump' && request.method === 'GET') return await adminContactsDump(request, env, url);
@@ -6187,6 +6483,47 @@ async function syncAttendanceMirror(env) {
   for (let i = 0; i < creates.length; i += 10) await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}`, { method: 'POST', body: JSON.stringify({ records: creates.slice(i, i + 10), typecast: true }) });
   for (let i = 0; i < updList.length; i += 10) await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: updList.slice(i, i + 10), typecast: true }) });
   return { events_created: missingEvents.length, rows_created: creates.length, rows_updated: updList.length };
+}
+
+// Instrumented variant of mirrorWriteThrough — returns 'created' | 'upgraded' |
+// 'unchanged' so admin endpoints can surface why a write did or didn't happen.
+async function mirrorWriteThroughInstrumented(env, contactId, eventName, status) {
+  if (!contactId || !eventName) return 'unchanged';
+  const metaMatch = Object.values(EVENT_META).find(m => m.attendEvent === eventName || mirrorEventName(m) === eventName);
+  const name = metaMatch ? mirrorEventName(metaMatch) : String(eventName).trim();
+  const esc = name.replace(/'/g, "\\'");
+  let evId = null;
+  const q = await at(env, `/${BASE}/${EVENTS_TBL}?filterByFormula=${encodeURIComponent(`{Name}='${esc}'`)}&maxRecords=1`);
+  if (q.records.length) evId = q.records[0].id;
+  else {
+    const { date, typ } = mirrorLaunchDef(name);
+    const f = { Name: name, type: typ };
+    if (date) f.date = date;
+    const c = await at(env, `/${BASE}/${EVENTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: f }], typecast: true }) });
+    evId = c.records[0].id;
+  }
+  // Linked-record fields in Airtable formulas render as their primary-field
+  // strings, not record IDs — so we can't filter by record ID server-side.
+  // Filter server-side by the event name (matches its formula lookup field
+  // "Attendance Record") to narrow the result set, then match contact ID in JS.
+  let hit = null, off = null;
+  do {
+    let qq = `?filterByFormula=${encodeURIComponent(`FIND('${esc}',{Attendance Record}&'')>0`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=event&fields%5B%5D=attended`;
+    if (off) qq += `&offset=${off}`;
+    const d = await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}${qq}`);
+    hit = (d.records || []).find(r => (r.fields.contact || []).includes(contactId)) || hit;
+    off = hit ? null : d.offset;
+  } while (off);
+  if (!hit) {
+    await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: { contact: [contactId], event: [evId], attended: status } }], typecast: true }) });
+    return 'created';
+  }
+  const cur = hit.fields.attended || '';
+  if ((MIRROR_RANK[status] || 0) > (MIRROR_RANK[cur] || 0)) {
+    await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}/${hit.id}`, { method: 'PATCH', body: JSON.stringify({ fields: { attended: status }, typecast: true }) });
+    return 'upgraded';
+  }
+  return 'unchanged';
 }
 
 // Write-through: create/upgrade the event_attendance mirror row the moment a
