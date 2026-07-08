@@ -13,6 +13,7 @@ const BASE = 'appQdixHbuttPldx6';
 const CONTACTS_TBL = 'tblJeHqz13AOvq71A';
 const CONTACT_LOG_TBL = 'tblXQXzxf8z1oht7z';
 const ORGANIZERS_TBL = 'tblxknZQg2W4JdTny';
+const ONE_ON_ONES_TBL = 'tbl2VM8Net9MgPCXX';
 const DONATIONS_TBL = 'tblLgvPvwamyy1ljD';   // ActBlue import: one row per gift (amount, date, contact)
 const ATTENDANCE_MIRROR_TBL = 'tblIuEyimGqxkNFrG';   // new linked attendance table (contact<->events); nightly-synced mirror of campaign signups/attendance
 // School -> region fallback: a known school routes a contact who has no usable county/city/district.
@@ -323,6 +324,9 @@ export default {
       if (url.pathname === '/amplifier-voter-update' && request.method === 'POST') return await amplifierVoterUpdate(request, env);
       if (url.pathname === '/amendment5-signup' && request.method === 'POST') return await amendment5Signup(request, env);
       if (url.pathname === '/training-signup' && request.method === 'POST') return await trainingSignup(request, env);
+      if (url.pathname === '/search-contact-public' && request.method === 'GET') return await searchContactPublic(request, env, url);
+      if (url.pathname === '/list-fellows-public' && request.method === 'GET') return await listFellowsPublic(env);
+      if (url.pathname === '/log-1on1' && request.method === 'POST') return await log1on1(request, env);
       if (url.pathname === '/launch-rsvp' && request.method === 'POST') return await launchRsvp(request, env);
       if (url.pathname === '/ingest/s2w' && request.method === 'POST') return await ingestS2W(request, env);
       if (url.pathname === '/event-checkin' && request.method === 'POST') return await eventCheckin(request, env);
@@ -510,6 +514,41 @@ export default {
       // same key the turnout Sheets already carry). Leads mark Attended/No-show in
       // the Sheet; this upserts the 'Event attendance' rows the dashboard counts.
       if (url.pathname === '/sheet-attendance' && request.method === 'POST') return await sheetAttendance(request, env);
+      // One-time: create the one_on_ones Airtable table if it doesn't exist yet.
+      // Idempotent — returns the existing table's id if it's already there.
+      if (url.pathname === '/admin/create-1on1-table' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const meta = await at(env, `/meta/bases/${BASE}/tables`);
+        const existing = (meta.tables || []).find(t => t.name === 'one_on_ones');
+        if (existing) return json({ status: 'already_exists', table_id: existing.id });
+        const schema = {
+          name: 'one_on_ones',
+          fields: [
+            { name: 'Summary', type: 'singleLineText' },
+            { name: 'contact', type: 'multipleRecordLinks', options: { linkedTableId: CONTACTS_TBL } },
+            { name: 'fellow_who_had_it', type: 'multipleRecordLinks', options: { linkedTableId: ORGANIZERS_TBL } },
+            { name: 'date', type: 'date', options: { dateFormat: { name: 'local' } } },
+            { name: 'self_interest', type: 'multilineText' },
+            { name: 'commitments', type: 'multipleSelects', options: { choices: [
+              { name: '1-on-1 back' }, { name: 'Attend next onboarding' }, { name: 'Host house meeting' },
+              { name: 'Volunteer at event' }, { name: 'Amplifier training' }, { name: 'Donate' },
+              { name: 'Talk to board or PTA' }, { name: 'Recruit others' }, { name: 'Other' },
+            ] } },
+            { name: 'notes', type: 'multilineText' },
+            { name: 'next_step', type: 'singleLineText' },
+            { name: 'next_step_by', type: 'date', options: { dateFormat: { name: 'local' } } },
+            { name: 'relationship_stage', type: 'singleSelect', options: { choices: [
+              { name: 'First meeting', color: 'blueLight2' },
+              { name: 'Deepening', color: 'yellowLight2' },
+              { name: 'Ready to lead', color: 'greenLight2' },
+              { name: 'Struggling to reach', color: 'redLight2' },
+            ] } },
+            { name: 'source', type: 'singleLineText' },
+          ],
+        };
+        const created = await at(env, `/meta/bases/${BASE}/tables`, { method: 'POST', body: JSON.stringify(schema) });
+        return json({ status: 'created', table_id: created.id, table: created });
+      }
       // Post-event summary: signups + attendance broken down by assigned organizer
       // (LaNeé vs Stephanie vs others). Reads current contact state — call any time
       // after mark-attendance-from-list has run.
@@ -2478,6 +2517,7 @@ async function eventCheckin(request, env) {
   const cPhone = body.phone ? String(body.phone).trim() : '';
   const cSchool = clean(body.school);
   const cDistrict = clean(body.district);
+  const cRecruiter = body.recruited_by ? String(body.recruited_by).trim() : '';   // free-text "who invited you" — stored in the log notes, never the linked recruited_by field (a plain name 422s the create)
   const event = clean(body.event);
   const pickedId = /^rec[A-Za-z0-9]{14,}$/.test(clean(body.contact_id)) ? clean(body.contact_id) : null;
   if (!event) return json({ error: 'missing event' }, 400);
@@ -2535,7 +2575,7 @@ async function eventCheckin(request, env) {
       await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
         Summary: `${today} — Checked in: ${event} (${cFirst} ${cLast})`,
         date: today, method: 'Event attendance', result: 'Attended', rsvp_launch: event, contact: [cid],
-        notes: walkIn ? 'Self check-in at the door (walk-in)' : 'Self check-in at the door',
+        notes: [walkIn ? 'Self check-in at the door (walk-in)' : 'Self check-in at the door', cRecruiter ? `Recruited by: ${cRecruiter}` : ''].filter(Boolean).join(' | '),
       }}], typecast: true }) });
     } catch (e) {
       return json({ error: 'could not check you in, please see a volunteer' }, 500);
@@ -5052,6 +5092,175 @@ async function confirmLog(request, env) {
   }
   await invalidateReadCaches(env);
   return json({ ok: true, created_count: created.records.length, status: result, signup_6_9, next_signup: nextSignup });
+}
+
+// PUBLIC autocomplete for the 1-on-1 form: rate-limited (60/hr per IP),
+// returns minimal contact info so fellows can pick an existing person to
+// dedupe against. Deliberately narrow — never returns phones or notes.
+async function searchContactPublic(request, env, url) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:search1on1:${ip}`;
+  let count = 0;
+  try { count = parseInt(await env.KV_BINDING.get(rlKey) || '0'); } catch {}
+  if (count >= 120) return json({ error: 'too many requests' }, 429);
+  try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 3600 }); } catch {}
+  const q = (url.searchParams.get('q') || '').trim();
+  if (q.length < 2) return json([]);
+  const qLower = q.toLowerCase().replace(/'/g, '');
+  const digits = q.replace(/\D/g, '');
+  const ors = [
+    `FIND('${qLower}',LOWER({Name}&''))>0`,
+    `FIND('${qLower}',LOWER({email}&''))>0`,
+  ];
+  if (digits.length >= 4) ors.push(`FIND('${digits}',REGEX_REPLACE({phone}&'','\\\\D',''))>0`);
+  const filter = `OR(${ors.join(',')})`;
+  const fields = ['Name', 'first', 'last', 'email', 'school', 'district', 'leader_ladder'];
+  let p = `?filterByFormula=${encodeURIComponent(filter)}&maxRecords=15`;
+  for (const f of fields) p += `&fields%5B%5D=${encodeURIComponent(f)}`;
+  const data = await at(env, `/${BASE}/${CONTACTS_TBL}${p}`);
+  return json(data.records.map(r => ({
+    id: r.id,
+    name: r.fields.Name || `${r.fields.first || ''} ${r.fields.last || ''}`.trim(),
+    email: r.fields.email || '',
+    school: r.fields.school || '',
+    district: r.fields.district || '',
+    leader_ladder: r.fields.leader_ladder || '',
+  })));
+}
+
+// Public: list active fellows for the "who had this 1-on-1?" dropdown.
+async function listFellowsPublic(env) {
+  return json(Object.entries(ORGANIZER_NAME_BY_ID).map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name)));
+}
+
+// Public: log a 1-on-1. Dedupes on email→phone→name, creates or links the
+// contact, creates the one_on_ones record, and writes back the funnel commitments
+// (house_meeting_date, amendment5_commitments, etc.) so dashboards stay honest.
+async function log1on1(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:log1on1:${ip}`;
+  let count = 0;
+  try { count = parseInt(await env.KV_BINDING.get(rlKey) || '0'); } catch {}
+  if (count >= 30) return json({ error: 'too many submissions, try again later' }, 429);
+  try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 3600 }); } catch {}
+  const body = await request.json().catch(() => ({}));
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
+  const clean = (s) => String(s || '').replace(/^[^\w\s@'.-]+/, '').trim();
+  const {
+    contact_id, first, last, email, phone, city, zip, school, district,
+    fellow_id, fellow_name, date, self_interest, notes, next_step, next_step_by,
+    relationship_stage, commitments,
+  } = body;
+  const cFirst = clean(first), cLast = clean(last);
+  const cEmail = email ? String(email).toLowerCase().trim() : '';
+  const cPhone = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
+  if (!contact_id && !cFirst && !cLast && !cEmail && !cPhone) {
+    return json({ error: 'pick an existing contact or fill out the new-person fields' }, 400);
+  }
+  // Resolve or create the contact
+  let cid = contact_id || null;
+  let matchedBy = null;
+  if (!cid && cEmail) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+    if (r.records.length) { cid = r.records[0].id; matchedBy = 'email'; }
+  }
+  if (!cid && cPhone.length === 10) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone}&'','\\\\D','')='${cPhone}'`)}&maxRecords=1`);
+    if (r.records.length) { cid = r.records[0].id; matchedBy = 'phone'; }
+  }
+  if (!cid && cFirst && cLast) {
+    // Name fallback — only match if EXACTLY one hit to avoid false merges.
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`AND(LOWER({first}&'')='${cFirst.toLowerCase().replace(/'/g, "\\'")}',LOWER({last}&'')='${cLast.toLowerCase().replace(/'/g, "\\'")}')`)}&maxRecords=2`);
+    if (r.records.length === 1) { cid = r.records[0].id; matchedBy = 'name'; }
+  }
+  const isNew = !cid;
+  if (!cid) {
+    const fields = { first: cFirst, last: cLast, leader_ladder: 'Prospect', source: `1-on-1 · ${fellow_name || 'unknown fellow'}` };
+    if (cEmail) fields.email = cEmail;
+    if (cPhone) fields.phone = cPhone;
+    if (clean(city)) fields.city = clean(city);
+    if (clean(zip)) fields.zip = clean(zip).slice(0, 5);
+    if (clean(school)) fields.school = clean(school);
+    if (clean(district)) fields.district = clean(district);
+    const orgId = deriveOrganizerId({ county: '', city: fields.city, zip: fields.zip, district: fields.district });
+    if (orgId) fields.assigned_organizer = [orgId];
+    const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+    cid = c.records[0].id;
+    matchedBy = 'created_new';
+  }
+  // Create the one_on_ones record
+  const dateStr = clean(date) || todayCT();
+  const summaryBits = [];
+  if (dateStr) summaryBits.push(new Date(dateStr).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }));
+  if (fellow_name) summaryBits.push(fellow_name);
+  if (cFirst || cLast) summaryBits.push(`${cFirst} ${cLast}`.trim());
+  const fields1on1 = {
+    Summary: summaryBits.join(' × ') || '(new 1-on-1)',
+    contact: [cid],
+    date: dateStr,
+  };
+  if (fellow_id) fields1on1.fellow_who_had_it = [fellow_id];
+  if (clean(self_interest)) fields1on1.self_interest = clean(self_interest);
+  if (clean(notes)) fields1on1.notes = clean(notes);
+  if (clean(next_step)) fields1on1.next_step = clean(next_step);
+  if (clean(next_step_by)) fields1on1.next_step_by = clean(next_step_by);
+  if (clean(relationship_stage)) fields1on1.relationship_stage = clean(relationship_stage);
+  const commitList = (Array.isArray(commitments) ? commitments : String(commitments || '').split(','))
+    .map(x => String(x || '').trim()).filter(Boolean);
+  if (commitList.length) fields1on1.commitments = commitList;
+  fields1on1.source = fellow_name ? `1-on-1 form · ${fellow_name}` : '1-on-1 form';
+  const created = await at(env, `/${BASE}/${ONE_ON_ONES_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: fields1on1 }], typecast: true }) });
+  // Write back commitments to the contact + log a contact_log row so history is continuous
+  const patch = {};
+  if (clean(self_interest) && !isNew) {
+    // Non-destructive: only stamp self_interest if we're populating a fresh field?
+    // For now, always overwrite — the most recent 1-on-1 usually has the best read.
+  }
+  if (commitList.includes('Host house meeting') && !clean(body.house_meeting_date)) {
+    patch.house_meeting_date = dateStr;
+    if (fellow_name) patch.house_meeting_host = fellow_name;
+  }
+  if (commitList.includes('Recruit others')) {
+    patch.wants_to_volunteer = 'Yes';
+  }
+  if (commitList.includes('Amplifier training')) {
+    patch.amplifier_status = 'signed up interested';
+  }
+  if (commitList.length && !patch.amendment5_commitments) {
+    patch.amendment5_commitments = commitList.join(', ');
+  }
+  if (Object.keys(patch).length) {
+    try { await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: patch, typecast: true }) }); } catch (e) {}
+  }
+  // Log to contact_log so the contact's history reads chronologically
+  try {
+    await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        records: [{ fields: {
+          Summary: `${dateStr} — 1-on-1 (${fellow_name || 'fellow'})`,
+          date: dateStr, method: 'In person', result: 'Conversation',
+          notes: [
+            clean(self_interest) ? `Self-interest: ${clean(self_interest)}` : '',
+            commitList.length ? `Commitments: ${commitList.join(', ')}` : '',
+            clean(next_step) ? `Next step: ${clean(next_step)}` : '',
+            clean(notes) ? `Notes: ${clean(notes)}` : '',
+          ].filter(Boolean).join('\n\n'),
+          contact: [cid],
+        } }],
+        typecast: true,
+      }),
+    });
+  } catch (e) { /* log row is non-fatal */ }
+  await invalidateReadCaches(env);
+  return json({
+    ok: true,
+    one_on_one_id: created.records[0].id,
+    contact_id: cid,
+    matched_by: matchedBy,
+    created_new_contact: isNew,
+  });
 }
 
 async function searchContacts(env, url) {
