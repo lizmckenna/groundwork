@@ -215,6 +215,11 @@ const FROM_CONFIRM = 'Parents for Missouri Public Schools <groundwork@civicpower
 // monitor inbox / the people who should get failure alerts.
 const CANARY_MONITOR_EMAIL = 'elizabethmck+gwcanary@gmail.com';   // lands in Liz's gmail; +alias never collides with a real record
 const CANARY_ALERT_TO = ['emckenna@hks.harvard.edu'];
+// The fixed key every deployed turnout-tracker Sheet (.gs) sends on /export/*.
+// If the worker's EXPORT_KEY secret ever drifts from this, every tracker Sheet
+// refresh silently 403s and shows stale counts (the 2026-07-08 incident). The
+// daily export canary asserts they still match and emails CANARY_ALERT_TO if not.
+const SHEET_EXPORT_KEY = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
 const REPLY_TO_CONFIRM = 'lanee4kckids@gmail.com';
 // Per-organizer profile used by sendConfirmationEmail.
 // Key is the lowercase organizer slug the dashboard sends (e.g. 'lanee', 'stephanie').
@@ -511,6 +516,7 @@ export default {
       if (url.pathname === '/admin/role-append' && request.method === 'POST') return await adminRoleAppend(request, env);
       if (url.pathname === '/admin/queue-check' && request.method === 'GET') return await adminQueueCheck(request, env, url);
       if (url.pathname === '/admin/run-canary' && request.method === 'GET') return await adminRunCanary(env, url);
+      if (url.pathname === '/admin/run-export-canary' && request.method === 'GET') return await adminRunExportCanary(env, url);
       if (url.pathname === '/admin/preview-email' && request.method === 'GET') {
         if (url.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
         const evKey = url.searchParams.get('event') || '6_30';
@@ -1433,6 +1439,9 @@ export default {
     // Hourly cron: only the attendance-mirror sync (keeps event_attendance grids fresh).
     if (event.cron === '0 * * * *') { ctx.waitUntil(syncAttendanceMirror(env).catch(() => {})); return; }
     ctx.waitUntil(runSignupCanary(env).catch(() => {}));
+    // Tracker-READ canary: alert if the worker's EXPORT_KEY drifts from the key
+    // the Sheets send, which silently 403s every turnout tracker (the 7/8 outage).
+    ctx.waitUntil(runExportCanary(env).catch(() => {}));
     // Daily board snapshot -> the master-tracker trend line.
     ctx.waitUntil((async () => {
       try { await env.KV_BINDING.delete('cache:rollup:v2'); const m = await computeRollupMetrics(env); await snapshotBoard(env, m, await boardDonations(env), true); } catch {}
@@ -3741,6 +3750,48 @@ async function adminRunCanary(env, urlObj) {
   if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
   const results = await runSignupCanary(env, { force: urlObj.searchParams.get('force') === '1', dry: urlObj.searchParams.get('dry') === '1' });
   return json({ ran: true, results });
+}
+
+// =========================================================================
+// Tracker-READ canary. The turnout-tracker Sheets refresh by GET-ing
+// /export/*.csv with a fixed key baked into their Apps Script (SHEET_EXPORT_KEY).
+// On 2026-07-08 the worker's EXPORT_KEY secret drifted from that key, so every
+// Sheet's refresh got a silent 403 and froze at a stale count with no alarm.
+// This runs daily (and on demand) to assert the two still match, and emails
+// CANARY_ALERT_TO the moment they don't. Deterministic, no Airtable calls.
+//   GET /admin/run-export-canary?key=...  -> run now, returns pass/fail
+// =========================================================================
+async function runExportCanary(env) {
+  const failures = [];
+  if (!env.EXPORT_KEY) {
+    failures.push('The worker has no EXPORT_KEY secret set, so every turnout-tracker Sheet refresh returns 403 (forbidden) and shows stale data.');
+  } else if (env.EXPORT_KEY !== SHEET_EXPORT_KEY) {
+    failures.push('The worker EXPORT_KEY secret no longer matches the key the tracker Sheets send, so every tracker refresh returns 403 and silently keeps stale counts. Reset the worker secret to the Sheets’ key.');
+  }
+  if (failures.length) await sendExportCanaryAlert(env, failures);
+  return { status: failures.length ? 'FAIL' : 'PASS', failures };
+}
+
+async function sendExportCanaryAlert(env, failures) {
+  if (!env.RESEND_KEY) return;
+  const html = `<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#1A2418">
+    <h2 style="color:#B25048;margin:0 0 10px">Turnout-tracker feed check FAILED</h2>
+    <p>The automated self-test found the live turnout-tracker feed is broken. The tracker Sheets may be silently showing stale counts right now:</p>
+    <ul>${failures.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>
+    <p>Fix: confirm the worker’s EXPORT_KEY secret matches the key in the tracker Sheets’ Apps Script. This alert comes from the daily export canary.</p></div>`;
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: FROM_CONFIRM, to: CANARY_ALERT_TO, subject: 'ALERT: turnout tracker feed is failing (EXPORT_KEY mismatch)', html }),
+    });
+  } catch (e) {}
+}
+
+async function adminRunExportCanary(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const result = await runExportCanary(env);
+  return json({ ran: true, result });
 }
 
 function resolveOutcome(outcome, methodCount) {
