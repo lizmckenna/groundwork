@@ -349,6 +349,40 @@ export default {
         if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
         return json(await syncAttendanceMirror(env));
       }
+      // Targeted single-contact patch — find by name, patch a small allowlisted set
+      // of fields, optionally clear assigned_organizer. Belt-and-suspenders for one-off
+      // organizer-cleanup asks like "move Jordan Williams into Platte, off LaNeé's queue."
+      // Dry-run by default; add &apply=1 to write.
+      if (url.pathname === '/admin/patch-contact-by-name' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const nameQ = (url.searchParams.get('name') || '').trim();
+        if (!nameQ) return json({ error: 'name required' }, 400);
+        const county = url.searchParams.get('county');
+        const clearOrganizer = url.searchParams.get('clear_organizer') === '1';
+        const dryRun = url.searchParams.get('apply') !== '1';
+        const esc = nameQ.replace(/'/g, "\\'");
+        const q = `?filterByFormula=${encodeURIComponent(`LOWER({Name})='${esc.toLowerCase()}'`)}&maxRecords=5&fields%5B%5D=Name&fields%5B%5D=county&fields%5B%5D=city&fields%5B%5D=zip&fields%5B%5D=district&fields%5B%5D=assigned_organizer`;
+        const r = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+        if (!r.records.length) return json({ error: 'not found', name: nameQ }, 404);
+        const results = [];
+        for (const rec of r.records) {
+          const fields = {};
+          if (county) fields.county = county;
+          if (clearOrganizer) fields.assigned_organizer = [];
+          const linked = Array.isArray(rec.fields.assigned_organizer) ? rec.fields.assigned_organizer : [];
+          const oldOrgIds = linked.map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+          const before = {
+            county: rec.fields.county || '',
+            assigned_organizer: oldOrgIds.map(id => ORGANIZER_NAME_BY_ID[id] || id),
+          };
+          if (!dryRun && Object.keys(fields).length) {
+            await at(env, `/${BASE}/${CONTACTS_TBL}/${rec.id}`, { method: 'PATCH', body: JSON.stringify({ fields, typecast: true }) });
+          }
+          results.push({ id: rec.id, name: rec.fields.Name, before, patch: fields });
+        }
+        if (!dryRun) await invalidateReadCaches(env);
+        return json({ dry_run: dryRun, updated: results.length, results });
+      }
       // Reroute confirmees for a given event: for anyone signed up whose assigned_organizer
       // is NOT LaNeé or Stephanie (parent-leader / unassigned), derive the correct organizer
       // from geo and reassign. Dry-run by default; add &apply=1 to actually write.
