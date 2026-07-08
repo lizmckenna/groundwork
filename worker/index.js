@@ -6931,7 +6931,10 @@ async function syncAttendanceMirror(env) {
 // 'unchanged' so admin endpoints can surface why a write did or didn't happen.
 async function mirrorWriteThroughInstrumented(env, contactId, eventName, status) {
   if (!contactId || !eventName) return 'unchanged';
-  const metaMatch = Object.values(EVENT_META).find(m => m.attendEvent === eventName || mirrorEventName(m) === eventName);
+  // Case-insensitive: forms send lowercase ("7/7 No on 5 onboarding"), meta has
+  // "Onboarding". A === miss here mints a dup "Regional launch" event per signup.
+  const _en = String(eventName).toLowerCase().trim();
+  const metaMatch = Object.values(EVENT_META).find(m => m.attendEvent.toLowerCase() === _en || mirrorEventName(m).toLowerCase() === _en);
   const name = metaMatch ? mirrorEventName(metaMatch) : String(eventName).trim();
   const esc = name.replace(/'/g, "\\'");
   let evId = null;
@@ -6977,7 +6980,10 @@ async function mirrorWriteThrough(env, contactId, eventName, status) {
     if (!contactId || !eventName) return;
     // Map training attendEvent labels ("House Meeting Training 7/16") to the
     // mirror's event names ("HM Training 7/16"); launches pass through as-is.
-    const metaMatch = Object.values(EVENT_META).find(m => m.attendEvent === eventName || mirrorEventName(m) === eventName);
+    // Case-insensitive: forms send lowercase ("7/7 No on 5 onboarding"), meta has
+    // "Onboarding". A === miss here mints a dup "Regional launch" event per signup.
+    const _en = String(eventName).toLowerCase().trim();
+    const metaMatch = Object.values(EVENT_META).find(m => m.attendEvent.toLowerCase() === _en || mirrorEventName(m).toLowerCase() === _en);
     const name = metaMatch ? mirrorEventName(metaMatch) : String(eventName).trim();
     const esc = name.replace(/'/g, "\\'");
     // resolve (or create) the event record
@@ -7017,14 +7023,19 @@ async function mirrorWriteThrough(env, contactId, eventName, status) {
 async function mirrorSetReminderStatus(env, contactId, eventName, newStatus) {
   try {
     if (!contactId || !eventName || !REMIND_RANK[newStatus]) return;
-    const esc = String(eventName).trim().replace(/'/g, "\\'");
+    // Case-insensitive canonicalization (same as mirrorWriteThrough) so a
+    // lowercase form name doesn't mint a dup "Regional launch" event here either.
+    const _en = String(eventName).toLowerCase().trim();
+    const metaMatch = Object.values(EVENT_META).find(m => m.attendEvent.toLowerCase() === _en || mirrorEventName(m).toLowerCase() === _en);
+    const name = metaMatch ? mirrorEventName(metaMatch) : String(eventName).trim();
+    const esc = name.replace(/'/g, "\\'");
     // resolve (or create) the event record
     let evId = null;
     const q = await at(env, `/${BASE}/${EVENTS_TBL}?filterByFormula=${encodeURIComponent(`{Name}='${esc}'`)}&maxRecords=1`);
     if (q.records.length) evId = q.records[0].id;
     else {
-      const { date, typ } = mirrorLaunchDef(eventName);
-      const f = { Name: eventName, type: typ };
+      const { date, typ } = mirrorLaunchDef(name);
+      const f = { Name: name, type: typ };
       if (date) f.date = date;
       const c = await at(env, `/${BASE}/${EVENTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: f }], typecast: true }) });
       evId = c.records[0].id;
