@@ -1,7 +1,7 @@
 // ============================================================================
-//  Voices for Small Schools Amplifier Training 7/19 — live RSVP tracker
-//  Paste into Extensions → Apps Script, Save, then run setUp() once.
-//  A "🔄 Groundwork" menu appears on reload; RSVPs refresh every 5 minutes.
+//  Voices for Small Schools Amplifier Training 7/19 - live RSVP tracker
+//  Paste into Extensions > Apps Script, Save, then run setUp() once.
+//  A "Groundwork" menu appears on reload; RSVPs refresh every 5 minutes.
 //  Attendance you mark in the Attendance column writes back to the Groundwork database.
 //
 //  Columns:
@@ -12,28 +12,29 @@
 //  "How did you hear?" is self-reported on the form. "Recruited by" is for you
 //  to credit the amplifier/organizer who brought them in.
 // ============================================================================
-const TOKEN = 'voices719-ca4a6651924de818';                                  // scoped to THIS event only — never the master key
+const TOKEN = 'voices719-ca4a6651924de818';                                  // scoped to THIS event only - never the master key
 const EVENT = 'Voices for Small Schools Amplifier Training 7/19';
 const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
 const TAB = 'RSVPs (live)';
 
-const TITLE = 'Voices for Small Schools · 7/19 · 7 PM CT — RSVP Tracker';
+const TITLE = 'Voices for Small Schools - 7/19 - 7 PM CT - RSVP Tracker';
 const DATA_COLS = 8;              // First, Last, Email, Phone, District, School, Registered, How did you hear?
 const EMAIL_COL = 3;             // column C
-const HEARD_COL = 8;             // column H — "How did you hear?" (from the form)
+const HEARD_COL = 8;             // column H - "How did you hear?" (from the form)
 const BANNER = 1, HDR = 2, FIRST = 3;   // row 1 banner, row 2 header, data from row 3
 
 const MANUAL = ['Assigned to', 'Reminder status', 'Recruited by', 'Attendance', 'Notes'];
 const M_START = DATA_COLS + 1;   // column I
 const N = MANUAL.length;         // 5
-const ATT_COL = M_START + 3;     // column L — Attendance (4th manual column)
+const ATT_COL = M_START + 3;     // column L - Attendance (4th manual column)
+const FROZEN_COLS = 2;           // freeze First + Last so names stay visible when scrolling to the manual columns
 
 const ASSIGNEES = ['Laci Horn', 'Molly Fleming'];                            // pick one, or type any other name
 const REMINDERS = ['Not started', 'Texted', 'Called', 'Left message', 'Confirmed', 'No answer', 'Declined'];
 const ATTEND    = ['Attended', 'No-show'];
 
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('🔄 Groundwork')
+  SpreadsheetApp.getUi().createMenu('Groundwork')
     .addItem('Refresh RSVPs now', 'refreshVoices')
     .addItem('Set up / repair tracker', 'setUp')
     .addToUi();
@@ -45,8 +46,15 @@ function setUp() {
   if (!sh) sh = ss.insertSheet(TAB);
   const width = DATA_COLS + N;   // A..M
 
-  // Banner row.
-  sh.getRange(BANNER, 1, 1, width).merge()
+  // Banner row. Split into a frozen segment (A:B, over the frozen name columns)
+  // and a scrolling segment (C:M). A single merge spanning the whole width can't
+  // coexist with frozen columns - Sheets refuses to merge across the freeze line,
+  // which is what broke the tracker when the name columns were frozen by hand.
+  sh.setFrozenColumns(0);                        // clear any freeze first so the merges below never straddle it
+  sh.getRange(BANNER, 1, 1, width).breakApart();
+  sh.getRange(BANNER, 1, 1, width).clearContent();   // drop any stale header text left in row 1
+  sh.getRange(BANNER, 1, 1, FROZEN_COLS).merge().setBackground('#2F5E3D');
+  sh.getRange(BANNER, FROZEN_COLS + 1, 1, width - FROZEN_COLS).merge()
     .setValue(TITLE).setFontColor('#FFFFFF').setBackground('#2F5E3D')
     .setFontWeight('bold').setFontSize(13).setHorizontalAlignment('center').setVerticalAlignment('middle');
   sh.setRowHeight(BANNER, 34);
@@ -55,14 +63,15 @@ function setUp() {
   sh.getRange(HDR, M_START, 1, N).setValues([MANUAL]);
   sh.getRange(HDR, 1, 1, width).setFontWeight('bold').setBackground('#DDE7DE').setVerticalAlignment('middle');
   sh.setFrozenRows(HDR);
+  sh.setFrozenColumns(FROZEN_COLS);              // keep First + Last visible when scrolling right to the manual columns
 
   // Data columns (A..H) are form-fed and must stay plain text. Strip any stray
-  // validation — older layouts left dropdowns on Registered + "Who told you
+  // validation - older layouts left dropdowns on Registered + "Who told you
   // about this training?", which should both be open text.
   sh.getRange(FIRST, 1, 500, DATA_COLS).clearDataValidations();
 
   // Dropdowns (allow-invalid so you can type a name/status that isn't listed).
-  // Recruited by (M_START+2) and Notes (M_START+4) are free text — no validation.
+  // Recruited by (M_START+2) and Notes (M_START+4) are free text - no validation.
   const dv = v => SpreadsheetApp.newDataValidation().requireValueInList(v, true).setAllowInvalid(true).build();
   sh.getRange(FIRST, M_START,     500, 1).setDataValidation(dv(ASSIGNEES));   // Assigned to
   sh.getRange(FIRST, M_START + 1, 500, 1).setDataValidation(dv(REMINDERS));   // Reminder status
@@ -72,7 +81,7 @@ function setUp() {
   setColumnWidths(sh);
 
   // Refresh every 5 minutes. (Every-minute across several trackers blows the
-  // Apps Script daily urlfetch quota — "Service invoked too many times".)
+  // Apps Script daily urlfetch quota - "Service invoked too many times".)
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'refreshVoices') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('refreshVoices').timeBased().everyMinutes(5).create();
 
@@ -81,7 +90,7 @@ function setUp() {
   ScriptApp.newTrigger('onAttendanceEdit').forSpreadsheet(ss).onEdit().create();
 
   // Initial pull. If the daily urlfetch quota is exhausted this throws; swallow it
-  // so the structure/triggers still finish — rows fill in on the next cycle after reset.
+  // so the structure/triggers still finish - rows fill in on the next cycle after reset.
   try { refreshVoices(); } catch (e) {}
   SpreadsheetApp.getUi().alert('Set up. RSVPs refresh every 5 minutes. "How did you hear?" comes from the form; Assigned-to / Reminder / Recruited by / Notes are yours and survive refreshes. Marking the Attendance column writes back to the database.');
 }
@@ -125,7 +134,7 @@ function refreshVoices() {
     }
   }
 
-  // 2. Fetch — BAIL OUT without touching the sheet if anything is wrong.
+  // 2. Fetch - BAIL OUT without touching the sheet if anything is wrong.
   const url = WORKER + '/export/training-roster.csv?t=' + encodeURIComponent(TOKEN) +
               '&event=' + encodeURIComponent(EVENT) + '&t2=' + Date.now();
   let resp;
@@ -139,7 +148,7 @@ function refreshVoices() {
   const body = rows.slice(1); if (!body.length) return;
 
   // Pad each row out to exactly DATA_COLS. The CSV may still be the pre-"How did
-  // you hear?" 7-column version until the worker export is updated — padding keeps
+  // you hear?" 7-column version until the worker export is updated - padding keeps
   // setValues() from throwing a width mismatch and just leaves column H blank.
   const pad = r => { const s = r.slice(0, DATA_COLS); while (s.length < DATA_COLS) s.push(''); return s; };
 
