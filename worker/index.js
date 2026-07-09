@@ -515,6 +515,58 @@ export default {
       // same key the turnout Sheets already carry). Leads mark Attended/No-show in
       // the Sheet; this upserts the 'Event attendance' rows the dashboard counts.
       if (url.pathname === '/sheet-attendance' && request.method === 'POST') return await sheetAttendance(request, env);
+      // CSV of every remind-me-to-vote signup: who, where, source attribution.
+      if (url.pathname === '/admin/remind-me-signups.csv' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const filter = `FIND('remind me to vote',LOWER({source}&''))>0`;
+        const fields = ['Name','first','last','email','phone','city','county','zip','district','school',
+          'source','recruited_by','assigned_organizer','wants_amendment5_updates','wants_to_volunteer','Created'];
+        const rows = [];
+        let off = null;
+        do {
+          let qStr = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100`;
+          for (const f of fields) qStr += `&fields%5B%5D=${encodeURIComponent(f)}`;
+          if (off) qStr += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACTS_TBL}${qStr}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        const qcsv = (v) => {
+          const s = v == null ? '' : String(v);
+          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        };
+        const resolveOrg = (raw) => {
+          const linked = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+          const ids = linked.map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+          return ids.map(id => ORGANIZER_NAME_BY_ID[id] || id).join(', ');
+        };
+        const resolveRecruiter = (raw) => {
+          if (!raw) return '';
+          if (Array.isArray(raw)) return raw.map(x => typeof x === 'string' ? x : (x && (x.name || x.id))).join(', ');
+          return String(raw);
+        };
+        const header = ['Name','First','Last','Email','Phone','City','County','Zip','District','School',
+                        'Source','Recruited by','Assigned organizer','Wants A5 updates','Wants to volunteer','Created'];
+        const csv = [header.map(qcsv).join(',')];
+        rows.sort((a, b) => String(b.fields.Created || '').localeCompare(String(a.fields.Created || '')));
+        for (const r of rows) {
+          const f = r.fields;
+          csv.push([
+            f.Name || `${f.first || ''} ${f.last || ''}`.trim(),
+            f.first || '', f.last || '', f.email || '', f.phone || '',
+            f.city || '', f.county || '', f.zip || '', f.district || '', f.school || '',
+            f.source || '', resolveRecruiter(f.recruited_by), resolveOrg(f.assigned_organizer),
+            f.wants_amendment5_updates ? 'Yes' : '', f.wants_to_volunteer ? 'Yes' : '',
+            f.Created || '',
+          ].map(qcsv).join(','));
+        }
+        return new Response(csv.join('\n'), {
+          headers: {
+            'content-type': 'text/csv; charset=utf-8',
+            'content-disposition': 'attachment; filename="remind-me-to-vote-signups.csv"',
+          },
+        });
+      }
       // Probe: for a given fellow, list every contact_log row on contacts they
       // own, so we can eyeball which are 1:1s regardless of notes phrasing.
       if (url.pathname === '/admin/list-fellow-logs' && request.method === 'GET') {
