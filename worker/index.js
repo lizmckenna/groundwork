@@ -7215,7 +7215,10 @@ const REGIONS = {
   },
   stl_stc: {
     label: 'St. Charles / St. Louis',
-    launchEvent: '',
+    // Two launches in this region: St. Louis 7/6 (done) + St. Charles 7/15. Both
+    // flag "Attended Launch". launchEvent accepts a string OR an array; the exact
+    // strings match the check-in webhooks' EVENT (written to rsvp_launch on attendance).
+    launchEvent: ['St. Louis County Parent Action Meeting 7/6', 'St. Charles County Parent Action Meeting 7/15'],
     match: {
       county:   ['st. louis', 'st louis', 'st. charles', 'st charles', 'warren count', 'lincoln count', 'jefferson count', 'franklin count', 'gasconade'],
       city:     ['st. louis', 'st louis', 'st charles', 'st. charles', 'wentzville', "o'fallon", 'ofallon', 'florissant', 'ferguson', 'hazelwood', 'kirkwood', 'chesterfield', 'ballwin', 'wildwood'],
@@ -7279,9 +7282,11 @@ async function regionExportCsv(env, urlObj) {
   // launch attendance set (skip entirely if the region has no launch event — avoids matching blank rsvp_launch)
   const launchSet = new Set();
   let off = null;
-  if (region.launchEvent) {
+  const launchEvents = region.launchEvent ? (Array.isArray(region.launchEvent) ? region.launchEvent : [region.launchEvent]) : [];
+  if (launchEvents.length) {
+    const orLaunch = 'OR(' + launchEvents.map(n => `{rsvp_launch}='${String(n).replace(/'/g, "\\'")}'`).join(',') + ')';
     do {
-      let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{rsvp_launch}='${region.launchEvent.replace(/'/g, "\\'")}')`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=result`;
+      let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',${orLaunch})`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=result`;
       if (off) q += `&offset=${encodeURIComponent(off)}`;
       const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
       for (const r of d.records) if (isAtt(r.fields.result)) (r.fields.contact || []).forEach(id => launchSet.add(id));
