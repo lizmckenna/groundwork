@@ -327,6 +327,7 @@ export default {
       if (url.pathname === '/search-contact-public' && request.method === 'GET') return await searchContactPublic(request, env, url);
       if (url.pathname === '/list-fellows-public' && request.method === 'GET') return await listFellowsPublic(env);
       if (url.pathname === '/log-1on1' && request.method === 'POST') return await log1on1(request, env);
+      if (url.pathname === '/get-my-share-link' && request.method === 'POST') return await getMyShareLink(request, env);
       if (url.pathname === '/launch-rsvp' && request.method === 'POST') return await launchRsvp(request, env);
       if (url.pathname === '/ingest/s2w' && request.method === 'POST') return await ingestS2W(request, env);
       if (url.pathname === '/event-checkin' && request.method === 'POST') return await eventCheckin(request, env);
@@ -1983,8 +1984,15 @@ export default {
   // Cron: pre-event signup-pipeline self-test. Signs up a synthetic user ~36h before
   // each event and emails an alert if the confirmation or the record fails to land.
   async scheduled(event, env, ctx) {
-    // Hourly cron: only the attendance-mirror sync (keeps event_attendance grids fresh).
-    if (event.cron === '0 * * * *') { ctx.waitUntil(syncAttendanceMirror(env).catch(() => {})); return; }
+    // Hourly cron: attendance-mirror sync + the EXPORT_KEY drift check. Running
+    // the export canary hourly (not just on the daily run) is what turns an
+    // EXPORT_KEY outage from a silent multi-hour dead tracker into a <=1-hour
+    // emailed alert (the 7/8 incident sat silent because the check was daily-only).
+    if (event.cron === '0 * * * *') {
+      ctx.waitUntil(syncAttendanceMirror(env).catch(() => {}));
+      ctx.waitUntil(runExportCanary(env).catch(() => {}));
+      return;
+    }
     ctx.waitUntil(runSignupCanary(env).catch(() => {}));
     // Tracker-READ canary: alert if the worker's EXPORT_KEY drifts from the key
     // the Sheets send, which silently 403s every turnout tracker (the 7/8 outage).
@@ -2373,7 +2381,7 @@ async function amendment5Signup(request, env) {
 
   const body = await request.json();
   if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
-  const { first, last, phone, email, street_address, city, state, zip, district, school, commitments = [], other_text, recruited_by, source } = body;
+  const { first, last, phone, email, street_address, city, state, zip, district, school, commitments = [], other_text, recruited_by, recruited_by_id, source } = body;
   if (!first || !last || (!email && !phone)) {
     return json({ error: 'first and last name, plus an email or phone, are required' }, 400);   // never drop a commit-form signup
   }
@@ -2427,6 +2435,13 @@ async function amendment5Signup(request, env) {
   if (district) baseFields.district = String(district).trim();
   if (school) baseFields.school = String(school).trim();
   if (cRecruiter) baseFields.recruited_by = cRecruiter;
+  // Amplifier attribution: if the user arrived via ?ref=<contactId>, link them to
+  // that amplifier's contact record on `recruited_by` (linked-record field) so
+  // recruiter dashboards attribute the signup back to the amplifier.
+  if (recruited_by_id && /^rec[A-Za-z0-9]+$/.test(String(recruited_by_id))) {
+    baseFields.recruited_by = [String(recruited_by_id)];
+    baseFields.source = (baseFields.source || '') + ' · via amplifier link';
+  }
   // Mark as signed-up for the appropriate event
   baseFields.last_attempt_date = today;
   if (EVENT_META[eventKey].signupField) baseFields[EVENT_META[eventKey].signupField] = 'Signed up';
@@ -3194,7 +3209,7 @@ async function remindSignup(request, env) {
 
   const body = await request.json();
   if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
-  const { first, last, phone, email, zip, school, district, wants_updates, wants_help, recruited_by, source } = body;
+  const { first, last, phone, email, zip, school, district, wants_updates, wants_help, recruited_by, recruited_by_id, source } = body;
   if (!first || !last || !phone) {
     return json({ error: 'first name, last name, and phone are required' }, 400);
   }
@@ -3235,6 +3250,12 @@ async function remindSignup(request, env) {
   if (cSchool) baseFields.school = cSchool;
   if (cDistrict) baseFields.district = cDistrict;
   if (cRecruiter) baseFields.recruited_by = cRecruiter;
+  // Amplifier attribution: ?ref=<amplifier_contact_id> writes the recruited_by
+  // link directly (overrides free-text if both present) and tags source.
+  if (recruited_by_id && /^rec[A-Za-z0-9]+$/.test(String(recruited_by_id))) {
+    baseFields.recruited_by = [String(recruited_by_id)];
+    baseFields.source = (baseFields.source || '') + ' · via amplifier link';
+  }
   if (wants_updates) baseFields.wants_amendment5_updates = true;
   if (wants_help) baseFields.wants_to_volunteer = true;
   // Flag vote-reminder intent durably + visibly (no dedicated field exists).
@@ -4326,7 +4347,7 @@ async function sendExportCanaryAlert(env, failures) {
     <h2 style="color:#B25048;margin:0 0 10px">Turnout-tracker feed check FAILED</h2>
     <p>The automated self-test found the live turnout-tracker feed is broken. The tracker Sheets may be silently showing stale counts right now:</p>
     <ul>${failures.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>
-    <p>Fix: confirm the worker’s EXPORT_KEY secret matches the key in the tracker Sheets’ Apps Script. This alert comes from the daily export canary.</p></div>`;
+    <p>Fix: confirm the worker’s EXPORT_KEY secret matches the key in the tracker Sheets’ Apps Script. This alert comes from the hourly export canary.</p></div>`;
   try {
     await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -5370,6 +5391,51 @@ async function listFellowsPublic(env) {
 // Public: log a 1-on-1. Dedupes on email→phone→name, creates or links the
 // contact, creates the one_on_ones record, and writes back the funnel commitments
 // (house_meeting_date, amendment5_commitments, etc.) so dashboards stay honest.
+// Public: an amplifier types their name (and optionally email/phone). We
+// dedupe against contacts (email → phone → exact first+last), create if new,
+// then return a personal share URL: /by-district/?ref=<recordId>. When
+// someone later signs up after clicking that link, the ref carries into their
+// `recruited_by` field so we can attribute the recruitment to the amplifier.
+async function getMyShareLink(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:mylink:${ip}`;
+  let count = 0;
+  try { count = parseInt(await env.KV_BINDING.get(rlKey) || '0'); } catch {}
+  if (count >= 20) return json({ error: 'too many requests' }, 429);
+  try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 3600 }); } catch {}
+  const body = await request.json().catch(() => ({}));
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
+  const clean = (s) => String(s || '').replace(/^[^\w\s@'.-]+/, '').trim();
+  const first = clean(body.first);
+  const last = clean(body.last);
+  const email = body.email ? String(body.email).toLowerCase().trim() : '';
+  const phone = body.phone ? String(body.phone).replace(/\D/g, '').slice(-10) : '';
+  if (!first || !last) return json({ error: 'first and last name are required' }, 400);
+  let cid = null, matchedBy = null;
+  if (email) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+    if (r.records.length) { cid = r.records[0].id; matchedBy = 'email'; }
+  }
+  if (!cid && phone.length === 10) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone}&'','\\\\D','')='${phone}'`)}&maxRecords=1`);
+    if (r.records.length) { cid = r.records[0].id; matchedBy = 'phone'; }
+  }
+  if (!cid) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`AND(LOWER({first}&'')='${first.toLowerCase().replace(/'/g, "\\'")}',LOWER({last}&'')='${last.toLowerCase().replace(/'/g, "\\'")}')`)}&maxRecords=2`);
+    if (r.records.length === 1) { cid = r.records[0].id; matchedBy = 'name'; }
+  }
+  if (!cid) {
+    const fields = { first, last, leader_ladder: 'Supporter', source: 'amplifier training · personal share link' };
+    if (email) fields.email = email;
+    if (phone) fields.phone = phone;
+    const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+    cid = c.records[0].id;
+    matchedBy = 'created_new';
+  }
+  const shareUrl = `https://parents4mopublicschools.org/by-district/?ref=${cid}`;
+  return json({ ok: true, contact_id: cid, matched_by: matchedBy, share_url: shareUrl, first_name: first });
+}
+
 async function log1on1(request, env) {
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   const rlKey = `rl:log1on1:${ip}`;
