@@ -515,6 +515,137 @@ export default {
       // same key the turnout Sheets already carry). Leads mark Attended/No-show in
       // the Sheet; this upserts the 'Event attendance' rows the dashboard counts.
       if (url.pathname === '/sheet-attendance' && request.method === 'POST') return await sheetAttendance(request, env);
+      // One-shot fix: rename the organizer record at rec0OmDN68hlffkTn back to
+      // "LaNeé Bridewell". Someone typed "Laci Horn" over it in Airtable, which
+      // silently attributed 1,119 of LaNee's contacts to Laci on the scoreboard.
+      if (url.pathname === '/admin/rename-lanee-back' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const before = await at(env, `/${BASE}/${ORGANIZERS_TBL}/rec0OmDN68hlffkTn`);
+        const oldName = before.fields.name || '';
+        if (oldName === 'LaNeé Bridewell') return json({ status: 'no_op', already: oldName });
+        await at(env, `/${BASE}/${ORGANIZERS_TBL}/rec0OmDN68hlffkTn`, {
+          method: 'PATCH',
+          body: JSON.stringify({ fields: { name: 'LaNeé Bridewell' }, typecast: true }),
+        });
+        // Nuke the cached name map + scoreboard so the fix shows up immediately.
+        try { await env.KV_BINDING.delete('cache:orgnamebyid:v1'); } catch (e) {}
+        try { await env.KV_BINDING.delete('cache:scoreboard:v3'); } catch (e) {}
+        try { await env.KV_BINDING.delete('cache:scoreboard:v2'); } catch (e) {}
+        return json({ status: 'renamed', from: oldName, to: 'LaNeé Bridewell' });
+      }
+      // Diagnostic: raw distribution of assigned_organizer IDs across all contacts.
+      // Reveals ghost records or duplicates that cause organizers to vanish from
+      // the scoreboard (e.g., a second Laci or LaNee record with empty name).
+      if (url.pathname === '/admin/organizer-id-distribution' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const rows = [];
+        let off = null;
+        do {
+          let q = `?pageSize=100&fields%5B%5D=assigned_organizer`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        const byId = {};
+        for (const r of rows) {
+          const raw = r.fields.assigned_organizer;
+          const linked = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+          const ids = linked.map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+          if (!ids.length) byId['(none)'] = (byId['(none)'] || 0) + 1;
+          for (const id of ids) byId[id] = (byId[id] || 0) + 1;
+        }
+        const orgMap = await orgNameById(env);
+        const HARD = { 'rec0OmDN68hlffkTn': 'LaNeé Bridewell (hardcoded)', 'recnnEdYIPcclnPLY': 'Stephanie (hardcoded)' };
+        const out = Object.entries(byId).sort((a, b) => b[1] - a[1]).map(([id, count]) => ({
+          id, count,
+          name_from_airtable: orgMap[id] || null,
+          name_from_code_const: HARD[id] || null,
+        }));
+        return json({ total_contacts: rows.length, by_organizer_id: out });
+      }
+      // Deeper diagnostic: for contacts assigned to <org>, show who actually WORKED
+      // them (via last_attempt_by) so we can see if the "leads worked" credit belongs
+      // to that organizer or someone else.
+      if (url.pathname === '/admin/who-worked-them' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const fname = (url.searchParams.get('org') || '').toLowerCase().trim();
+        const orgMap = await orgNameById(env);
+        let fid = Object.entries(orgMap).find(([, n]) => String(n).toLowerCase() === fname)?.[0];
+        if (!fid) return json({ error: 'unknown org', tried: fname });
+        const fullName = orgMap[fid];
+        const rows = [];
+        let off = null;
+        do {
+          const fesc = fullName.replace(/'/g, "\\'");
+          let q = `?filterByFormula=${encodeURIComponent(`AND(FIND('${fesc}',{assigned_organizer}&'')>0,OR({attempt_count}>0,{last_attempt_result}))`)}&pageSize=100&fields%5B%5D=Name&fields%5B%5D=source&fields%5B%5D=last_attempt_by&fields%5B%5D=last_attempt_result&fields%5B%5D=last_attempt_date&fields%5B%5D=attempt_count`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        const byWorker = {}, byResult = {}, bySource = {};
+        for (const r of rows) {
+          const w = String(r.fields.last_attempt_by || '(no attempt_by)').trim() || '(no attempt_by)';
+          const res = String(r.fields.last_attempt_result || '(no result)').trim() || '(no result)';
+          const src = String(r.fields.source || '(empty)').trim() || '(empty)';
+          byWorker[w] = (byWorker[w] || 0) + 1;
+          byResult[res] = (byResult[res] || 0) + 1;
+          bySource[src] = (bySource[src] || 0) + 1;
+        }
+        return json({
+          org: fullName, worked_total: rows.length,
+          by_last_attempt_by: Object.entries(byWorker).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ actor: k, count: v })),
+          by_last_attempt_result: Object.entries(byResult).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ result: k, count: v })),
+          by_source: Object.entries(bySource).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([k, v]) => ({ source: k, count: v })),
+        });
+      }
+      // Diagnostic: sample contacts assigned to a given organizer, show their source
+      // + assignment pattern so we can figure out how they landed there.
+      if (url.pathname === '/admin/who-owns-what' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const fname = (url.searchParams.get('org') || '').toLowerCase().trim();
+        // Look up live from the organizers table (not the hardcoded const, which
+        // may be missing recently-added organizers like Laci Horn).
+        const orgMap = await orgNameById(env);
+        let fid = Object.entries(orgMap).find(([, n]) => String(n).toLowerCase() === fname)?.[0];
+        if (!fid) return json({ error: 'unknown org', tried: fname, known: Object.values(orgMap) });
+        const fullName = orgMap[fid];
+        const rows = [];
+        let off = null;
+        do {
+          const fesc = fullName.replace(/'/g, "\\'");
+          let q = `?filterByFormula=${encodeURIComponent(`FIND('${fesc}',{assigned_organizer}&'')>0`)}&pageSize=100&fields%5B%5D=Name&fields%5B%5D=source&fields%5B%5D=county&fields%5B%5D=Created`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        const bySource = {}, byCounty = {}, byMonth = {};
+        for (const r of rows) {
+          const s = String(r.fields.source || '(empty)').trim() || '(empty)';
+          bySource[s] = (bySource[s] || 0) + 1;
+          const c = String(r.fields.county || '(unknown)').trim() || '(unknown)';
+          byCounty[c] = (byCounty[c] || 0) + 1;
+          const m = String(r.fields.Created || '').slice(0, 7);
+          if (m) byMonth[m] = (byMonth[m] || 0) + 1;
+        }
+        return json({
+          org: fullName, total: rows.length,
+          top_sources: Object.entries(bySource).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([s, c]) => ({ source: s, count: c })),
+          top_counties: Object.entries(byCounty).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([c, n]) => ({ county: c, count: n })),
+          by_month: Object.entries(byMonth).sort().map(([m, n]) => ({ month: m, count: n })),
+        });
+      }
+      // Clear the stale scoreboard cache and force fresh compute.
+      if (url.pathname === '/admin/nuke-scoreboard-cache' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        try {
+          await env.KV_BINDING.delete('cache:scoreboard:v3');
+          await env.KV_BINDING.delete('cache:scoreboard:v2');
+        } catch (e) {}
+        return json({ status: 'cleared' });
+      }
       // CSV of every remind-me-to-vote signup: who, where, source attribution.
       if (url.pathname === '/admin/remind-me-signups.csv' && request.method === 'GET') {
         if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
@@ -6838,7 +6969,7 @@ async function computeScoreboard(env) {
   }
   chains.sort((a, b) => (b.bringers - a.bringers) || (b.brought - a.brought));
   const payload = { generated: new Date().toISOString(), orgs, chains };
-  await cachePut(env, 'cache:scoreboard:v2', payload, 300);
+  await cachePut(env, 'cache:scoreboard:v3', payload, 300);
   return payload;
 }
 function csvEsc(s) { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
@@ -7756,10 +7887,11 @@ async function rsvpExportCsv(env, urlObj) {
   const event = urlObj.searchParams.get('event') || 'Northland Emergency Meeting 6/18';
   const evEsc = event.replace(/'/g, "\\'");
   let order = []; const recruited = {}; const seen = new Set(); const rdate = {};
+  const access = {}, oneeds = {};   // rsvp_accessibility (interpretation folds in here) + rsvp_other_needs
   let pizza = 0, ccFam = 0, ccKids = 0;   // logistics totals for the stats feed
   let off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=notes&fields%5B%5D=date&fields%5B%5D=rsvp_pizza&fields%5B%5D=rsvp_childcare&fields%5B%5D=rsvp_childcare_kids`;
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=notes&fields%5B%5D=date&fields%5B%5D=rsvp_pizza&fields%5B%5D=rsvp_childcare&fields%5B%5D=rsvp_childcare_kids&fields%5B%5D=rsvp_accessibility&fields%5B%5D=rsvp_other_needs`;
     if (off) q += `&offset=${encodeURIComponent(off)}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
     for (const r of d.records) {
@@ -7769,6 +7901,8 @@ async function rsvpExportCsv(env, urlObj) {
       rdate[cid] = r.fields.date || '';
       const m = String(r.fields.notes || '').match(/Recruited by:\s*([^|]+)/);
       recruited[cid] = m ? m[1].trim() : '';
+      access[cid] = r.fields.rsvp_accessibility || '';
+      oneeds[cid] = r.fields.rsvp_other_needs || '';
       if (r.fields.rsvp_pizza === 'Yes') pizza++;
       if (r.fields.rsvp_childcare === 'Yes') { ccFam++; ccKids += countKids(r.fields.rsvp_childcare_kids); }
     }
@@ -7799,6 +7933,23 @@ async function rsvpExportCsv(env, urlObj) {
     for (const r of d.records) det[r.id] = r.fields;
   }
   const csvEsc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  // needs=1 → accessibility/interpretation report (interpretation folds into rsvp_accessibility
+  // as "Interpretation: <lang>"). Read-only, additive; the tracker sheets don't pass needs=1
+  // so the default roster shape below is untouched. needs=interp filters to interpretation only.
+  if (urlObj.searchParams.get('needs')) {
+    const interpOnly = urlObj.searchParams.get('needs') === 'interp';
+    const nl = [['First Name', 'Last Name', 'Phone', 'Interpretation', 'Language', 'Accessibility / needs', 'Anything else'].join(',')];
+    for (const cid of order) {
+      const a = String(access[cid] || ''), o = String(oneeds[cid] || '');
+      const im = a.match(/Interpretation:\s*([^·|]+)/i);
+      const needsInterp = !!im;
+      if (interpOnly && !needsInterp) continue;
+      const lang = im ? im[1].trim() : '';
+      const f = det[cid] || {};
+      nl.push([f.first, f.last, f.phone, needsInterp ? 'Yes' : '', lang, a, o].map(csvEsc).join(','));
+    }
+    return new Response(nl.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+  }
   const lines = [['First Name', 'Last Name', 'Email', 'Phone', 'Role', 'School', 'District', 'Who Recruited'].join(',')];
   for (const cid of order) {
     const f = det[cid] || {};
