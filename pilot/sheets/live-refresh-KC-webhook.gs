@@ -18,11 +18,13 @@
  *   A First Name · B Last Name · C Email · D Phone · E Role · F School · G District · H Who Recruited
  *   I Claimed by · J Reminder: assigned to · K Reminder: status · L Attendance · M Notes (free text)
  *   A–H (DATA_COLS) are form-fed and rewritten on every push. I–L are the manual
- *   organizer columns. M (Notes) is free text the script never touches.
+ *   organizer columns. M (Notes) is free text; the script only ever APPENDS a
+ *   "Walk-in" marker to it for door walk-ins (never overwrites what's typed there).
  */
 
 const KEY     = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
 const EVENT   = 'Kansas City Emergency Meeting 7/9';
+const EVENT_DATE = '2026-07-09';                                            // commitments logged on/after this date = "made that night"
 const LEADS   = 'LaNee,David,Facebook,Other';
 const STATUS  = 'Not started,Texted,Called,Left message,Confirmed coming,No answer,Declined';
 const ATTEND  = 'Scheduled,Self check-in,Attended,No-show,Walk-in,Canceled';
@@ -117,11 +119,13 @@ function _upsertRow(p) {
     sh.getRange(targetRow, ATT_COL).setValue(p.attendance || 'Scheduled');                          // L attendance
     brandRows(sh, last-FIRST+2);
   }
-  // Repair leftover from the earlier off-by-one bug: a stray 'Walk-in' written into
-  // the Notes column (M).
-  if (p.attendance === 'Walk-in') {
+  // Walk-in marker in Notes (M). Durable flag so turnout counts walk-ins even if an
+  // organizer later overwrites the Attendance cell, and so the "Walk-in" note the
+  // organizers asked for stays visible. Append (never overwrite their free text).
+  if (p.walkin || p.attendance === 'Walk-in') {
     const nCell = sh.getRange(targetRow, NOTES_COL);
-    if (String(nCell.getValue()||'').trim() === 'Walk-in') nCell.clearContent();
+    const curN = String(nCell.getValue()||'').trim();
+    if (!/walk-?in/i.test(curN)) nCell.setValue(curN ? curN + ' · Walk-in' : 'Walk-in');
   }
   if (!_bulk) { try { writeStats(); } catch(e) {} }
 }
@@ -136,6 +140,7 @@ function onOpen(){
     .addSeparator()
     .addItem('Safety-net refresh now','safetyRefresh')
     .addItem('Pull attendance + walk-ins now','pullAttendance')
+    .addItem('Refresh commitments now','pullCommitments')
     .addItem('Rebuild How-to + Goals','installHelp')
     .addItem('Re-apply branding','brandSheet')
     .addToUi();
@@ -243,7 +248,7 @@ function pullAttendance() {
       const a = String(av[i][0]||'').trim();
       if (a && STATUS_SET.indexOf(a) >= 0) { av[i][0]='Scheduled'; dA=true; }   // reminder status in Attendance
       const n = String(nv[i][0]||'').trim();
-      if (n === 'Scheduled' || n === 'Walk-in') { nv[i][0]=''; dN=true; }        // attendance leaked into Notes
+      if (n === 'Scheduled') { nv[i][0]=''; dN=true; }                           // 'Scheduled' leaked into Notes (keep 'Walk-in' — it's a wanted marker)
     }
     if (dA) attRng.setValues(av);
     if (dN) noteRng.setValues(nv);
@@ -260,10 +265,46 @@ function pullAttendance() {
         role: r[4]||'', school: r[5]||'', district: r[6]||'',
         recruited: rc >= 0 ? (r[rc]||'') : '',
         attendance: status,
+        walkin: isWalk,
       });
     }
   } finally { _bulk = false; }
+  try { pullCommitments(); } catch(e) {}   // refresh the DB-driven commitment counts alongside attendance
   try { writeStats(); } catch(e) {}
+}
+
+// ============================================================================
+// COMMITMENTS — pulled live from the database. The worker returns, per bucket,
+// how many of THIS event's attendees committed (Amplifier / Canvass / Regional
+// team / …), split into all-time and "that night" (logged on/after EVENT_DATE).
+// We cache the "that night" counts in ScriptProperties so the turnout block can
+// render them on every edit-driven refresh without another network call.
+// ============================================================================
+function pullCommitments() {
+  const url = WORKER + '/export/event-commitments.csv?key=' + encodeURIComponent(KEY)
+    + '&event=' + encodeURIComponent(EVENT) + '&since=' + encodeURIComponent(EVENT_DATE) + '&t=' + Date.now();
+  let resp;
+  try { resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true }); }
+  catch (e) { return getCommitCounts(); }                   // quota/network -> keep last cached
+  if (resp.getResponseCode() !== 200) return getCommitCounts();
+  const rows = Utilities.parseCsv(resp.getContentText());
+  if (rows.length < 1) return getCommitCounts();
+  const hd = rows[0].map(h => String(h).toLowerCase().trim());
+  const ki = hd.indexOf('key'), li = hd.indexOf('label'), ni = hd.indexOf('count_night');
+  if (ki === -1 || li === -1 || ni === -1) return getCommitCounts();          // not our CSV -> keep cache
+  const out = { order: [], label: {}, night: {} };
+  for (const r of rows.slice(1)) {
+    const key = String(r[ki]||'').trim(); if (!key) continue;
+    const night = Number(r[ni]) || 0;
+    out.order.push(key); out.label[key] = String(r[li]||'').trim() || key; out.night[key] = night;
+  }
+  PropertiesService.getScriptProperties().setProperty('commitCounts', JSON.stringify(out));
+  try { refreshGoals(); } catch(e) {}
+  return out;
+}
+function getCommitCounts() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('commitCounts') || '{}'); }
+  catch (e) { return {}; }
 }
 
 // ============================================================================
@@ -316,6 +357,7 @@ function setUp(){
   brandSheet();
   try { ensureTemplate(); } catch(e) {}
   try { installHelp(); } catch(e) {}
+  try { pullCommitments(); } catch(e) {}
   try { writeStats(); } catch(e) {}
   brandSheet();
   SpreadsheetApp.getUi().alert(
@@ -415,20 +457,8 @@ function writeStats(){
 // ============================================================================
 function refreshGoals(){
   const g=SpreadsheetApp.getActive().getSheetByName('Goals'); if(!g) return;
-  const saved=readCommitments(g);       // preserve hand-entered commitment counts before the clear
   try{ writeLeaderboardExtra(); }catch(e){}
-  try{ writeTurnout(saved); }catch(e){}
-}
-
-// Read the hand-entered commitment counts (col I, rows 10–12) so a refresh keeps
-// them. Only trust them once the block exists (H10 == 'Amplifier'), otherwise
-// col I here may still hold leftovers from the retired standalone table.
-function readCommitments(g){
-  try{
-    if(String(g.getRange(10,8).getValue()||'').trim().toLowerCase()!=='amplifier') return {};
-    const v=g.getRange(10,9,3,1).getValues();
-    return { amplifier:v[0][0], canvass:v[1][0], regional_team:v[2][0] };
-  }catch(e){ return {}; }
+  try{ writeTurnout(); }catch(e){}
 }
 
 function writeLeaderboardExtra(){
@@ -468,9 +498,20 @@ function writeLeaderboardExtra(){
   for(let i=hdr;i<colA.length;i++){ if(colA[i].toLowerCase()==='total'){ tot=i+1; break; } }
 
   // --- Two new columns: E Attended, F Flake rate. Flake = didn't show / claimed
-  //     (the event is over, so a claimed person with no check-in = a flake). ---
-  g.getRange(hdr,5,1,2).setValues([['Attended','Flake rate']]).setFontWeight('bold').setBackground(BAND);
+  //     (the event is over, so a claimed person with no check-in = a flake).
+  //     Match the existing leaderboard exactly: copy column C's look onto E
+  //     (both are counts) and column D's look onto F (both are the %/rate column),
+  //     header and body, so the new columns are visually indistinguishable. ---
   const lastLead=(tot>0?tot:gLast+1)-1;
+  g.getRange(hdr,3).copyTo(g.getRange(hdr,5),{formatOnly:true});   // "Attended" header ← "Registered" header
+  g.getRange(hdr,4).copyTo(g.getRange(hdr,6),{formatOnly:true});   // "Flake rate" header ← "% to goal" header
+  if(lastLead>=hdr+1 && tot>0){
+    g.getRange(hdr+1,3,lastLead-hdr,1).copyTo(g.getRange(hdr+1,5,lastLead-hdr,1),{formatOnly:true});   // Attended body ← Registered body
+    g.getRange(hdr+1,4,lastLead-hdr,1).copyTo(g.getRange(hdr+1,6,lastLead-hdr,1),{formatOnly:true});   // Flake body ← % body
+    g.getRange(tot,3).copyTo(g.getRange(tot,5),{formatOnly:true});   // TOTAL row too
+    g.getRange(tot,4).copyTo(g.getRange(tot,6),{formatOnly:true});
+  }
+  g.getRange(hdr,5,1,2).setValues([['Attended','Flake rate']]);
   let tShow=0, tClaim=0;
   for(let r=hdr+1;r<=lastLead;r++){
     const name=String(colA[r-1]||'').trim();
@@ -499,7 +540,7 @@ function writeLeaderboardExtra(){
     else { g.insertRowBefore(tot); uRow=tot; }
   }
   if(uRow>0){
-    g.getRange(uRow,1).setValue('Unclaimed (walk-ins)');
+    g.getRange(uRow,1).setValue('Unclaimed');   // anyone with no "Claimed by" — un-claimed RSVPs AND walk-ins, not walk-ins alone
     g.getRange(uRow,3).setValue(unc.claimed);
     g.getRange(uRow,5).setValue(unc.showed);
     g.getRange(uRow,6).setValue(unc.claimed?(unc.claimed-unc.showed)/unc.claimed:'').setNumberFormat('0%');
@@ -507,48 +548,84 @@ function writeLeaderboardExtra(){
   }
 }
 
-function writeTurnout(saved){
+function writeTurnout(){
   const ss=SpreadsheetApp.getActive();
   const g=ss.getSheetByName('Goals'); if(!g) return;
   const sh=ss.getSheetByName(TAB); if(!sh) return;
-  saved=saved||{};
 
-  // Compute turnout from the Attendance column.
+  // Compute turnout from the RSVPs tab. A walk-in = Attendance 'Walk-in' OR a
+  // 'Walk-in' marker in Notes (M) — the note is durable even if an organizer later
+  // overwrites the Attendance cell, so the walk-in count can never silently drop to 0.
   const last=sh.getLastRow();
   let rsvps=0, walkins=0, totalAtt=0, rsvpShowed=0;
+  const statusCount={'Scheduled':0,'Self check-in':0,'Attended':0,'Walk-in':0,'No-show':0,'Canceled':0,'(blank)':0};
   if(last>=FIRST){
     const att=sh.getRange(FIRST,ATT_COL,last-FIRST+1,1).getValues();
+    const notes=sh.getRange(FIRST,NOTES_COL,last-FIRST+1,1).getValues();
     for(let i=0;i<att.length;i++){
       const a=String(att[i][0]||'').trim();
-      const isWalk=(a==='Walk-in');
-      if(isWalk) walkins++; else rsvps++;
-      if(SHOW.indexOf(a)>=0) totalAtt++;
-      if(!isWalk && (a==='Attended'||a==='Self check-in')) rsvpShowed++;
+      const noteWalk=/walk-?in/i.test(String(notes[i][0]||''));
+      const isWalk=(a==='Walk-in')||noteWalk;
+      // Attendance-status tally (walk-ins bucket under Walk-in regardless of the cell).
+      if(isWalk) statusCount['Walk-in']++;
+      else if(a && statusCount.hasOwnProperty(a)) statusCount[a]++;
+      else if(!a) statusCount['(blank)']++;
+      // Turnout math.
+      if(isWalk){ walkins++; totalAtt++; }
+      else {
+        rsvps++;
+        if(SHOW.indexOf(a)>=0){ rsvpShowed++; totalAtt++; }
+      }
     }
   }
 
   const C=8, V=9;   // labels col H, values col I
-  // Turnout header.
-  g.getRange(3,C,1,2).breakApart();
-  g.getRange(3,C).setValue('Turnout — KC 7/9');
-  g.getRange(3,C,1,2).merge().setFontWeight('bold').setFontColor(YELLOW).setBackground(PLUM).setHorizontalAlignment('center');
+  const hdrBlock=(row,text)=>{
+    g.getRange(row,C,1,2).breakApart();
+    g.getRange(row,C).setValue(text);
+    g.getRange(row,C,1,2).merge().setFontWeight('bold').setFontColor(YELLOW).setBackground(PLUM).setHorizontalAlignment('center');
+  };
+  // Clear the whole right-hand panel first so a shorter render never leaves stragglers.
+  g.getRange(3,C,40,2).breakApart().clearContent().setBackground(null).setFontStyle('normal').setFontColor(INK);
+
+  // --- Turnout block ---
+  hdrBlock(3,'Turnout — KC 7/9');
   g.getRange(4,C,4,1).setValues([['RSVPs'],['Show rate'],['Walk-ins'],['Total attendance']]).setFontWeight('bold');
   g.getRange(4,V).setValue(rsvps);
   g.getRange(5,V).setValue(rsvps?rsvpShowed/rsvps:'').setNumberFormat('0%');
   g.getRange(6,V).setValue(walkins);
   g.getRange(7,V).setValue(totalAtt);
 
-  // Commitments header + hand-entered counts (preserved across refresh).
-  g.getRange(9,C,1,2).breakApart();
-  g.getRange(9,C).setValue('Commitments made that night');
-  g.getRange(9,C,1,2).merge().setFontWeight('bold').setFontColor(YELLOW).setBackground(PLUM).setHorizontalAlignment('center');
-  g.getRange(10,C,3,1).setValues([['Amplifier'],['Canvass'],['Regional team']]).setFontWeight('bold');
-  const cv=[[saved.amplifier==null?'':saved.amplifier],[saved.canvass==null?'':saved.canvass],[saved.regional_team==null?'':saved.regional_team]];
-  g.getRange(10,V,3,1).setValues(cv).setBackground(ALERT).setHorizontalAlignment('center').setFontWeight('bold');
-  g.getRange(13,C,1,2).breakApart();
-  g.getRange(13,C).setValue('↑ enter counts hand-tallied at the event').setFontColor('#8A8F98').setFontStyle('italic').setFontSize(9);
+  // --- Commitments made that night — LIVE from the database (worker feed). ---
+  let row=9;
+  hdrBlock(row,'Commitments made that night'); row++;
+  const cc=getCommitCounts();
+  const CORE={amplifier:1,canvass:1,regional_team:1};   // STL format always lists these three, even at 0
+  const order=(cc && cc.order && cc.order.length)
+    ? cc.order.filter(k=>(cc.night[k]||0)>0 || CORE[k]) : [];
+  if(order.length){
+    const labels=order.map(k=>[cc.label[k]||k]);
+    const vals=order.map(k=>[cc.night[k]||0]);
+    g.getRange(row,C,order.length,1).setValues(labels).setFontWeight('bold');
+    g.getRange(row,V,order.length,1).setValues(vals).setHorizontalAlignment('center').setFontWeight('bold');
+    row+=order.length;
+  } else {
+    g.getRange(row,C).setValue('(run "Pull attendance + walk-ins now")').setFontColor('#8A8F98').setFontStyle('italic').setFontSize(9);
+    row++;
+  }
+  row++;   // gap
 
-  g.setColumnWidth(C,150); g.setColumnWidth(V,90);
+  // --- Attendance-status breakdown (every status, counted). ---
+  hdrBlock(row,'Attendance status'); row++;
+  const sOrder=['Scheduled','Attended','Self check-in','Walk-in','No-show','Canceled','(blank)'];
+  const sLabels=[], sVals=[];
+  for(const s of sOrder){ if(statusCount[s]){ sLabels.push([s==='Scheduled'?'Scheduled (no check-in)':s]); sVals.push([statusCount[s]]); } }
+  if(sLabels.length){
+    g.getRange(row,C,sLabels.length,1).setValues(sLabels).setFontWeight('bold');
+    g.getRange(row,V,sVals.length,1).setValues(sVals).setHorizontalAlignment('center');
+  }
+
+  g.setColumnWidth(C,190); g.setColumnWidth(V,90);
 }
 
 function ensureTemplate(){
