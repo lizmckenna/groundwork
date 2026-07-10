@@ -7972,6 +7972,7 @@ async function attendanceExportCsv(env, urlObj) {
   const evEsc = event.replace(/'/g, "\\'");
   const cidSelf = {};  // contact id -> true if any of their attendance rows is a self check-in
   const cidWalk = {};  // contact id -> true if any attendance row's notes flag it a walk-in
+  const cidRecruit = {};  // contact id -> "Recruited by: X" name parsed from the check-in note
   let off = null;
   do {
     let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=notes`;
@@ -7982,6 +7983,7 @@ async function attendanceExportCsv(env, urlObj) {
       const note = String(r.fields.notes || '');
       cidSelf[c] = cidSelf[c] || /self check-in/i.test(note);
       cidWalk[c] = cidWalk[c] || /walk-?in/i.test(note);
+      if (!cidRecruit[c]) { const mr = note.match(/recruited by:\s*([^|]+)/i); if (mr) cidRecruit[c] = mr[1].trim(); }
     }
     off = d.offset;
   } while (off);
@@ -8010,12 +8012,12 @@ async function attendanceExportCsv(env, urlObj) {
       for (const r of d.records) det[r.id] = r.fields;
     }
     const csvEsc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const out = [['First Name', 'Last Name', 'Email', 'Phone', 'Role', 'School', 'District', 'Status', 'Walk-in'].join(',')];
+    const out = [['First Name', 'Last Name', 'Email', 'Phone', 'Role', 'School', 'District', 'Recruited By', 'Status', 'Walk-in'].join(',')];
     for (const cid of cids) {
       const f = det[cid] || {};
       const isWalk = !rsvpCids.has(cid) || cidWalk[cid];
       const status = isWalk ? 'Walk-in' : (cidSelf[cid] ? 'Self check-in' : 'Attended');
-      out.push([f.first, f.last, f.email, f.phone, '', f.school, f.district, status, isWalk ? 'Yes' : 'No'].map(csvEsc).join(','));
+      out.push([f.first, f.last, f.email, f.phone, '', f.school, f.district, cidRecruit[cid] || '', status, isWalk ? 'Yes' : 'No'].map(csvEsc).join(','));
     }
     return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
   }
