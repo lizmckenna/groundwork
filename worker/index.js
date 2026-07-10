@@ -519,6 +519,10 @@ export default {
       // same key the turnout Sheets already carry). Leads mark Attended/No-show in
       // the Sheet; this upserts the 'Event attendance' rows the dashboard counts.
       if (url.pathname === '/sheet-attendance' && request.method === 'POST') return await sheetAttendance(request, env);
+      // Import paper commitment cards: {date, people:[{email, commitments:[bucketKey]}]}.
+      // Finds each contact by email, creates the missing method='Commitment' log rows
+      // (idempotent — skips buckets the contact already has). Key-gated.
+      if (url.pathname === '/import-commitments' && request.method === 'POST') return await importCommitments(request, env);
       // One-shot fix: rename the organizer record at rec0OmDN68hlffkTn back to
       // "LaNeé Bridewell". Someone typed "Laci Horn" over it in Airtable, which
       // silently attributed 1,119 of LaNee's contacts to Laci on the scoreboard.
@@ -8089,6 +8093,63 @@ async function eventCommitmentsCsv(env, urlObj) {
     out.push([k, LABELS[k], all, night].map(csvEsc).join(','));
   }
   return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Import paper commitment cards. Body: { date:'YYYY-MM-DD', event:'…' (optional,
+// for the note), people:[ {email, commitments:['amplifier','house_meeting',…]} ] }.
+// For each person: find the contact by email, then create one method='Commitment'
+// log row per bucket they don't already have. Idempotent — safe to re-run, and the
+// count dedupes per contact per bucket anyway. Returns a per-person report.
+async function importCommitments(request, env) {
+  const url = new URL(request.url);
+  if (!env.EXPORT_KEY || url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+  let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+  const date = String(body.date || '').slice(0, 10) || todayCT();
+  const eventNote = String(body.event || '');
+  const people = Array.isArray(body.people) ? body.people : [];
+  const labelFor = k => { const b = COMMIT_BUCKETS.find(x => x.key === k); return b ? b.label : null; };
+  const report = [];
+  for (const p of people) {
+    const email = String(p.email || '').trim().toLowerCase().replace(/'/g, "\\'");
+    const wantKeys = (Array.isArray(p.commitments) ? p.commitments : []).map(commitBucket).filter(Boolean);
+    // dedupe requested keys
+    const want = [...new Set(wantKeys.map(k => (k)))];
+    if (!email) { report.push({ email: p.email || '', status: 'skipped: no email' }); continue; }
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email}'`)}&maxRecords=1&fields%5B%5D=first&fields%5B%5D=last`);
+    const rec = (r.records || [])[0];
+    if (!rec) { report.push({ email: p.email, status: 'skipped: contact not found' }); continue; }
+    const cid = rec.id;
+    // Existing commitment buckets for this contact.
+    const have = new Set();
+    let off = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Commitment',{contact}='${cid}')`)}&pageSize=100&fields%5B%5D=event`;
+      if (off) q += `&offset=${encodeURIComponent(off)}`;
+      let d;
+      try { d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`); }
+      catch (e) { d = { records: [] }; }   // {contact}='id' filter can be finicky; fall back to creating (dedupe still happens on count)
+      for (const lr of d.records) { const k = commitBucket(lr.fields.event); if (k) have.add(k); }
+      off = d.offset;
+    } while (off);
+    const toAdd = want.filter(k => !have.has(k));
+    const records = toAdd.map(k => ({
+      fields: {
+        Summary: `${date} — commitment: ${labelFor(k)}`,
+        date,
+        method: 'Commitment',
+        result: 'Committed',
+        event: labelFor(k),
+        contact: [cid],
+        notes: `Paper commitment card${eventNote ? ` at ${eventNote}` : ''} on ${date}`,
+      }
+    }));
+    for (let i = 0; i < records.length; i += 10) {
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: records.slice(i, i + 10), typecast: true }) });
+    }
+    report.push({ email: p.email, name: `${rec.fields.first || ''} ${rec.fields.last || ''}`.trim(), added: toAdd, already_had: [...have].filter(k => want.includes(k)) });
+  }
+  await invalidateReadCaches(env);
+  return json({ ok: true, date, report });
 }
 
 async function contactsExportCsv(env, urlObj) {
