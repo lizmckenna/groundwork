@@ -31,7 +31,10 @@ const FILL_TINT='#F0E2C2';
 const C_RED='#F2C9C4', C_GREEN='#CDE9D5', C_GREEN_STRONG='#1F7A43', C_GREY='#E0E0E0', C_BLUE='#D8E6F2', C_AMBER='#FBE8B0', C_NEUTRAL='#EDEFF4';
 
 const TAB='RSVPs (live)';
-const DATA_COLS=8;
+// Form-fed columns A–I. A–H (CORE_COLS) are the roster the webhook rewrites on
+// every push; column I (NEEDS_COL) is "Interpretation / needs" — the accessibility
+// / interpretation answer folded in from the RSVP form ("Interpretation: Spanish").
+const DATA_COLS=9, CORE_COLS=8, NEEDS_COL=9;
 const MANUAL=['Claimed by','Reminder: assigned to','Reminder: status','Attendance'];
 const M_START=DATA_COLS+1, TOTAL_COLS=DATA_COLS+MANUAL.length, EMAIL_COL=3, HDR=1, FIRST=2;
 
@@ -69,20 +72,38 @@ function _upsertRow(p) {
       }
     }
   }
-  const row = [
+  // Columns A–H: form-fed roster, always rewritten. Column I (Interpretation /
+  // needs) is written separately below so the hourly safety poll — which carries
+  // no accessibility field — never blanks an answer the webhook already filled.
+  const core = [
     p.first||'', p.last||'', p.email||'', p.phone||'',
     p.role||'', p.school||'', p.district||'',
     ''  // Who Recruited (kept blank; column exists for parity with CSV export)
   ];
+  let targetRow;
   if (existingRow > 0) {
-    sh.getRange(existingRow, 1, 1, DATA_COLS).setValues([row]);
+    targetRow = existingRow;
+    sh.getRange(existingRow, 1, 1, CORE_COLS).setValues([core]);
+    // Attendance from Airtable (walk-in pull). Only fill blank / 'Scheduled' so a
+    // manual mark an organizer typed is never clobbered.
+    if (p.attendance) {
+      const attCell = sh.getRange(existingRow, M_START+3);
+      const cur = String(attCell.getValue()||'').trim();
+      if (!cur || cur === 'Scheduled') attCell.setValue(p.attendance);
+    }
   } else {
-    const newRow = last < FIRST ? FIRST : last + 1;
-    sh.getRange(newRow, 1, 1, DATA_COLS).setValues([row]);
-    // Seed default manual values so conditional formatting shows the "not started" red
-    sh.getRange(newRow, M_START+2, 1, 1).setValue('Not started');
-    sh.getRange(newRow, M_START+3, 1, 1).setValue('Scheduled');
+    targetRow = last < FIRST ? FIRST : last + 1;
+    sh.getRange(targetRow, 1, 1, CORE_COLS).setValues([core]);
+    // Seed default manual values so conditional formatting shows the "not started" red.
+    // Walk-ins already showed up, so skip the reminder seed and stamp Attendance directly.
+    sh.getRange(targetRow, M_START+2, 1, 1).setValue(p.attendance === 'Walk-in' ? '' : 'Not started');
+    sh.getRange(targetRow, M_START+3, 1, 1).setValue(p.attendance || 'Scheduled');
     brandRows(sh, last-FIRST+2);
+  }
+  // Interpretation / needs (col I) — only overwrite when the payload actually
+  // carries it. The webhook + backfill send `accessibility`; the safety poll does not.
+  if (typeof p.accessibility === 'string' && p.accessibility.trim()) {
+    sh.getRange(targetRow, NEEDS_COL, 1, 1).setValue(p.accessibility.trim());
   }
   try { writeStats(); } catch(e) {}
 }
@@ -96,6 +117,7 @@ function onOpen(){
     .addItem('Backfill from worker','menuBackfill')
     .addSeparator()
     .addItem('Safety-net refresh now','safetyRefresh')
+    .addItem('Pull walk-ins now','pullWalkIns')
     .addItem('Rebuild How-to + Goals','installHelp')
     .addItem('Re-apply branding','brandSheet')
     .addToUi();
@@ -161,6 +183,38 @@ function safetyRefresh() {
       role: r[4]||'', school: r[5]||'', district: r[6]||'',
     });
   }
+  try { pullWalkIns(); } catch(e) {}   // fold in door walk-ins (only live in Airtable, never in the RSVP export)
+}
+
+// ============================================================================
+// WALK-INS — people who showed up WITHOUT an RSVP. They exist only in Airtable
+// (method='Event attendance', no 'Event RSVP' row), so the RSVP export/webhook
+// never sees them. This pulls them in as rows marked Attendance='Walk-in'.
+// Piggybacks on the hourly safety poll (no extra trigger); also runnable from the
+// menu. Never clobbers a manual Attendance mark (see _upsertRow).
+// ============================================================================
+function pullWalkIns() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(TAB); if (!sh) return;
+  const url = WORKER + '/export/attendance.csv?details=1&key=' + encodeURIComponent(KEY)
+    + '&event=' + encodeURIComponent(EVENT) + '&t=' + Date.now();
+  let resp;
+  try { resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true }); }
+  catch (e) { return; }                                   // urlfetch quota / network -> retry next cycle
+  if (resp.getResponseCode() !== 200) return;
+  const rows = Utilities.parseCsv(resp.getContentText());
+  if (rows.length < 2) return;
+  const hd = rows[0].map(h => String(h).toLowerCase());
+  const wi = hd.indexOf('walk-in');
+  if (hd.indexOf('email') === -1 || wi === -1) return;    // not our CSV -> bail, never wipe
+  for (const r of rows.slice(1)) {
+    if (String(r[wi]||'').trim().toLowerCase() !== 'yes') continue;   // walk-ins only; RSVP'd attendees already have rows
+    _upsertRow({
+      event: EVENT,
+      first: r[0]||'', last: r[1]||'', email: r[2]||'', phone: r[3]||'',
+      role: r[4]||'', school: r[5]||'', district: r[6]||'',
+      attendance: 'Walk-in',
+    });
+  }
 }
 
 // ============================================================================
@@ -190,12 +244,24 @@ function setUp(){
     const r1 = sh.getRange(1,1,1,Math.min(sh.getMaxColumns(),TOTAL_COLS)).getValues()[0].join(' ');
     if (r1.indexOf('⚠') >= 0 || r1.indexOf('LIVE LIST') >= 0) sh.deleteRow(1);
   } catch(e) {}
+  // One-time migration to the 9-column roster. Older sheets have the manual
+  // columns (Claimed by / Reminder / Attendance) starting at col 9. Insert a
+  // blank column there so that existing manual DATA shifts right and stays
+  // aligned under its headers; the freed col 9 becomes "Interpretation / needs".
+  // Idempotent: skips once col 9 already holds the needs header (or is empty/new).
+  try {
+    const h9 = String(sh.getRange(HDR, NEEDS_COL).getValue() || '').trim().toLowerCase();
+    if (h9 && h9.indexOf('interpretation') === -1 && h9.indexOf('needs') === -1) {
+      sh.insertColumnBefore(NEEDS_COL);
+    }
+  } catch(e) {}
   // Headers on row 1 — no banner. Clear any old validations/merges leftover
   // from the previous (banner) layout so header cells never flag "Invalid".
   sh.getRange(1,1,2,TOTAL_COLS).breakApart().clearDataValidations();
   sh.getRange(HDR,M_START,1,MANUAL.length).setValues([MANUAL]);
-  sh.getRange(HDR,1,1,DATA_COLS).setValues([['First Name','Last Name','Email','Phone','Role','School','District','Who Recruited']]);
+  sh.getRange(HDR,1,1,DATA_COLS).setValues([['First Name','Last Name','Email','Phone','Role','School','District','Who Recruited','Interpretation / needs']]);
   sh.getRange(HDR,1,1,TOTAL_COLS).setWrap(true).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  sh.setColumnWidth(NEEDS_COL,220);   // interpretation/accessibility answers can be a sentence
   sh.setRowHeight(HDR,44);
   const dv=v=>SpreadsheetApp.newDataValidation().requireValueInList(v.split(','),true).setAllowInvalid(true).build();
   sh.getRange(FIRST,M_START,400,1).setDataValidation(dv(LEADS));
@@ -333,7 +399,7 @@ function installHelp(){
     ['','gap'],
     ['Claim someone who registered','h'],
     ['Find the person and pick your name in the plum "Claimed by" column. It adds to your number on the Goals tab right away.','p'],
-    ['Do NOT type into the RED columns (A–H). They are the live database list and anything typed there is erased on the next refresh.','note'],
+    ['Do NOT type into the RED columns (A–I). They are the live database list and anything typed there is erased on the next refresh. "Interpretation / needs" (col I) fills in automatically from the RSVP form — e.g. "Interpretation: Spanish".','note'],
   ];
   h.getRange(1,1,rows.length,1).setValues(rows.map(function(r){ return [r[0]]; }));
   rows.forEach(function(it,i){

@@ -7971,15 +7971,55 @@ async function attendanceExportCsv(env, urlObj) {
   const event = urlObj.searchParams.get('event') || '';
   const evEsc = event.replace(/'/g, "\\'");
   const cidSelf = {};  // contact id -> true if any of their attendance rows is a self check-in
+  const cidWalk = {};  // contact id -> true if any attendance row's notes flag it a walk-in
   let off = null;
   do {
     let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=notes`;
     if (off) q += `&offset=${encodeURIComponent(off)}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
-    for (const r of d.records) { const c = (r.fields.contact || [])[0]; if (!c) continue; cidSelf[c] = cidSelf[c] || /self check-in/i.test(String(r.fields.notes || '')); }
+    for (const r of d.records) {
+      const c = (r.fields.contact || [])[0]; if (!c) continue;
+      const note = String(r.fields.notes || '');
+      cidSelf[c] = cidSelf[c] || /self check-in/i.test(note);
+      cidWalk[c] = cidWalk[c] || /walk-?in/i.test(note);
+    }
     off = d.offset;
   } while (off);
   const cids = Object.keys(cidSelf);
+
+  // details=1 → full walk-in report: name / phone + a Walk-in flag, so the turnout
+  // Sheet can add door registrants it never saw (walk-ins live only in Airtable,
+  // never in the RSVP export). Additive — the default email,status shape below is
+  // unchanged when `details` is absent. "Walk-in" = attended but never RSVP'd
+  // (set-difference against the RSVP set), which also catches rows lacking the note.
+  if (urlObj.searchParams.get('details')) {
+    const rsvpCids = new Set();
+    let ro = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
+      if (ro) q += `&offset=${encodeURIComponent(ro)}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+      for (const r of d.records) { const c = (r.fields.contact || [])[0]; if (c) rsvpCids.add(c); }
+      ro = d.offset;
+    } while (ro);
+    const det = {};
+    for (let i = 0; i < cids.length; i += 40) {
+      const chunk = cids.slice(i, i + 40);
+      const f = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone&fields%5B%5D=school&fields%5B%5D=district`);
+      for (const r of d.records) det[r.id] = r.fields;
+    }
+    const csvEsc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const out = [['First Name', 'Last Name', 'Email', 'Phone', 'Role', 'School', 'District', 'Status', 'Walk-in'].join(',')];
+    for (const cid of cids) {
+      const f = det[cid] || {};
+      const isWalk = !rsvpCids.has(cid) || cidWalk[cid];
+      const status = isWalk ? 'Walk-in' : (cidSelf[cid] ? 'Self check-in' : 'Attended');
+      out.push([f.first, f.last, f.email, f.phone, '', f.school, f.district, status, isWalk ? 'Yes' : 'No'].map(csvEsc).join(','));
+    }
+    return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+  }
+
   const lines = [];   // email,status  (status = "Self check-in" or "Attended")
   for (let i = 0; i < cids.length; i += 40) {
     const chunk = cids.slice(i, i + 40);
