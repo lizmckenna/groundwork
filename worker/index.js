@@ -523,6 +523,12 @@ export default {
       // Finds each contact by email, creates the missing method='Commitment' log rows
       // (idempotent — skips buckets the contact already has). Key-gated.
       if (url.pathname === '/import-commitments' && request.method === 'POST') return await importCommitments(request, env);
+      // One-time cleanup: an earlier import run created duplicate paper-commitment
+      // rows (the idempotency check was broken). This finds Commitment rows whose
+      // notes say "Paper commitment card" dated 2026-07-09, groups by contact+bucket,
+      // and deletes the extras so each contact+bucket keeps exactly one row. Never
+      // touches a non-paper row. Dry-run by default; add &confirm=1 to delete. Key-gated.
+      if (url.pathname === '/cleanup-commitment-dupes' && request.method === 'GET') return await cleanupCommitmentDupes(env, url);
       // One-shot fix: rename the organizer record at rec0OmDN68hlffkTn back to
       // "LaNeé Bridewell". Someone typed "Laci Horn" over it in Airtable, which
       // silently attributed 1,119 of LaNee's contacts to Laci on the scoreboard.
@@ -8108,6 +8114,10 @@ async function importCommitments(request, env) {
   const eventNote = String(body.event || '');
   const people = Array.isArray(body.people) ? body.people : [];
   const labelFor = k => { const b = COMMIT_BUCKETS.find(x => x.key === k); return b ? b.label : null; };
+  // Existing commitments per contact, from the proven scan (a linked {contact}
+  // field can't be filtered by record id in an Airtable formula, so we build the
+  // contact→buckets map in JS instead — this is what makes the import idempotent).
+  const sets = await commitmentSets(env);
   const report = [];
   for (const p of people) {
     const email = String(p.email || '').trim().toLowerCase().replace(/'/g, "\\'");
@@ -8123,18 +8133,12 @@ async function importCommitments(request, env) {
     const rec = (r.records || [])[0];
     if (!rec) { report.push({ email: p.email, status: 'skipped: contact not found' }); continue; }
     const cid = rec.id;
-    // Existing commitment buckets for this contact.
+    // Existing commitment buckets for this contact, from the proven contact→buckets
+    // map. (A per-contact Airtable formula on the linked {contact} field never
+    // matches by record id, so the old query always returned empty and this import
+    // double-created rows. commitmentSets scans every Commitment row in JS.)
     const have = new Set();
-    let off = null;
-    do {
-      let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Commitment',{contact}='${cid}')`)}&pageSize=100&fields%5B%5D=event`;
-      if (off) q += `&offset=${encodeURIComponent(off)}`;
-      let d;
-      try { d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`); }
-      catch (e) { d = { records: [] }; }   // {contact}='id' filter can be finicky; fall back to creating (dedupe still happens on count)
-      for (const lr of d.records) { const k = commitBucket(lr.fields.event); if (k) have.add(k); }
-      off = d.offset;
-    } while (off);
+    for (const b of COMMIT_BUCKETS) if (sets[b.key] && sets[b.key].has(cid)) have.add(b.key);
     const toAdd = want.filter(k => !have.has(k));
     const records = toAdd.map(k => ({
       fields: {
@@ -8154,6 +8158,56 @@ async function importCommitments(request, env) {
   }
   await invalidateReadCaches(env);
   return json({ ok: true, date, report });
+}
+
+// Remove duplicate paper-commitment rows created by an earlier broken-idempotency
+// import. Only ever deletes rows whose notes contain "Paper commitment card" and
+// whose date is PAPER_DUPE_DATE; keeps exactly one such row per contact+bucket, and
+// keeps ZERO paper rows if a non-paper Commitment already covers that contact+bucket.
+// Dry-run unless ?confirm=1. Key-gated.
+async function cleanupCommitmentDupes(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+  const PAPER_DUPE_DATE = urlObj.searchParams.get('date') || '2026-07-09';
+  const confirm = urlObj.searchParams.get('confirm') === '1';
+  const isPaper = f => /Paper commitment card/i.test(String(f.notes || '')) && String(f.date || '').slice(0, 10) === PAPER_DUPE_DATE;
+  // Pull every Commitment row (id, event, contact, notes, date).
+  const groups = {};  // 'cid|bucket' -> { paper:[ids...], nonPaper:0 }
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent("{method}='Commitment'")}&pageSize=100`;
+    for (const fld of ['event', 'contact', 'notes', 'date']) q += `&fields%5B%5D=${fld}`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      const k = commitBucket(r.fields.event); const cid = (r.fields.contact || [])[0];
+      if (!k || !cid) continue;
+      const g = groups[`${cid}|${k}`] || (groups[`${cid}|${k}`] = { paper: [], nonPaper: 0 });
+      if (isPaper(r.fields)) g.paper.push(r.id); else g.nonPaper++;
+    }
+    off = d.offset;
+  } while (off);
+  // Decide deletions: keep one paper row only when nothing else covers the bucket.
+  const toDelete = [];
+  const kept = [];
+  for (const [key, g] of Object.entries(groups)) {
+    if (!g.paper.length) continue;
+    const keepOne = g.nonPaper === 0;
+    const keepIds = keepOne ? g.paper.slice(0, 1) : [];
+    const dropIds = g.paper.slice(keepIds.length);
+    keepIds.forEach(id => kept.push({ key, id }));
+    dropIds.forEach(id => toDelete.push(id));
+  }
+  let deleted = 0;
+  if (confirm) {
+    for (let i = 0; i < toDelete.length; i += 10) {
+      const batch = toDelete.slice(i, i + 10);
+      const qs = batch.map(id => `records%5B%5D=${encodeURIComponent(id)}`).join('&');
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}?${qs}`, { method: 'DELETE' });
+      deleted += batch.length;
+    }
+    await invalidateReadCaches(env);
+  }
+  return json({ ok: true, date: PAPER_DUPE_DATE, dry_run: !confirm, paper_groups: kept.length, to_delete: toDelete.length, deleted, kept });
 }
 
 async function contactsExportCsv(env, urlObj) {
