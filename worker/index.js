@@ -346,6 +346,10 @@ export default {
       // Who has attended/checked in (by email) — lets the turnout Sheet fill its
       // Attendance column live from check-ins without shifting any columns.
       if (url.pathname === '/export/attendance.csv' && request.method === 'GET') return await attendanceExportCsv(env, url);
+      // Commitments made by attendees of a given event (Amplifier / Canvass / Regional team, etc.),
+      // for the turnout Sheet's "commitments made that night" block. Intersects method='Commitment'
+      // rows with the event's attendee set; optional since=YYYY-MM-DD limits to that night's cards.
+      if (url.pathname === '/export/event-commitments.csv' && request.method === 'GET') return await eventCommitmentsCsv(env, url);
       // Live feed of house-meeting attendees + their commitments for the HM
       // follow-up Sheet (host follow-up). Append-ordered so manual columns stay aligned.
       if (url.pathname === '/export/house-meetings.csv' && request.method === 'GET') return await houseMeetingsExportCsv(env, url);
@@ -8030,6 +8034,61 @@ async function attendanceExportCsv(env, urlObj) {
     for (const r of d.records) { const e = String(r.fields.email || '').trim().toLowerCase(); if (e) lines.push(e + ',' + (cidSelf[r.id] ? 'Self check-in' : 'Attended')); }
   }
   return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=30', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Commitments made by the people who attended a given event, bucketed
+// (Amplifier / Canvass / Regional team / …). "count" is all-time commitments by
+// those attendees; "count_night" is only those logged on/after `since` (the event
+// date) — i.e. commitments made that night. The Sheet uses count_night for the
+// STL-format "Commitments made that night" block.
+async function eventCommitmentsCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const event = urlObj.searchParams.get('event') || '';
+  const evEsc = event.replace(/'/g, "\\'");
+  const since = String(urlObj.searchParams.get('since') || '').slice(0, 10);   // YYYY-MM-DD; commitments on/after this date count as "that night"
+  // 1. Attendee contact ids for this event.
+  const attendees = new Set();
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) { const c = (r.fields.contact || [])[0]; if (c) attendees.add(c); }
+    off = d.offset;
+  } while (off);
+  // 2. Every commitment log row; keep only those by an attendee. Tally all-time and
+  //    "that night" (date on/after `since`). Dedupe per contact per bucket so one
+  //    person picking Amplifier twice counts once.
+  const seen = {};   // bucket -> Set(cid)  (all-time)
+  const seenNight = {};   // bucket -> Set(cid)  (on/after since)
+  for (const b of COMMIT_BUCKETS) { seen[b.key] = new Set(); seenNight[b.key] = new Set(); }
+  seen.other = new Set(); seenNight.other = new Set();
+  off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent("{method}='Commitment'")}&pageSize=100&fields%5B%5D=event&fields%5B%5D=contact&fields%5B%5D=date`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      const cid = (r.fields.contact || [])[0];
+      if (!cid || !attendees.has(cid)) continue;
+      const key = commitBucket(r.fields.event) || 'other';
+      seen[key].add(cid);
+      const dt = String(r.fields.date || r.createdTime || '').slice(0, 10);
+      if (since && dt && dt >= since) seenNight[key].add(cid);
+      else if (!since) seenNight[key].add(cid);
+    }
+    off = d.offset;
+  } while (off);
+  const LABELS = {}; for (const b of COMMIT_BUCKETS) LABELS[b.key] = b.label; LABELS.other = 'Other commitment';
+  const csvEsc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const out = [['key', 'label', 'count', 'count_night'].join(',')];
+  const order = [...COMMIT_BUCKETS.map(b => b.key), 'other'];
+  for (const k of order) {
+    const all = seen[k].size, night = seenNight[k].size;
+    if (!all && !night) continue;
+    out.push([k, LABELS[k], all, night].map(csvEsc).join(','));
+  }
+  return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
 }
 
 async function contactsExportCsv(env, urlObj) {
