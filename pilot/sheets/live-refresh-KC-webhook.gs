@@ -141,6 +141,7 @@ function onOpen(){
     .addItem('Safety-net refresh now','safetyRefresh')
     .addItem('Pull attendance + walk-ins now','pullAttendance')
     .addItem('Refresh commitments now','pullCommitments')
+    .addItem('Find duplicate rows','flagDuplicates')
     .addItem('Rebuild How-to + Goals','installHelp')
     .addItem('Re-apply branding','brandSheet')
     .addToUi();
@@ -305,6 +306,47 @@ function pullCommitments() {
 function getCommitCounts() {
   try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('commitCounts') || '{}'); }
   catch (e) { return {}; }
+}
+
+// ============================================================================
+// DUPLICATE FINDER — the sheet keeps rows forever, so an earlier buggy run can
+// leave a stale duplicate that inflates the counts (e.g. 100 attended vs the 99
+// in the database). This highlights any row whose email — or name+phone when
+// there's no email — repeats an earlier row, so you can delete the stray. It
+// never deletes anything itself. First occurrence is left clean; later ones go
+// red with a note in column M.
+// ============================================================================
+function flagDuplicates() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(TAB); if (!sh) return;
+  const last = sh.getLastRow();
+  if (last < FIRST) { SpreadsheetApp.getActive().toast('No rows yet.', 'Groundwork', 4); return; }
+  const data = sh.getRange(FIRST, 1, last - FIRST + 1, DATA_COLS).getValues();
+  const seen = {};
+  const dupRows = [];
+  for (let i = 0; i < data.length; i++) {
+    const email = String(data[i][EMAIL_COL - 1] || '').trim().toLowerCase();
+    const nameKey = String(data[i][0] || '').trim().toLowerCase() + '|' + String(data[i][1] || '').trim().toLowerCase();
+    const phone = String(data[i][3] || '').replace(/\D/g, '').slice(-10);
+    const key = email || (nameKey + '|' + phone);      // prefer email; fall back to name+phone
+    if (!key || key === '||') continue;
+    if (seen[key]) dupRows.push({ row: FIRST + i, first: data[i][0], last: data[i][1], firstSeen: seen[key] });
+    else seen[key] = FIRST + i;
+  }
+  // Clear any previous flags first.
+  const bandN = Math.max(last - FIRST + 1, 1);
+  sh.getRange(FIRST, 1, bandN, 1).setBackground(null);
+  try { brandRows(sh, bandN); } catch (e) {}
+  if (!dupRows.length) {
+    SpreadsheetApp.getActive().toast('No duplicate rows found. Sheet matches the database.', 'Groundwork', 5);
+    return;
+  }
+  for (const d of dupRows) {
+    sh.getRange(d.row, 1, 1, DATA_COLS).setBackground('#F2C9C4');
+    sh.getRange(d.row, NOTES_COL).setValue('DUPLICATE of row ' + d.firstSeen + ' — delete this row');
+  }
+  const list = dupRows.map(d => 'Row ' + d.row + ' (' + d.first + ' ' + d.last + ') duplicates row ' + d.firstSeen).join('\n');
+  SpreadsheetApp.getUi().alert('Found ' + dupRows.length + ' duplicate row(s), highlighted red:\n\n' + list +
+    '\n\nDelete the highlighted row(s) (right-click the row number → Delete row), then run Pull attendance + walk-ins again.');
 }
 
 // ============================================================================
