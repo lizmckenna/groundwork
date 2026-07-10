@@ -594,7 +594,9 @@ function writeTurnout(){
     g.getRange(row,C,1,2).merge().setFontWeight('bold').setFontColor(YELLOW).setBackground(PLUM).setHorizontalAlignment('center');
   };
   // Clear the whole right-hand panel first so a shorter render never leaves stragglers.
-  g.getRange(3,C,40,2).breakApart().clearContent().setBackground(null).setFontStyle('normal').setFontColor(INK);
+  // Reset the number format too — a leftover '0%' on a value cell was rendering the
+  // walk-in count (18) as "1800%".
+  g.getRange(3,C,40,2).breakApart().clearContent().setBackground(null).setFontStyle('normal').setFontColor(INK).setNumberFormat('General');
 
   // --- Turnout block ---
   hdrBlock(3,'Turnout — KC 7/9');
