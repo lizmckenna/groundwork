@@ -270,6 +270,7 @@ function pullAttendance() {
       });
     }
   } finally { _bulk = false; }
+  try { pullTurnoutCounts(); } catch(e) {}  // refresh the DB-authoritative headline counts (RSVPs/walk-ins/attended)
   try { pullCommitments(); } catch(e) {}   // refresh the DB-driven commitment counts alongside attendance
   try { writeStats(); } catch(e) {}
 }
@@ -305,6 +306,47 @@ function pullCommitments() {
 }
 function getCommitCounts() {
   try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('commitCounts') || '{}'); }
+  catch (e) { return {}; }
+}
+
+// ============================================================================
+// TURNOUT COUNTS — pulled live from the database so the headline numbers
+// (RSVPs / Walk-ins / Attended / Show rate) are the DB's own counts and can
+// NEVER be inflated by a stray or duplicate row that lingers in the sheet.
+// Cached in ScriptProperties so edit-driven refreshes don't re-hit the network.
+//   rsvps      = rows in the RSVP feed (people who registered)
+//   walkins    = attendance rows flagged walk-in (no RSVP)
+//   rsvpShowed = attendance rows that are NOT walk-ins (RSVP'd and showed)
+//   attended   = all attendance rows (rsvpShowed + walkins)
+// ============================================================================
+function pullTurnoutCounts() {
+  const fetchCsv = (path) => {
+    const url = WORKER + path + (path.indexOf('?') < 0 ? '?' : '&')
+      + 'key=' + encodeURIComponent(KEY) + '&event=' + encodeURIComponent(EVENT) + '&t=' + Date.now();
+    try {
+      const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+      if (resp.getResponseCode() !== 200) return null;
+      const rows = Utilities.parseCsv(resp.getContentText());
+      if (rows.length < 2) return null;
+      const hd = rows[0].map(h => String(h).toLowerCase().trim());
+      if (hd.indexOf('email') === -1) return null;                 // not our CSV
+      return { hd: hd, body: rows.slice(1).filter(r => r.some(v => String(v).trim() !== '')) };
+    } catch (e) { return null; }
+  };
+  const rs = fetchCsv('/export/rsvps.csv');
+  const at = fetchCsv('/export/attendance.csv?details=1');
+  if (!rs || !at) return getTurnoutCounts();                        // any failure -> keep last good cache
+  const wi = at.hd.indexOf('walk-in');
+  let walkins = 0, rsvpShowed = 0;
+  for (const r of at.body) {
+    if (wi >= 0 && String(r[wi] || '').trim().toLowerCase() === 'yes') walkins++; else rsvpShowed++;
+  }
+  const out = { rsvps: rs.body.length, walkins: walkins, rsvpShowed: rsvpShowed, attended: at.body.length };
+  PropertiesService.getScriptProperties().setProperty('turnoutCounts', JSON.stringify(out));
+  return out;
+}
+function getTurnoutCounts() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('turnoutCounts') || '{}'); }
   catch (e) { return {}; }
 }
 
@@ -350,6 +392,13 @@ function flagDuplicates() {
   for (let i = 0; i < data.length; i++) {
     const row = FIRST + i, first = data[i][0], lastName = data[i][1];
     const email = String(data[i][EMAIL_COL - 1] || '').trim().toLowerCase();
+    // A leftover header-text row (an old bug once wrote a second header into the
+    // data). It reads as First='First Name' / Email='email' — call it out plainly
+    // so it's never mistaken for the real frozen header on row 1.
+    if (String(first || '').trim().toLowerCase() === 'first name' || email === 'email') {
+      flags.push({ row, first, last: lastName, reason: 'header', note: 'STRAY header-text row (not your real header on row 1) — delete this row' });
+      continue;
+    }
     const nameKey = String(first || '').trim().toLowerCase() + '|' + String(lastName || '').trim().toLowerCase();
     const phone = String(data[i][3] || '').replace(/\D/g, '').slice(-10);
     const key = email || (nameKey + '|' + phone);      // prefer email; fall back to name+phone
@@ -375,7 +424,8 @@ function flagDuplicates() {
     sh.getRange(d.row, 1, 1, DATA_COLS).setBackground('#F2C9C4');
     sh.getRange(d.row, NOTES_COL).setValue(d.note);
   }
-  const list = flags.map(d => 'Row ' + d.row + ' (' + d.first + ' ' + d.last + ') — ' + (d.reason === 'dup' ? 'duplicate' : 'not in database')).join('\n');
+  const reasonTxt = { dup: 'duplicate', stale: 'not in database', header: 'stray header row' };
+  const list = flags.map(d => 'Row ' + d.row + ' (' + d.first + ' ' + d.last + ') — ' + (reasonTxt[d.reason] || d.reason)).join('\n');
   SpreadsheetApp.getUi().alert('Found ' + flags.length + ' stray row(s), highlighted red:\n\n' + list +
     '\n\nDelete the highlighted row(s) (right-click the row number → Delete row), then run Pull attendance + walk-ins again.' +
     (feedsOk ? '' : '\n\n(Feed unreachable this run — only in-sheet duplicates were checked, not stale rows.)'));
@@ -520,7 +570,11 @@ function writeStats(){
   const g=SpreadsheetApp.getActive().getSheetByName('Goals'); if(!g) return;
   const sh=SpreadsheetApp.getActive().getSheetByName(TAB); if(!sh) return;
   const last=sh.getLastRow();
-  const count = last >= FIRST ? last - FIRST + 1 : 0;
+  // Prefer the DB's own total (RSVPs + walk-ins) so a stray sheet row can't inflate
+  // it; fall back to the raw sheet row count only before the first pull populates it.
+  const tc=getTurnoutCounts();
+  const count = (tc && typeof tc.rsvps==='number') ? (tc.rsvps + tc.walkins)
+              : (last >= FIRST ? last - FIRST + 1 : 0);
   const colA=g.getRange(1,1,Math.max(g.getLastRow(),1),1).getValues().map(r=>String(r[0]).toLowerCase());
   let row=-1;
   // Match the old label too so an existing sheet's row gets relabeled in place.
@@ -663,6 +717,14 @@ function writeTurnout(){
         if(SHOW.indexOf(a)>=0){ rsvpShowed++; totalAtt++; }
       }
     }
+  }
+
+  // Headline numbers come from the DATABASE (authoritative) when available, so a
+  // stray/duplicate sheet row can't inflate them. The per-status breakdown below
+  // stays sheet-derived (it reflects what organizers marked in the Attendance col).
+  const tc=getTurnoutCounts();
+  if(tc && typeof tc.rsvps==='number'){
+    rsvps=tc.rsvps; walkins=tc.walkins; rsvpShowed=tc.rsvpShowed; totalAtt=tc.attended;
   }
 
   const C=8, V=9;   // labels col H, values col I
