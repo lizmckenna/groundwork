@@ -375,20 +375,28 @@ function setUp(){
 function onAttendanceEdit(e){
   if(!e||!e.range) return;
   const sh=e.range.getSheet(); if(sh.getName()!==TAB) return;
-  if(e.range.getColumn()>ATT_COL || e.range.getLastColumn()<ATT_COL) return;
-  const r0=Math.max(e.range.getRow(),FIRST), r1=e.range.getLastRow();
-  const marks=[];
-  for(let r=r0;r<=r1;r++){
-    const email=String(sh.getRange(r,EMAIL_COL).getValue()||'').trim();
-    const status=String(sh.getRange(r,ATT_COL).getValue()||'').trim();
-    if(!email || status==='Scheduled') continue;
-    marks.push({email:email, status:status});
+  const c0=e.range.getColumn(), c1=e.range.getLastColumn();
+  const touchesAtt   = c0<=ATT_COL   && c1>=ATT_COL;     // L Attendance
+  const touchesClaim = c0<=CLAIM_COL && c1>=CLAIM_COL;   // I Claimed by
+  if(!touchesAtt && !touchesClaim) return;               // only these two move the leaderboard/turnout
+  // Attendance edits also post back to the database.
+  if(touchesAtt){
+    const r0=Math.max(e.range.getRow(),FIRST), r1=e.range.getLastRow();
+    const marks=[];
+    for(let r=r0;r<=r1;r++){
+      const email=String(sh.getRange(r,EMAIL_COL).getValue()||'').trim();
+      const status=String(sh.getRange(r,ATT_COL).getValue()||'').trim();
+      if(!email || status==='Scheduled') continue;
+      marks.push({email:email, status:status});
+    }
+    if(marks.length){
+      UrlFetchApp.fetch(WORKER + '/sheet-attendance?key='+encodeURIComponent(KEY),
+        {method:'post',contentType:'application/json',payload:JSON.stringify({event:EVENT,marks:marks}),muteHttpExceptions:true});
+    }
   }
-  if(marks.length){
-    UrlFetchApp.fetch(WORKER + '/sheet-attendance?key='+encodeURIComponent(KEY),
-      {method:'post',contentType:'application/json',payload:JSON.stringify({event:EVENT,marks:marks}),muteHttpExceptions:true});
-  }
-  try { refreshGoals(); } catch(e) {}   // reflect the new mark in the leaderboard + turnout right away
+  // Claiming a walk-in (or anyone) in col I moves them from Unclaimed to that lead's
+  // Attended count — recompute the leaderboard + turnout right away.
+  try { refreshGoals(); } catch(err) {}
 }
 
 // ============================================================================
