@@ -8111,9 +8111,13 @@ async function importCommitments(request, env) {
   const report = [];
   for (const p of people) {
     const email = String(p.email || '').trim().toLowerCase().replace(/'/g, "\\'");
-    const wantKeys = (Array.isArray(p.commitments) ? p.commitments : []).map(commitBucket).filter(Boolean);
-    // dedupe requested keys
-    const want = [...new Set(wantKeys.map(k => (k)))];
+    // Accept either a bucket key ('house_meeting') or a raw label/phrase ('Host a
+    // house meeting'). Match keys directly first, then fall back to the text matcher.
+    const want = [...new Set((Array.isArray(p.commitments) ? p.commitments : []).map(c => {
+      const s = String(c || '').trim().toLowerCase();
+      const byKey = COMMIT_BUCKETS.find(b => b.key === s);
+      return byKey ? byKey.key : commitBucket(s);
+    }).filter(Boolean))];
     if (!email) { report.push({ email: p.email || '', status: 'skipped: no email' }); continue; }
     const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email}'`)}&maxRecords=1&fields%5B%5D=first&fields%5B%5D=last`);
     const rec = (r.records || [])[0];
