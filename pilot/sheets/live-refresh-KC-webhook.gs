@@ -309,44 +309,76 @@ function getCommitCounts() {
 }
 
 // ============================================================================
-// DUPLICATE FINDER — the sheet keeps rows forever, so an earlier buggy run can
-// leave a stale duplicate that inflates the counts (e.g. 100 attended vs the 99
-// in the database). This highlights any row whose email — or name+phone when
-// there's no email — repeats an earlier row, so you can delete the stray. It
-// never deletes anything itself. First occurrence is left clean; later ones go
-// red with a note in column M.
+// DUPLICATE / STALE-ROW FINDER — the sheet keeps rows forever, so an earlier
+// buggy run can leave a stray that inflates the counts (e.g. 129 in the tracker
+// vs 128 = 110 RSVPs + 18 walk-ins in the database). Catches BOTH kinds of stray:
+//   • DUPLICATE — a row whose email (or name+phone) repeats an earlier row.
+//   • STALE — a row whose person is no longer in either live feed (RSVPs or
+//     attendance), e.g. a cancellation or a mistyped-email row that never matched.
+// Highlights each in red with a note in column M. Never deletes anything itself.
 // ============================================================================
 function flagDuplicates() {
   const sh = SpreadsheetApp.getActive().getSheetByName(TAB); if (!sh) return;
   const last = sh.getLastRow();
   if (last < FIRST) { SpreadsheetApp.getActive().toast('No rows yet.', 'Groundwork', 4); return; }
   const data = sh.getRange(FIRST, 1, last - FIRST + 1, DATA_COLS).getValues();
+
+  // Build the set of "live" keys from the two feeds the tracker is fed by. A row
+  // is legit if EITHER its email OR its name+phone appears in a feed (lenient, so
+  // a blank-email walk-in matched by name+phone is never wrongly flagged).
+  const liveEmail = {}, liveNP = {};
+  const npKey = (f, l, p) => String(f || '').trim().toLowerCase() + '|' + String(l || '').trim().toLowerCase() + '|' + String(p || '').replace(/\D/g, '').slice(-10);
+  const soakFeed = (path) => {
+    try {
+      const resp = UrlFetchApp.fetch(WORKER + path + (path.indexOf('?') < 0 ? '?' : '&') + 'key=' + encodeURIComponent(KEY) + '&event=' + encodeURIComponent(EVENT) + '&t=' + Date.now(), { muteHttpExceptions: true });
+      if (resp.getResponseCode() !== 200) return false;
+      const rows = Utilities.parseCsv(resp.getContentText());
+      if (rows.length < 2) return false;
+      for (const r of rows.slice(1)) {
+        const em = String(r[2] || '').trim().toLowerCase(); if (em) liveEmail[em] = 1;
+        liveNP[npKey(r[0], r[1], r[3])] = 1;
+      }
+      return true;
+    } catch (e) { return false; }
+  };
+  const gotRsvps = soakFeed('/export/rsvps.csv');
+  const gotAtt = soakFeed('/export/attendance.csv?details=1');
+  const feedsOk = gotRsvps && gotAtt;   // only flag STALE rows if BOTH feeds loaded (else we'd nuke everything)
+
   const seen = {};
-  const dupRows = [];
+  const flags = [];   // {row, first, last, reason, note}
   for (let i = 0; i < data.length; i++) {
+    const row = FIRST + i, first = data[i][0], lastName = data[i][1];
     const email = String(data[i][EMAIL_COL - 1] || '').trim().toLowerCase();
-    const nameKey = String(data[i][0] || '').trim().toLowerCase() + '|' + String(data[i][1] || '').trim().toLowerCase();
+    const nameKey = String(first || '').trim().toLowerCase() + '|' + String(lastName || '').trim().toLowerCase();
     const phone = String(data[i][3] || '').replace(/\D/g, '').slice(-10);
     const key = email || (nameKey + '|' + phone);      // prefer email; fall back to name+phone
     if (!key || key === '||') continue;
-    if (seen[key]) dupRows.push({ row: FIRST + i, first: data[i][0], last: data[i][1], firstSeen: seen[key] });
-    else seen[key] = FIRST + i;
+    if (seen[key]) { flags.push({ row, first, last: lastName, reason: 'dup', note: 'DUPLICATE of row ' + seen[key] + ' — delete this row' }); continue; }
+    seen[key] = row;
+    // Stale check: not in either feed (only when both feeds actually loaded).
+    if (feedsOk) {
+      const inFeed = (email && liveEmail[email]) || liveNP[npKey(first, lastName, data[i][3])];
+      if (!inFeed) flags.push({ row, first, last: lastName, reason: 'stale', note: 'NOT in the live database (RSVPs or attendance) — likely a cancellation or stale row; delete it' });
+    }
   }
+
   // Clear any previous flags first.
   const bandN = Math.max(last - FIRST + 1, 1);
   sh.getRange(FIRST, 1, bandN, 1).setBackground(null);
   try { brandRows(sh, bandN); } catch (e) {}
-  if (!dupRows.length) {
-    SpreadsheetApp.getActive().toast('No duplicate rows found. Sheet matches the database.', 'Groundwork', 5);
+  if (!flags.length) {
+    SpreadsheetApp.getActive().toast(feedsOk ? 'No duplicate or stale rows. Sheet matches the database.' : 'No duplicates found (couldn\'t reach the feed to check for stale rows).', 'Groundwork', 6);
     return;
   }
-  for (const d of dupRows) {
+  for (const d of flags) {
     sh.getRange(d.row, 1, 1, DATA_COLS).setBackground('#F2C9C4');
-    sh.getRange(d.row, NOTES_COL).setValue('DUPLICATE of row ' + d.firstSeen + ' — delete this row');
+    sh.getRange(d.row, NOTES_COL).setValue(d.note);
   }
-  const list = dupRows.map(d => 'Row ' + d.row + ' (' + d.first + ' ' + d.last + ') duplicates row ' + d.firstSeen).join('\n');
-  SpreadsheetApp.getUi().alert('Found ' + dupRows.length + ' duplicate row(s), highlighted red:\n\n' + list +
-    '\n\nDelete the highlighted row(s) (right-click the row number → Delete row), then run Pull attendance + walk-ins again.');
+  const list = flags.map(d => 'Row ' + d.row + ' (' + d.first + ' ' + d.last + ') — ' + (d.reason === 'dup' ? 'duplicate' : 'not in database')).join('\n');
+  SpreadsheetApp.getUi().alert('Found ' + flags.length + ' stray row(s), highlighted red:\n\n' + list +
+    '\n\nDelete the highlighted row(s) (right-click the row number → Delete row), then run Pull attendance + walk-ins again.' +
+    (feedsOk ? '' : '\n\n(Feed unreachable this run — only in-sheet duplicates were checked, not stale rows.)'));
 }
 
 // ============================================================================
@@ -491,8 +523,12 @@ function writeStats(){
   const count = last >= FIRST ? last - FIRST + 1 : 0;
   const colA=g.getRange(1,1,Math.max(g.getLastRow(),1),1).getValues().map(r=>String(r[0]).toLowerCase());
   let row=-1;
-  for(let i=0;i<colA.length;i++){ if(colA[i].indexOf('live rsvp total')>=0){ row=i+1; break; } }
-  if(row<0){ row=g.getLastRow()+1; g.getRange(row,1).setValue('Live RSVP total (everyone):').setFontWeight('bold'); }
+  // Match the old label too so an existing sheet's row gets relabeled in place.
+  for(let i=0;i<colA.length;i++){ if(colA[i].indexOf('live rsvp total')>=0 || colA[i].indexOf('total in tracker')>=0){ row=i+1; break; } }
+  if(row<0){ row=g.getLastRow()+1; }
+  // This counts EVERY row on the RSVPs tab = RSVPs + walk-ins, which is why it's
+  // larger than the Turnout "RSVPs" line (that one is RSVPs only, walk-ins split out).
+  g.getRange(row,1).setValue('Total in tracker (RSVPs + walk-ins):').setFontWeight('bold');
   g.getRange(row,3).setValue(count).setFontColor(TANGERINE).setFontWeight('bold');
   refreshGoals();
 }
