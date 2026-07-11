@@ -547,6 +547,56 @@ export default {
         try { await env.KV_BINDING.delete('cache:scoreboard:v2'); } catch (e) {}
         return json({ status: 'renamed', from: oldName, to: 'LaNeé Bridewell' });
       }
+      // Show event_attendance mirror rows + contacts data for a given contact_id
+      if (url.pathname === '/admin/contact-full-dump' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const cid = url.searchParams.get('contact_id');
+        if (!cid) return json({ error: 'contact_id required' }, 400);
+        // Contact fields
+        const c = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
+        // Event attendance mirror
+        const mirrorRows = [];
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`FIND('${cid}',ARRAYJOIN({contact}))>0`)}&pageSize=100&fields%5B%5D=event&fields%5B%5D=attended&fields%5B%5D=reminder_status`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${ATTENDANCE_MIRROR_TBL}${q}`);
+          mirrorRows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        return json({
+          contact_id: cid,
+          contact_fields: c.fields,
+          event_attendance_mirror: mirrorRows.map(r => ({
+            id: r.id,
+            event: r.fields.event, attended: r.fields.attended, reminder_status: r.fields.reminder_status,
+          })),
+        });
+      }
+      // Show all contact_log rows for a given contact_id
+      if (url.pathname === '/admin/contact-log-dump' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const cid = url.searchParams.get('contact_id');
+        if (!cid) return json({ error: 'contact_id required' }, 400);
+        const rows = [];
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`FIND('${cid}',ARRAYJOIN({contact}))>0`)}&pageSize=100&fields%5B%5D=Summary&fields%5B%5D=date&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=event&fields%5B%5D=rsvp_launch&fields%5B%5D=notes`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        return json({
+          contact_id: cid, total: rows.length,
+          logs: rows.map(r => ({
+            id: r.id, date: r.fields.date, method: r.fields.method,
+            result: r.fields.result, event: r.fields.event,
+            rsvp_launch: r.fields.rsvp_launch,
+            summary: r.fields.Summary, notes: (r.fields.notes || '').slice(0, 200),
+          })).sort((a, b) => String(b.date).localeCompare(String(a.date))),
+        });
+      }
       // Diagnostic: raw distribution of assigned_organizer IDs across all contacts.
       // Reveals ghost records or duplicates that cause organizers to vanish from
       // the scoreboard (e.g., a second Laci or LaNee record with empty name).
@@ -3732,15 +3782,33 @@ async function amplifierLog(request, env) {
   });
 }
 
+// Resolve an amplifier's display Name — the string frozen into each conversation
+// log's notes as "Amplifier: <Name>" at write time. An amplifier's whole voter
+// list/progress is reconstructed by string-matching that name, so resolving it
+// is load-bearing. Returns the trimmed Name, or null if no contact matches this
+// email. THROWS on a database/transport error — callers MUST treat that as
+// "try again", never as an empty result. Never fall back to using the raw email
+// as the name: log notes never contain the email, so that always matches zero —
+// that silent-zero was the bug that made amplifier trackers appear wiped.
+async function resolveAmpName(env, email) {
+  const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email}'`)}&pageSize=10`);
+  const recs = r.records || [];
+  const named = recs.filter((x) => (x.fields.Name || "").trim());
+  const pick = named[0] || recs[0];
+  const nm = pick && (pick.fields.Name || "").trim();
+  return nm || null;
+}
+
 async function amplifierProgress(request, env, urlObj) {
   const email = (urlObj.searchParams.get("email") || "").toLowerCase().trim();
   if (!email) return json({ error: "email required" }, 400);
-  let ampName = email;
+  let ampName;
   try {
-    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email}'`)}&maxRecords=1`);
-    if (r.records.length > 0) ampName = r.records[0].fields.Name || email;
+    ampName = await resolveAmpName(env, email);
   } catch {
+    return json({ error: "database unavailable, please try again", retry: true }, 503);
   }
+  if (!ampName) return json({ error: "no amplifier profile found for " + email, not_found: true }, 404);
   let unique_voters = 0, total_conversations = 0;
   try {
     const search = await at(env, `/${BASE}/${CONTACT_LOG_TBL}?filterByFormula=${encodeURIComponent(`AND({method}='Amplifier conversation',FIND('Amplifier: ${ampName}',{notes})>0)`)}&pageSize=100`);
@@ -3751,6 +3819,7 @@ async function amplifierProgress(request, env, urlObj) {
     }
     unique_voters = voterSet.size;
   } catch {
+    return json({ error: "database unavailable, please try again", retry: true }, 503);
   }
   return json({ ok: true, email, amplifier_name: ampName, unique_voters, total_conversations });
 }
@@ -3758,12 +3827,13 @@ async function amplifierProgress(request, env, urlObj) {
 async function amplifierVoters(request, env, urlObj) {
   const email = (urlObj.searchParams.get("email") || "").toLowerCase().trim();
   if (!email) return json({ error: "email required" }, 400);
-  let ampName = email;
+  let ampName;
   try {
-    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email}'`)}&maxRecords=1`);
-    if (r.records.length > 0) ampName = r.records[0].fields.Name || email;
+    ampName = await resolveAmpName(env, email);
   } catch {
+    return json({ error: "database unavailable, please try again", retry: true }, 503);
   }
+  if (!ampName) return json({ error: "no amplifier profile found for " + email, not_found: true }, 404);
   const logs = [];
   let offset = null;
   const filter = `AND({method}='Amplifier conversation',FIND('Amplifier: ${ampName}',{notes})>0)`;
@@ -7350,7 +7420,13 @@ const REGIONS = {
   },
   ejackson: {
     label: 'Eastern Jackson County',
-    launchEvent: '',   // no dedicated launch event yet — needs-data bucket stays empty until one is set
+    // Attendance is credited to Ejack for BOTH the region's own 7/1 launch AND
+    // the KC 7/9 launch (Ejack folks like Moriah Parham from Raytown often cross
+    // over to KC's launch — we still want them flagged "Attended Launch" here).
+    launchEvent: [
+      'Eastern Jackson County Emergency Meeting on Public School Funding',
+      'Kansas City No on 5 Regional Campaign Launch',
+    ],
     // No broad county match: Jackson is split east/west (KCPS is its own region). Route by the EJ cities + districts.
     match: {
       county:   [],
@@ -7396,7 +7472,7 @@ const REGIONS = {
   },
   kc: {
     label: 'Kansas City',
-    launchEvent: '',
+    launchEvent: 'Kansas City No on 5 Regional Campaign Launch',
     // KCPS urban core: match the district (KCPS/Center/Hickman Mills) OR a known KC school (charters + KCPS buildings).
     match: {
       county:   [],
