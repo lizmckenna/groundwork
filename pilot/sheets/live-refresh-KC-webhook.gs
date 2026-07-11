@@ -66,6 +66,7 @@ function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents || '{}');
     if (payload.event !== EVENT) return _resp({ok:false, reason:'event mismatch'});
+    try { const sh = SpreadsheetApp.getActive().getSheetByName(TAB); if (sh) normalizeLayout(sh); } catch(_) {}
     _upsertRow(payload);
     return _resp({ok:true});
   } catch (err) {
@@ -199,6 +200,7 @@ function safetyRefresh() {
   if (rows.length < 2) return;
   const hd = rows[0].map(h => String(h).toLowerCase());
   if (hd.indexOf('email') === -1) return;
+  try { const sh0 = SpreadsheetApp.getActive().getSheetByName(TAB); if (sh0) normalizeLayout(sh0); } catch(e) {}
   const body = rows.slice(1);
   _bulk = true;
   try {
@@ -224,6 +226,7 @@ function safetyRefresh() {
 // ============================================================================
 function pullAttendance() {
   const sh = SpreadsheetApp.getActive().getSheetByName(TAB); if (!sh) return;
+  normalizeLayout(sh);   // self-heal a legacy banner row so counts aren't shifted by one
   const url = WORKER + '/export/attendance.csv?details=1&key=' + encodeURIComponent(KEY)
     + '&event=' + encodeURIComponent(EVENT) + '&t=' + Date.now();
   let resp;
@@ -361,6 +364,7 @@ function getTurnoutCounts() {
 // ============================================================================
 function flagDuplicates() {
   const sh = SpreadsheetApp.getActive().getSheetByName(TAB); if (!sh) return;
+  normalizeLayout(sh);   // realign first so the header (row 1) is never scanned/flagged
   const last = sh.getLastRow();
   if (last < FIRST) { SpreadsheetApp.getActive().toast('No rows yet.', 'Groundwork', 4); return; }
   const data = sh.getRange(FIRST, 1, last - FIRST + 1, DATA_COLS).getValues();
@@ -444,6 +448,28 @@ function ensureGoals(ss){
   rows.push(['TOTAL','','','']);
   g.getRange(4,1,rows.length,4).setValues(rows);
 }
+// SELF-HEAL THE LAYOUT. The whole script assumes the header row (First Name /
+// Last Name / … ) is row 1 with data from row 2 (HDR=1, FIRST=2). A legacy
+// "instructions" banner sitting on row 1 pushed the header down to row 2, so the
+// code treated the header as the first data row: every count came out one too high
+// (RSVPs 111 vs 110, the duplicate-finder flagging the header, etc.). This finds
+// the real header in the first few rows and, if it isn't on row 1, deletes the
+// banner row(s) above it so the sheet matches the code. It never touches data rows.
+// Returns true if it changed anything.
+function normalizeLayout(sh){
+  try{
+    const scan=sh.getRange(1,1,Math.min(6,sh.getMaxRows()),Math.min(DATA_COLS,sh.getMaxColumns())).getValues();
+    let headerRow=-1;
+    for(let i=0;i<scan.length;i++){
+      const a=String(scan[i][0]||'').trim().toLowerCase();
+      const c=String(scan[i][2]||'').trim().toLowerCase();
+      if(a==='first name' || c==='email'){ headerRow=i+1; break; }
+    }
+    if(headerRow>1){ sh.deleteRows(1, headerRow-1); return true; }   // drop banner row(s) above the header
+  }catch(e){}
+  return false;
+}
+
 function setUp(){
   const ss=SpreadsheetApp.getActive();
   let sh=ss.getSheetByName(TAB);
@@ -452,12 +478,9 @@ function setUp(){
     sh=(all.length===1 && all[0].getLastRow()<1 && all[0].getLastColumn()<2) ? all[0].setName(TAB) : ss.insertSheet(TAB);
   }
   ensureGoals(ss);
-  // Migrate from the old banner layout: if row 1 is the warning banner, delete it
-  // so headers land on row 1 and existing data shifts to row 2.
-  try {
-    const r1 = sh.getRange(1,1,1,Math.min(sh.getMaxColumns(),TOTAL_COLS)).getValues()[0].join(' ');
-    if (r1.indexOf('⚠') >= 0 || r1.indexOf('LIVE LIST') >= 0) sh.deleteRow(1);
-  } catch(e) {}
+  // Realign the layout (removes any legacy banner above the header). Broader than
+  // the old ⚠/LIVE LIST check, which missed the "…erased on the next refresh…" banner.
+  normalizeLayout(sh);
   // Headers on row 1 — no banner. Clear any old validations/merges leftover so
   // header cells never flag "Invalid".
   sh.getRange(1,1,2,TOTAL_COLS).breakApart().clearDataValidations();
@@ -568,22 +591,18 @@ function styleStatuses(sh){
 
 function writeStats(){
   const g=SpreadsheetApp.getActive().getSheetByName('Goals'); if(!g) return;
-  const sh=SpreadsheetApp.getActive().getSheetByName(TAB); if(!sh) return;
-  const last=sh.getLastRow();
-  // Prefer the DB's own total (RSVPs + walk-ins) so a stray sheet row can't inflate
-  // it; fall back to the raw sheet row count only before the first pull populates it.
-  const tc=getTurnoutCounts();
-  const count = (tc && typeof tc.rsvps==='number') ? (tc.rsvps + tc.walkins)
-              : (last >= FIRST ? last - FIRST + 1 : 0);
-  const colA=g.getRange(1,1,Math.max(g.getLastRow(),1),1).getValues().map(r=>String(r[0]).toLowerCase());
-  let row=-1;
-  // Match the old label too so an existing sheet's row gets relabeled in place.
-  for(let i=0;i<colA.length;i++){ if(colA[i].indexOf('live rsvp total')>=0 || colA[i].indexOf('total in tracker')>=0){ row=i+1; break; } }
-  if(row<0){ row=g.getLastRow()+1; }
-  // This counts EVERY row on the RSVPs tab = RSVPs + walk-ins, which is why it's
-  // larger than the Turnout "RSVPs" line (that one is RSVPs only, walk-ins split out).
-  g.getRange(row,1).setValue('Total in tracker (RSVPs + walk-ins):').setFontWeight('bold');
-  g.getRange(row,3).setValue(count).setFontColor(TANGERINE).setFontWeight('bold');
+  // The old "live rsvp total" / "Total in tracker" stat line counted RSVPs + walk-ins,
+  // so it read as a mismatch against the Turnout panel's "RSVPs" line (129 vs 111).
+  // The Turnout block (RSVPs / Walk-ins / Total attendance) is the single source of
+  // truth now, so wipe any leftover stat line and just recompute the dashboard.
+  try{
+    const colA=g.getRange(1,1,Math.max(g.getLastRow(),1),1).getValues().map(r=>String(r[0]||'').toLowerCase());
+    for(let i=0;i<colA.length;i++){
+      if(colA[i].indexOf('live rsvp total')>=0 || colA[i].indexOf('total in tracker')>=0){
+        g.getRange(i+1,1).clearContent(); g.getRange(i+1,3).clearContent(); break;
+      }
+    }
+  }catch(e){}
   refreshGoals();
 }
 
@@ -685,6 +704,18 @@ function writeLeaderboardExtra(){
     g.getRange(uRow,5).setValue(unc.showed);
     g.getRange(uRow,6).setValue(unc.claimed?(unc.claimed-unc.showed)/unc.claimed:'').setNumberFormat('0%');
     g.getRange(uRow,1,1,6).setBackground(ALERT).setFontWeight('bold');
+
+    // Sweep orphaned cruft left by older script versions: stray numbers (e.g. C=129 /
+    // E=100) sitting in unlabeled rows just below Unclaimed. Stop at the first labeled
+    // row so the hand-entered pizza / childcare rows (which have text in col A or B)
+    // are never touched.
+    for(let r=uRow+1; r<=uRow+6 && r<=g.getMaxRows(); r++){
+      const a=String(g.getRange(r,1).getValue()||'').trim();
+      const b=String(g.getRange(r,2).getValue()||'').trim();
+      if(a||b) break;                                       // labeled (manual) row — protect it and everything below
+      const cf=g.getRange(r,3,1,4).getValues()[0];          // C:F
+      if(cf.some(v=>v!=='' && v!==null)) g.getRange(r,3,1,4).clearContent();
+    }
   }
 }
 
