@@ -509,6 +509,9 @@ export default {
       if (url.pathname === '/sheet-add-organizer' && request.method === 'POST') return await sheetAddOrganizer(request, env);
       if (url.pathname === '/export/organizers.csv' && request.method === 'GET') return await organizersExportCsv(env, url);
       if (url.pathname === '/export/signups.csv' && request.method === 'GET') return await signupsExportCsv(env, url);
+      // One deduped row per person who had any EVENT activity on/after ?since=YYYY-MM-DD
+      // (default 2026-05-25, inclusive). Add &all=1 to include non-event activity too.
+      if (url.pathname === '/export/active-since.csv' && request.method === 'GET') return await activeSinceCsv(env, url);
       // Per-event training roster for a volunteer's Google Sheet (live IMPORTDATA feed).
       // Auth: master EXPORT_KEY, OR a per-event scoped token (t=) so an organizer can
       // hold the feed link without the master key — leaking t exposes only this roster.
@@ -546,6 +549,20 @@ export default {
         try { await env.KV_BINDING.delete('cache:scoreboard:v3'); } catch (e) {}
         try { await env.KV_BINDING.delete('cache:scoreboard:v2'); } catch (e) {}
         return json({ status: 'renamed', from: oldName, to: 'LaNeé Bridewell' });
+      }
+      // Fetch specific contact_log rows by id (comma-separated).
+      if (url.pathname === '/admin/contact-log-by-ids' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const ids = String(url.searchParams.get('ids') || '').split(',').filter(Boolean);
+        if (!ids.length) return json({ error: 'ids required' }, 400);
+        const rows = [];
+        for (const id of ids) {
+          try {
+            const r = await at(env, `/${BASE}/${CONTACT_LOG_TBL}/${id}`);
+            rows.push({ id: r.id, ...r.fields });
+          } catch (e) { rows.push({ id, error: String(e) }); }
+        }
+        return json({ rows });
       }
       // Show event_attendance mirror rows + contacts data for a given contact_id
       if (url.pathname === '/admin/contact-full-dump' && request.method === 'GET') {
@@ -7423,9 +7440,10 @@ const REGIONS = {
     // Attendance is credited to Ejack for BOTH the region's own 7/1 launch AND
     // the KC 7/9 launch (Ejack folks like Moriah Parham from Raytown often cross
     // over to KC's launch — we still want them flagged "Attended Launch" here).
+    // Substring match against rsvp_launch — catches any naming variant.
     launchEvent: [
-      'Eastern Jackson County Emergency Meeting on Public School Funding',
-      'Kansas City No on 5 Regional Campaign Launch',
+      'Eastern Jackson County Emergency Meeting',
+      'Kansas City Emergency Meeting',
     ],
     // No broad county match: Jackson is split east/west (KCPS is its own region). Route by the EJ cities + districts.
     match: {
@@ -7472,7 +7490,7 @@ const REGIONS = {
   },
   kc: {
     label: 'Kansas City',
-    launchEvent: 'Kansas City No on 5 Regional Campaign Launch',
+    launchEvent: 'Kansas City Emergency Meeting',
     // KCPS urban core: match the district (KCPS/Center/Hickman Mills) OR a known KC school (charters + KCPS buildings).
     match: {
       county:   [],
@@ -7505,7 +7523,9 @@ async function regionExportCsv(env, urlObj) {
   let off = null;
   const launchEvents = region.launchEvent ? (Array.isArray(region.launchEvent) ? region.launchEvent : [region.launchEvent]) : [];
   if (launchEvents.length) {
-    const orLaunch = 'OR(' + launchEvents.map(n => `{rsvp_launch}='${String(n).replace(/'/g, "\\'")}'`).join(',') + ')';
+    // Use FIND substring so any naming variant matches (e.g., "Kansas City
+    // Emergency Meeting 7/9" or the fuller "…on Public School Funding 7/9").
+    const orLaunch = 'OR(' + launchEvents.map(n => `FIND('${String(n).replace(/'/g, "\\'")}',{rsvp_launch}&'')>0`).join(',') + ')';
     do {
       let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',${orLaunch})`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=result`;
       if (off) q += `&offset=${encodeURIComponent(off)}`;
@@ -7919,6 +7939,72 @@ async function signupsExportCsv(env, urlObj) {
   const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const out = [cols.join(',')];
   for (const r of rows) out.push([r.first, r.last, r.email, r.phone, r.zip, r.event, r.source, r.date].map(esc).join(','));
+  return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// One deduped row per person with EVENT activity on/after `since` (default 5/25,
+// inclusive). "Event activity" = a contact_log row whose event/rsvp_launch is set,
+// or whose method is an event method (attendance/RSVP/house meeting/commitment).
+// &all=1 widens it to ANY activity (calls, texts, emails too). Aggregates each
+// person's activity count, the events they touched, the methods used, and their
+// first/last activity date, then joins name/contact/geo from the Contacts table.
+async function activeSinceCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const since = (urlObj.searchParams.get('since') || '2026-05-25').slice(0, 10);
+  const includeAll = urlObj.searchParams.get('all') === '1';
+  const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+
+  // 1. Scan contact_log for activity on/after `since` (NOT-IS-BEFORE keeps the day itself).
+  const eventClause = `OR({event}!=BLANK(),{rsvp_launch}!=BLANK(),{method}='Event attendance',{method}='Event RSVP',{method}='Event',{method}='House meeting',{method}='Commitment')`;
+  const f = includeAll
+    ? `AND({date}!=BLANK(),NOT(IS_BEFORE({date},'${since}')))`
+    : `AND({date}!=BLANK(),NOT(IS_BEFORE({date},'${since}')),${eventClause})`;
+  const per = {};   // cid -> { count, events:Set, methods:Set, first, last }
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=date&fields%5B%5D=method&fields%5B%5D=event&fields%5B%5D=rsvp_launch`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      const cid = (r.fields.contact || [])[0];
+      if (!cid) continue;
+      const p = per[cid] || (per[cid] = { count: 0, events: new Set(), methods: new Set(), first: '', last: '' });
+      p.count++;
+      const dt = String(r.fields.date || '');
+      if (dt) { if (!p.first || dt < p.first) p.first = dt; if (dt > p.last) p.last = dt; }
+      const ev = String(r.fields.event || r.fields.rsvp_launch || '').trim();
+      if (ev) p.events.add(ev);
+      const mth = String(r.fields.method || '').trim();
+      if (mth) p.methods.add(mth);
+    }
+    off = d.offset;
+  } while (off);
+
+  // 2. Join contact details, 40 record-ids per filterByFormula call.
+  const cids = Object.keys(per);
+  const info = {};
+  for (let i = 0; i < cids.length; i += 40) {
+    const batch = cids.slice(i, i + 40);
+    const orF = 'OR(' + batch.map(id => `RECORD_ID()='${id}'`).join(',') + ')';
+    let q = `?filterByFormula=${encodeURIComponent(orF)}&pageSize=100`;
+    for (const fld of ['first', 'last', 'email', 'phone', 'county', 'school', 'district', 'assigned_organizer']) q += `&fields%5B%5D=${fld}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) {
+      const c = r.fields;
+      const org = (c.assigned_organizer || []).map(id => ORGANIZER_NAME_BY_ID[id] || '').filter(Boolean)[0] || '';
+      info[r.id] = { first: c.first || '', last: c.last || '', email: c.email || '', phone: c.phone || '', county: c.county || '', school: c.school || '', district: c.district || '', organizer: org };
+    }
+  }
+
+  // 3. One row per person, newest activity first, test rows dropped.
+  const rows = cids.map(cid => {
+    const p = per[cid], c = info[cid] || {};
+    return { first: c.first || '', last: c.last || '', email: c.email || '', phone: c.phone || '', county: c.county || '', school: c.school || '', district: c.district || '', organizer: c.organizer || '', activities: p.count, events: [...p.events].join('; '), methods: [...p.methods].join('; '), firstDate: p.first, lastDate: p.last };
+  }).filter(r => !/^(test|smoke|sample|audit|final|demo|pipeline|canary)\b/i.test(r.first) && !/test|smoke|example|gwcanary/i.test(r.email));
+  rows.sort((a, b) => String(b.lastDate).localeCompare(String(a.lastDate)));
+  const cols = ['First', 'Last', 'Email', 'Phone', 'County', 'School', 'District', 'Organizer', 'Activities', 'Events', 'Methods', 'First activity', 'Last activity'];
+  const out = [cols.join(',')];
+  for (const r of rows) out.push([r.first, r.last, r.email, r.phone, r.county, r.school, r.district, r.organizer, r.activities, r.events, r.methods, r.firstDate, r.lastDate].map(esc).join(','));
   return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=60', 'Access-Control-Allow-Origin': '*' } });
 }
 
