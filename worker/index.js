@@ -7955,7 +7955,10 @@ async function activeSinceCsv(env, urlObj) {
   const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 
   // 1. Scan contact_log for activity on/after `since` (NOT-IS-BEFORE keeps the day itself).
-  const eventClause = `OR({event}!=BLANK(),{rsvp_launch}!=BLANK(),{method}='Event attendance',{method}='Event RSVP',{method}='Event',{method}='House meeting',{method}='Commitment')`;
+  // "Event activity" = an actual participation method. We do NOT use {event}!=BLANK()
+  // because the event field also holds passive tags (e.g. "Vote reminder list",
+  // "School board resolution") that aren't event participation and would over-count.
+  const eventClause = `OR({method}='Event attendance',{method}='Event RSVP',{method}='Event',{method}='House meeting',{method}='Commitment')`;
   const f = includeAll
     ? `AND({date}!=BLANK(),NOT(IS_BEFORE({date},'${since}')))`
     : `AND({date}!=BLANK(),NOT(IS_BEFORE({date},'${since}')),${eventClause})`;
