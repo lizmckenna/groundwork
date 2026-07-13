@@ -102,8 +102,9 @@ function ctFetchOrganizers(){
 function ctBuildTab(cfg, orgs){
   const ss = SpreadsheetApp.getActive();
   let sh = ss.getSheetByName(cfg.name);
-  if (!sh){ sh = ss.insertSheet(cfg.name, cfg.pos - 1); }
-  ss.setActiveSheet(sh); ss.moveActiveSheet(cfg.pos);
+  if (!sh){ sh = ss.insertSheet(cfg.name, Math.min(cfg.pos - 1, ss.getSheets().length)); }
+  ss.setActiveSheet(sh);
+  ss.moveActiveSheet(Math.min(cfg.pos, ss.getSheets().length));   // clamp: later tabs (Goals) may not exist yet
   // banner — A1:C1 stay OUT of the merge: Sheets refuses frozen columns that
   // cut through a merged cell, and we freeze 3 columns below.
   sh.getRange(1,1,1,CT_TOTAL).breakApart();
