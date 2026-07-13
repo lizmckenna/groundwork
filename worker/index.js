@@ -542,6 +542,10 @@ export default {
       // and deletes the extras so each contact+bucket keeps exactly one row. Never
       // touches a non-paper row. Dry-run by default; add &confirm=1 to delete. Key-gated.
       if (url.pathname === '/cleanup-commitment-dupes' && request.method === 'GET') return await cleanupCommitmentDupes(env, url);
+      // Merge the nameless/sourceless stub contacts created by the 7/13 Airtable
+      // CSV import (zip-enrichment file appended as new rows instead of merging).
+      // Dry-run by default; &confirm=1 executes. See mergeImportStubs.
+      if (url.pathname === '/admin/merge-import-stubs' && request.method === 'GET') return await mergeImportStubs(env, url);
       // One-shot fix: rename the organizer record at rec0OmDN68hlffkTn back to
       // "LaNeé Bridewell". Someone typed "Laci Horn" over it in Airtable, which
       // silently attributed 1,119 of LaNee's contacts to Laci on the scoreboard.
@@ -8993,6 +8997,119 @@ async function importCommitments(request, env) {
   }
   await invalidateReadCaches(env);
   return json({ ok: true, date, report });
+}
+
+// =========================================================================
+// /admin/merge-import-stubs — clean up the 7/13 zip-enrichment CSV import that
+// Airtable appended as ~667 NEW nameless rows instead of merging (the importer
+// never enabled "Merge with existing records"). For each stub — a contact with
+// blank first+last AND blank source — matched to exactly one NAMED contact by
+// email (then by phone):
+//   1. copy the stub's geo fields (zip/city/county/state/street) onto the named
+//      contact ONLY where the named contact's field is blank (fill, never clobber)
+//   2. delete the stub — UNLESS it has linked activity (contact_log / donations /
+//      attendance mirror / 1-1s), which means a form matched the stub since the
+//      import; those are reported for manual re-linking, never auto-deleted.
+// Stubs matching zero or 2+ named contacts are left alone and reported.
+// Dry-run unless ?confirm=1. Key-gated.
+// =========================================================================
+async function mergeImportStubs(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+  const confirm = urlObj.searchParams.get('confirm') === '1';
+  const GEO = ['zip', 'city', 'county', 'state', 'street_address'];
+
+  // 1. Full contacts scan once: split stubs vs named, index named by email/phone.
+  const stubs = [];
+  const namedByEmail = {}, namedByPhone = {};   // key -> [ids]
+  const namedGeo = {};                          // id -> current geo fields
+  const fields = ['first', 'last', 'email', 'phone', 'source'].concat(GEO);
+  let off = null;
+  do {
+    let q = `?pageSize=100` + fields.map(f => `&fields%5B%5D=${encodeURIComponent(f)}`).join('');
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) {
+      const f = r.fields;
+      const noName = !String(f.first || '').trim() && !String(f.last || '').trim();
+      const noSource = !String(f.source || '').trim();
+      const email = String(f.email || '').trim().toLowerCase();
+      const phone = String(f.phone || '').replace(/\D/g, '').slice(-10);
+      if (noName && noSource) {
+        stubs.push({ id: r.id, email, phone, geo: GEO.reduce((o, g) => { if (String(f[g] || '').trim()) o[g] = f[g]; return o; }, {}) });
+      } else {
+        if (email) (namedByEmail[email] = namedByEmail[email] || []).push(r.id);
+        if (phone.length === 10) (namedByPhone[phone] = namedByPhone[phone] || []).push(r.id);
+        namedGeo[r.id] = GEO.reduce((o, g) => { o[g] = String(f[g] || '').trim(); return o; }, {});
+      }
+    }
+    off = d.offset;
+  } while (off);
+
+  // 2. Which contact ids have linked activity? One paginated id-scan per table —
+  //    the proven commitmentSets pattern (linked fields can't be formula-filtered).
+  const active = new Set();
+  const linkScans = [
+    { tbl: CONTACT_LOG_TBL, field: 'contact' },
+    { tbl: DONATIONS_TBL, field: 'contact' },
+    { tbl: ATTENDANCE_MIRROR_TBL, field: 'contact' },
+    { tbl: ONE_ON_ONES_TBL, field: 'contact' },
+  ];
+  for (const s of linkScans) {
+    let o2 = null;
+    try {
+      do {
+        let q = `?pageSize=100&fields%5B%5D=${encodeURIComponent(s.field)}`;
+        if (o2) q += `&offset=${encodeURIComponent(o2)}`;
+        const d = await at(env, `/${BASE}/${s.tbl}${q}`);
+        for (const r of d.records) for (const c of (r.fields[s.field] || [])) active.add(c);
+        o2 = d.offset;
+      } while (o2);
+    } catch (e) { /* table read failure -> treat as unknown; stubs stay conservative below */ }
+  }
+
+  // 3. Plan per stub.
+  const plan = { merge_and_delete: [], geo_only_named_complete: [], has_activity: [], no_match: [], ambiguous: [] };
+  for (const s of stubs) {
+    let matches = s.email && namedByEmail[s.email] ? namedByEmail[s.email] : [];
+    if (!matches.length && s.phone && namedByPhone[s.phone]) matches = namedByPhone[s.phone];
+    matches = Array.from(new Set(matches));
+    if (!matches.length) { plan.no_match.push(s.id); continue; }
+    if (matches.length > 1) { plan.ambiguous.push({ stub: s.id, named: matches }); continue; }
+    const target = matches[0];
+    if (active.has(s.id)) { plan.has_activity.push({ stub: s.id, named: target }); continue; }
+    const fill = {};
+    for (const g of GEO) if (s.geo[g] && namedGeo[target] && !namedGeo[target][g]) fill[g] = s.geo[g];
+    (Object.keys(fill).length ? plan.merge_and_delete : plan.geo_only_named_complete)
+      .push({ stub: s.id, named: target, fill });
+  }
+
+  const summary = {
+    ok: true, dry_run: !confirm,
+    stubs_found: stubs.length,
+    will_fill_geo_and_delete: plan.merge_and_delete.length,
+    named_already_complete_delete_only: plan.geo_only_named_complete.length,
+    kept_has_activity: plan.has_activity.length,
+    kept_no_match: plan.no_match.length,
+    kept_ambiguous: plan.ambiguous.length,
+  };
+  if (!confirm) return json({ ...summary, sample_fills: plan.merge_and_delete.slice(0, 5), has_activity: plan.has_activity, ambiguous: plan.ambiguous });
+
+  // 4. Execute: fill geo on named, then delete stubs (batches of 10).
+  let filled = 0, deleted = 0;
+  const toPatch = plan.merge_and_delete.filter(p => Object.keys(p.fill).length);
+  for (let i = 0; i < toPatch.length; i += 10) {
+    const batch = toPatch.slice(i, i + 10).map(p => ({ id: p.named, fields: p.fill }));
+    await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+    filled += batch.length;
+  }
+  const toDelete = plan.merge_and_delete.concat(plan.geo_only_named_complete).map(p => p.stub);
+  for (let i = 0; i < toDelete.length; i += 10) {
+    const qs = toDelete.slice(i, i + 10).map(id => `records%5B%5D=${id}`).join('&');
+    await at(env, `/${BASE}/${CONTACTS_TBL}?${qs}`, { method: 'DELETE' });
+    deleted += Math.min(10, toDelete.length - i);
+  }
+  await invalidateReadCaches(env);
+  return json({ ...summary, dry_run: false, geo_filled_on_named: filled, stubs_deleted: deleted });
 }
 
 // Remove duplicate paper-commitment rows created by an earlier broken-idempotency
