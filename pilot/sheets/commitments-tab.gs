@@ -1,26 +1,40 @@
 /**
- * Groundwork — COMMITMENTS tab add-on (paste as a SECOND file in a region
- * tracker's bound Apps Script project; do not touch the existing file).
+ * Groundwork — COMMITMENTS tab add-on.
+ * Paste as a file in a spreadsheet's bound Apps Script project, set CT_TABS
+ * for that sheet (two ready-made configs below), Save, run ctSetUp once.
  *
- * What it adds:
- *   · A 'Commitments' tab (3rd position): everyone statewide who has committed
- *     to anything at any stage, with the commitment columns, attendance flags,
- *     and the region they route to — plus manual follow-up columns (Claimed by /
- *     Follow-up status / Notes) that survive every refresh, keyed on contact_id.
- *   · A '🗳 Commitments' menu with an "Add a commitment" dialog: search the
- *     database first (no re-typing people we already have), tick what they
- *     committed to; only a genuinely new person needs info typed. Writes go
- *     through the worker (structured — no free-text Airtable edits).
+ * Tabs are driven by /export/commitments.csv buckets:
+ *   bucket=commits        → people with ≥1 REAL commitment (vote-reminder-only
+ *                           folks excluded; vote-reminder lines stripped from Other)
+ *   bucket=votereminders  → everyone who asked for a vote reminder (GOTV list)
+ *   region=kc|northland|… → only people who route to that region
  *
- * SETUP (once): paste file → Save → run ctSetUp → authorize. Done.
- * Every name here is ct-prefixed: the host project's globals (KEY, COLS,
- * onOpen, …) are untouched and both files share one namespace.
+ * Manual follow-up columns (Claimed by / Follow-up status / Notes) survive
+ * every refresh, keyed on the hidden contact_id column.
+ * '🗳 Commitments' menu → search-first Add-a-commitment dialog: match an
+ * existing contact and tick commitments; only net-new people need info typed.
+ *
+ * Every name is ct-prefixed: safe to paste alongside a region tracker's
+ * existing script (shared global namespace, zero collisions).
  */
+
+// ==== PER-SHEET CONFIG — keep exactly one CT_TABS ==========================
+// ALL-commitments tracker (statewide, two tabs):
+const CT_TABS = [
+  { name: 'Commitments', pos: 1, params: 'bucket=commits',
+    banner: 'EVERYONE WITH A REAL COMMITMENT, statewide (vote-reminder-only folks live on the next tab) — auto-refreshes; columns A–V come from the database (edits there are overwritten). The PLUM columns are YOURS and survive every refresh. Add new commitments via the 🗳 Commitments menu.' },
+  { name: 'Vote reminders', pos: 2, params: 'bucket=votereminders',
+    banner: 'EVERYONE WHO ASKED FOR A VOTE REMINDER, statewide (the GOTV list; some also appear on the Commitments tab) — auto-refreshes; columns A–V come from the database. The PLUM columns are YOURS and survive every refresh.' },
+];
+// Kansas City tracker (single tab, 3rd position) — use this CT_TABS instead:
+// const CT_TABS = [
+//   { name: 'Commitments', pos: 3, params: 'region=kc&bucket=commits',
+//     banner: 'KANSAS CITY commitments only (vote reminders live on the ALL tracker) — auto-refreshes; columns A–V come from the database (edits there are overwritten). The PLUM columns are YOURS and survive every refresh. Add new commitments via the 🗳 Commitments menu.' },
+// ];
+// ===========================================================================
 
 const CT_KEY    = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
 const CT_WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
-const CT_TAB    = 'Commitments';
-const CT_POS    = 3;                 // third tab
 const CT_HDR    = 2, CT_FIRST = 3;   // banner row 1, header row 2, data from 3
 
 // Feed columns, in feed order (contact_id first). Manual columns appended after.
@@ -38,8 +52,14 @@ const CT_FONT='Archivo', CT_PLUM='#3e4f6e', CT_INK='#1A2418', CT_PAPER='#E9E5CE'
 const CT_GREEN='#38761D', CT_COMMIT_BLUE='#6FA8DC', CT_YES_GREEN='#CDE9D5', CT_BAND='#F3F4F6', CT_ALERT='#FBE48A';
 
 function ctSetUp(){
-  ctBuildTab();
+  CT_TABS.forEach(ctBuildTab);
   ctRefresh();
+  // drop the blank default sheet if this is a fresh spreadsheet
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const s1 = ss.getSheetByName('Sheet1');
+    if (s1 && ss.getSheets().length > CT_TABS.length && s1.getDataRange().isBlank()) ss.deleteSheet(s1);
+  } catch(e) {}
   // installable triggers: refresh every 10 min + our own menu on open
   ScriptApp.getProjectTriggers().forEach(t => {
     const fn = t.getHandlerFunction();
@@ -57,20 +77,18 @@ function ctOnOpen(){
     .addToUi();
 }
 
-function ctBuildTab(){
+function ctBuildTab(cfg){
   const ss = SpreadsheetApp.getActive();
-  let sh = ss.getSheetByName(CT_TAB);
-  if (!sh){ sh = ss.insertSheet(CT_TAB, CT_POS - 1); }
-  ss.setActiveSheet(sh); ss.moveActiveSheet(CT_POS);
+  let sh = ss.getSheetByName(cfg.name);
+  if (!sh){ sh = ss.insertSheet(cfg.name, cfg.pos - 1); }
+  ss.setActiveSheet(sh); ss.moveActiveSheet(cfg.pos);
   // banner — A1:C1 stay OUT of the merge: Sheets refuses frozen columns that
   // cut through a merged cell, and we freeze 3 columns below.
   sh.getRange(1,1,1,CT_TOTAL).breakApart();
   sh.getRange(1,1,1,CT_TOTAL).setBackground(CT_INK);
-  sh.getRange(1,1).setValue('🗳 COMMITMENTS')
+  sh.getRange(1,1).setValue('🗳 ' + cfg.name.toUpperCase())
     .setFontFamily(CT_FONT).setFontWeight('bold').setFontSize(11).setFontColor('#ffffff').setVerticalAlignment('middle');
-  sh.getRange(1,4,1,CT_TOTAL-3).merge().setValue(
-    'EVERYONE WHO HAS COMMITTED TO ANYTHING, statewide — auto-refreshes; columns A–V come from the database (edits there are overwritten). ' +
-    'The PLUM columns (Claimed by / Follow-up status / Notes) are YOURS and survive every refresh. Add new commitments via the 🗳 Commitments menu.')
+  sh.getRange(1,4,1,CT_TOTAL-3).merge().setValue(cfg.banner)
     .setFontFamily(CT_FONT).setFontSize(10).setFontColor('#ffffff').setBackground(CT_INK).setWrap(true).setVerticalAlignment('middle');
   sh.setRowHeight(1, 44);
   // header
@@ -90,28 +108,31 @@ function ctBuildTab(){
   if (!sh.getFilter()) sh.getRange(CT_HDR,1,sh.getMaxRows()-CT_HDR+1,CT_TOTAL).createFilter();
 }
 
-// Abort-safe refresh: NEVER clears unless a valid non-empty feed is confirmed
-// (non-200, error body, or missing header → keep what's on screen).
+// Abort-safe refresh: NEVER clears a tab unless a valid non-empty feed is
+// confirmed (non-200, error body, or missing header → keep what's on screen).
 function ctRefresh(){
-  const sh = SpreadsheetApp.getActive().getSheetByName(CT_TAB); if (!sh) return;
-  const resp = UrlFetchApp.fetch(CT_WORKER + '/export/commitments.csv?key=' + encodeURIComponent(CT_KEY) + '&t=' + Date.now(), {muteHttpExceptions:true});
-  if (resp.getResponseCode() !== 200) return;
-  const rows = Utilities.parseCsv(resp.getContentText());
-  if (rows.length < 2) return;
-  if (String(rows[0][0]).trim().toLowerCase() !== 'contact_id') return;
-  // preserve manual columns by contact_id
-  const last = sh.getLastRow(), byId = {};
-  if (last >= CT_FIRST){
-    const ids = sh.getRange(CT_FIRST,1,last-CT_FIRST+1,1).getValues();
-    const man = sh.getRange(CT_FIRST,CT_M_START,last-CT_FIRST+1,CT_MANUAL.length).getValues();
-    for (let i=0;i<ids.length;i++){ const id=String(ids[i][0]||'').trim(); if (id && man[i].some(v=>v!=='')) byId[id]=man[i]; }
-  }
-  const body = rows.slice(1).map(r => { const o=r.slice(0,CT_N_FEED); while (o.length<CT_N_FEED) o.push(''); return o; });
-  if (last >= CT_FIRST) sh.getRange(CT_FIRST,1,last-CT_FIRST+1,CT_TOTAL).clearContent();
-  sh.getRange(CT_FIRST,1,body.length,CT_N_FEED).setValues(body);
-  const man = body.map(r => byId[String(r[0]||'').trim()] || new Array(CT_MANUAL.length).fill(''));
-  sh.getRange(CT_FIRST,CT_M_START,body.length,CT_MANUAL.length).setValues(man);
-  ctBrand(sh, body.length);
+  const ss = SpreadsheetApp.getActive();
+  CT_TABS.forEach(cfg => {
+    const sh = ss.getSheetByName(cfg.name); if (!sh) return;
+    const resp = UrlFetchApp.fetch(CT_WORKER + '/export/commitments.csv?key=' + encodeURIComponent(CT_KEY) + '&' + cfg.params + '&t=' + Date.now(), {muteHttpExceptions:true});
+    if (resp.getResponseCode() !== 200) return;
+    const rows = Utilities.parseCsv(resp.getContentText());
+    if (rows.length < 2) return;
+    if (String(rows[0][0]).trim().toLowerCase() !== 'contact_id') return;
+    // preserve manual columns by contact_id
+    const last = sh.getLastRow(), byId = {};
+    if (last >= CT_FIRST){
+      const ids = sh.getRange(CT_FIRST,1,last-CT_FIRST+1,1).getValues();
+      const man = sh.getRange(CT_FIRST,CT_M_START,last-CT_FIRST+1,CT_MANUAL.length).getValues();
+      for (let i=0;i<ids.length;i++){ const id=String(ids[i][0]||'').trim(); if (id && man[i].some(v=>v!=='')) byId[id]=man[i]; }
+    }
+    const body = rows.slice(1).map(r => { const o=r.slice(0,CT_N_FEED); while (o.length<CT_N_FEED) o.push(''); return o; });
+    if (last >= CT_FIRST) sh.getRange(CT_FIRST,1,last-CT_FIRST+1,CT_TOTAL).clearContent();
+    sh.getRange(CT_FIRST,1,body.length,CT_N_FEED).setValues(body);
+    const man = body.map(r => byId[String(r[0]||'').trim()] || new Array(CT_MANUAL.length).fill(''));
+    sh.getRange(CT_FIRST,CT_M_START,body.length,CT_MANUAL.length).setValues(man);
+    ctBrand(sh, body.length);
+  });
 }
 
 function ctBrand(sh, n){
