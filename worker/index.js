@@ -80,7 +80,9 @@ const EVENT_META = {
   'hm_6_16': { type: 'hm', date: '2026-06-16', time: '6:00pm CT', label: 'HM Training 6/16', confirmEvent: 'Confirm HM 6/16', attendEvent: 'House Meeting Training 6/16', confirmField: 'confirm_hm_6_16_status', attendField: 'attendance_hm_6_16_status', signupField: 'signup_hm_6_16_status', confirmTag: 'hm 6/16 confirm', attendTag: 'hm training 6/16' },
   'hm_7_1':  { type: 'hm', date: '2026-07-01', time: '5:30pm CT', label: 'HM Training 7/1',  confirmEvent: 'Confirm HM 7/1',  attendEvent: 'House Meeting Training 7/1',  confirmField: 'confirm_hm_7_1_status',  attendField: 'attendance_hm_7_1_status',  signupField: 'signup_hm_7_1_status',  confirmTag: 'hm 7/1 confirm',  attendTag: 'hm training 7/1' },
   'hm_7_16': { type: 'hm', date: '2026-07-16', time: '6:30pm CT', label: 'HM Training 7/16', confirmEvent: 'Confirm HM 7/16', attendEvent: 'House Meeting Training 7/16', confirmField: 'confirm_hm_7_16_status', attendField: 'attendance_hm_7_16_status', signupField: 'signup_hm_7_16_status', confirmTag: 'hm 7/16 confirm', attendTag: 'hm training 7/16' },
-  'hm_7_29': { type: 'hm', date: '2026-07-29', time: '5:30pm CT', label: 'HM Training 7/29', confirmEvent: 'Confirm HM 7/29', attendEvent: 'House Meeting Training 7/29', confirmField: 'confirm_hm_7_29_status', attendField: 'attendance_hm_7_29_status', signupField: 'signup_hm_7_29_status', confirmTag: 'hm 7/29 confirm', attendTag: 'hm training 7/29' },
+  // 7/29 was repurposed from HM Training → Final Push All-In Strategy Call (Ellen, 7/13).
+  // Airtable field names keep the hm_7_29 stem so the 3 pre-flip RSVPs stay attached.
+  'hm_7_29': { type: 'hm', date: '2026-07-29', time: '7:00pm CT', label: 'Final Push Strategy Call 7/29', emailTitle: 'Final Push All-In Strategy Call', confirmEvent: 'Confirm HM 7/29', attendEvent: 'Final Push Strategy Call 7/29', legacyAttendEvents: ['House Meeting Training 7/29'], confirmField: 'confirm_hm_7_29_status', attendField: 'attendance_hm_7_29_status', signupField: 'signup_hm_7_29_status', confirmTag: 'final push 7/29 confirm', attendTag: 'final push strategy call 7/29' },
   // Amplifier trainings — dates from the website (Ellen's sheet had typos)
   'amp_6_11': { type: 'amp', date: '2026-06-11', time: '6:30pm CT', label: 'Amplifier 6/11', confirmEvent: 'Confirm Amp 6/11', attendEvent: 'Amplifier Training 6/11', confirmField: 'confirm_amp_6_11_status', attendField: 'attendance_amp_6_11_status', signupField: 'signup_amp_6_11_status', confirmTag: 'amp 6/11 confirm', attendTag: 'amplifier 6/11' },
   'amp_6_27': { type: 'amp', date: '2026-06-27', time: '1:00pm CT', label: 'Amplifier 6/27', confirmEvent: 'Confirm Amp 6/27', attendEvent: 'Amplifier Training 6/27', confirmField: 'confirm_amp_6_27_status', attendField: 'attendance_amp_6_27_status', signupField: 'signup_amp_6_27_status', confirmTag: 'amp 6/27 confirm', attendTag: 'amplifier 6/27' },
@@ -1236,6 +1238,139 @@ export default {
         };
         const created = await at(env, `/meta/bases/${BASE}/tables`, { method: 'POST', body: JSON.stringify(schema) });
         return json({ status: 'created', table_id: created.id, table: created });
+      }
+      // Launch turnout report — for launches tracked via rsvp_launch in contact_log
+      // (Northland 6/18, KC 7/9, etc.). RSVPs vs attendance vs flake by organizer,
+      // plus confirm-status show-rates and commitment counts. &launch=<substring>.
+      if (url.pathname === '/admin/launch-turnout' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const launchQ = (url.searchParams.get('launch') || 'Northland Emergency Meeting').replace(/'/g, "\\'");
+        // 1. Pull all log rows for this launch: RSVPs, attendance, confirm touches.
+        const logs = [];
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`FIND('${launchQ}',{rsvp_launch}&'')>0`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=date`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+          logs.push(...p.records);
+          off = p.offset;
+        } while (off);
+        const isAtt = v => { v = String(v || '').toLowerCase(); return v === 'attended' || v === 'walk-in' || v === 'walk in'; };
+        const state = {}; // cid -> {rsvp, attended, confirm}
+        const CONF_RANK = { 'Reminder sent': 1, 'Confirmed': 2, 'Cancelled': 3 };
+        for (const r of logs) {
+          const f = r.fields;
+          for (const cid of (f.contact || [])) {
+            const s = state[cid] || (state[cid] = { rsvp: false, attended: false, confirm: null });
+            if (f.method === 'Event RSVP' || String(f.result || '') === 'Signed up') s.rsvp = true;
+            if (f.method === 'Event attendance' && isAtt(f.result)) s.attended = true;
+            if (CONF_RANK[f.result] && (CONF_RANK[f.result] > (CONF_RANK[s.confirm] || 0))) s.confirm = f.result;
+          }
+        }
+        // 2. Enrich each contact with organizer + commitments.
+        const orgMap = await orgNameById(env);
+        // Batch-fetch all involved contacts in pages of 50 RECORD_ID() clauses —
+        // per-record GETs blow Cloudflare's 50-subrequest budget and fail silently.
+        const cids = Object.keys(state);
+        const contactFields = {}; // cid -> fields
+        const wanted = ['Name', 'assigned_organizer', 'organized_by', 'amendment5_commitments',
+          'house_meeting_date', 'one_on_one_booked', 'commitments_added', 'house_meeting_commitments'];
+        for (let i = 0; i < cids.length; i += 50) {
+          const chunk = cids.slice(i, i + 50);
+          const orIds = 'OR(' + chunk.map(id => `RECORD_ID()='${id}'`).join(',') + ')';
+          let q = `?filterByFormula=${encodeURIComponent(orIds)}&pageSize=100`;
+          for (const f of wanted) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+          let off2 = null;
+          do {
+            const p = await at(env, `/${BASE}/${CONTACTS_TBL}${q}${off2 ? `&offset=${encodeURIComponent(off2)}` : ''}`);
+            for (const r of p.records) contactFields[r.id] = r.fields;
+            off2 = p.offset;
+          } while (off2);
+        }
+        // organized_by links point at CONTACTS (peer recruiters) — resolve their names
+        // in one more batched pass.
+        const obIdsAll = new Set();
+        for (const f of Object.values(contactFields)) {
+          const obRaw = f.organized_by;
+          for (const x of (Array.isArray(obRaw) ? obRaw : (obRaw ? [obRaw] : []))) {
+            const id = typeof x === 'string' ? x : (x && x.id);
+            if (id) obIdsAll.add(id);
+          }
+        }
+        const obNames = {};
+        const obList = [...obIdsAll];
+        for (let i = 0; i < obList.length; i += 50) {
+          const chunk = obList.slice(i, i + 50);
+          const orIds = 'OR(' + chunk.map(id => `RECORD_ID()='${id}'`).join(',') + ')';
+          const p = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(orIds)}&pageSize=100&fields%5B%5D=Name`);
+          for (const r of p.records) obNames[r.id] = r.fields.Name || r.id;
+        }
+        const buckets = {};
+        const rosterOut = [];
+        for (const [cid, s] of Object.entries(state)) {
+          const cf = contactFields[cid] || {};
+          const raw = cf.assigned_organizer;
+          const linked = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+          const orgIds = linked.map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+          let orgLabel = orgIds.length ? orgIds.map(id => orgMap[id] || ORGANIZER_NAME_BY_ID[id] || id).join(', ') : '';
+          // Northland book was deliberately unassigned in July so the regional team
+          // could claim contacts — fall back to organized_by (who brought them in,
+          // a contacts-table link) so the report still groups usefully.
+          if (!orgLabel) {
+            const obRaw = cf.organized_by;
+            const obIds = (Array.isArray(obRaw) ? obRaw : (obRaw ? [obRaw] : [])).map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+            if (obIds.length) orgLabel = (obNames[obIds[0]] || obIds[0]) + ' (organized_by)';
+          }
+          if (!orgLabel) orgLabel = '(unassigned)';
+          const hasCommit = !!(String(cf.amendment5_commitments || '').trim() || cf.house_meeting_date || cf.one_on_one_booked
+            || String(cf.commitments_added || '').trim() || String(cf.house_meeting_commitments || '').trim());
+          const b = buckets[orgLabel] || (buckets[orgLabel] = {
+            rsvps: 0, attended: 0, walkin_or_unrsvpd: 0, no_show: 0, commits: 0,
+            confirmed: 0, confirmed_attended: 0, reminder: 0, reminder_attended: 0, no_conf: 0, no_conf_attended: 0,
+          });
+          if (s.rsvp) b.rsvps++;
+          if (s.attended && s.rsvp) b.attended++;
+          if (s.attended && !s.rsvp) b.walkin_or_unrsvpd++;
+          if (s.rsvp && !s.attended) b.no_show++;
+          if (s.attended && hasCommit) b.commits++;
+          if (s.rsvp) {
+            if (s.confirm === 'Confirmed') { b.confirmed++; if (s.attended) b.confirmed_attended++; }
+            else if (s.confirm === 'Reminder sent') { b.reminder++; if (s.attended) b.reminder_attended++; }
+            else { b.no_conf++; if (s.attended) b.no_conf_attended++; }
+          }
+          rosterOut.push({ name: cf.Name || cid, organizer: orgLabel, rsvp: s.rsvp, attended: s.attended, confirm: s.confirm, has_commitment: hasCommit });
+        }
+        const by_organizer = Object.entries(buckets).map(([organizer, b]) => ({
+          organizer,
+          rsvps: b.rsvps,
+          attended: b.attended,
+          walk_ins: b.walkin_or_unrsvpd,
+          no_show: b.no_show,
+          show_rate_pct: b.rsvps ? Math.round(b.attended / b.rsvps * 1000) / 10 : null,
+          flake_rate_pct: b.rsvps ? Math.round(b.no_show / b.rsvps * 1000) / 10 : null,
+          attendees_with_commitments: b.commits,
+          confirmed: b.confirmed, confirmed_attended: b.confirmed_attended,
+          confirmed_show_pct: b.confirmed ? Math.round(b.confirmed_attended / b.confirmed * 1000) / 10 : null,
+          reminder_sent: b.reminder, reminder_attended: b.reminder_attended,
+          reminder_show_pct: b.reminder ? Math.round(b.reminder_attended / b.reminder * 1000) / 10 : null,
+          no_confirm_status: b.no_conf, no_confirm_attended: b.no_conf_attended,
+        })).sort((a, b) => b.rsvps - a.rsvps);
+        const totals = by_organizer.reduce((t, o) => ({
+          rsvps: t.rsvps + o.rsvps, attended: t.attended + o.attended,
+          walk_ins: t.walk_ins + o.walk_ins, no_show: t.no_show + o.no_show,
+          commits: t.commits + o.attendees_with_commitments,
+        }), { rsvps: 0, attended: 0, walk_ins: 0, no_show: 0, commits: 0 });
+        return json({
+          launch_match: launchQ,
+          totals: {
+            ...totals,
+            total_in_room: totals.attended + totals.walk_ins,
+            show_rate_pct: totals.rsvps ? Math.round(totals.attended / totals.rsvps * 1000) / 10 : null,
+            flake_rate_pct: totals.rsvps ? Math.round(totals.no_show / totals.rsvps * 1000) / 10 : null,
+          },
+          by_organizer,
+          roster: rosterOut.sort((a, b) => String(a.organizer).localeCompare(String(b.organizer)) || String(a.name).localeCompare(String(b.name))),
+        });
       }
       // Post-event summary: signups + attendance broken down by assigned organizer
       // (LaNeé vs Stephanie vs others). Reads current contact state — call any time
@@ -3093,6 +3228,7 @@ async function trainingSignup(request, env) {
   for (const evName of events) {
     const metaKey = Object.keys(EVENT_META).find(k =>
       EVENT_META[k].attendEvent.toLowerCase() === String(evName).toLowerCase() ||   // case-insensitive: form sends "...onboarding", meta has "...Onboarding"
+      (EVENT_META[k].legacyAttendEvents || []).some(le => le.toLowerCase() === String(evName).toLowerCase()) ||   // renamed events (e.g. HM 7/29 → Final Push) still match from cached pages
       (k === 'kyn_7_25' && /neighbor.*7\/25/i.test(evName)));
     if (metaKey && EVENT_META[metaKey].signupField) {
       baseFields[EVENT_META[metaKey].signupField] = 'Signed up';
@@ -3161,7 +3297,7 @@ async function trainingSignup(request, env) {
   if (cEmail && AUTO_CONFIRM_EMAIL) {
     const keys = new Set();
     for (const evName of events) {
-      const k = Object.keys(EVENT_META).find(kk => EVENT_META[kk].attendEvent.toLowerCase() === String(evName).toLowerCase() || (kk === 'kyn_7_25' && /neighbor.*7\/25/i.test(evName)));
+      const k = Object.keys(EVENT_META).find(kk => EVENT_META[kk].attendEvent.toLowerCase() === String(evName).toLowerCase() || (EVENT_META[kk].legacyAttendEvents || []).some(le => le.toLowerCase() === String(evName).toLowerCase()) || (kk === 'kyn_7_25' && /neighbor.*7\/25/i.test(evName)));
       if (k) keys.add(k);
     }
     for (const k of keys) { try { await sendConfirmationEmail(env, cEmail, cFirst, contactId, null, k); confirmation_email_sent = true; } catch (e) {} }
@@ -5253,7 +5389,8 @@ function autoEmailEvent(key) {
   const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][d.getMonth()];
   const mdy = `${d.getMonth()+1}/${d.getDate()}`;
   const time = meta.time || '7:30pm CT';
-  const fullTitle = meta.type === 'hm' ? 'House Meeting Training'
+  const fullTitle = meta.emailTitle ? meta.emailTitle
+    : meta.type === 'hm' ? 'House Meeting Training'
     : meta.type === 'amp' ? 'Amplifier Training'
     : meta.label;
   return {
