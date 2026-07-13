@@ -83,6 +83,10 @@ function recruitFromNotes(notes){
 
 function _upsertRow(sh, p){
   if (!sh) return;
+  // Never land test/canary submissions in the live sheet (matches the worker's
+  // export test-name filter, so a smoke test can't clutter organizers' view).
+  var fn = String(p.first||'').trim(), em = String(p.email||'').toLowerCase();
+  if (/^(test|testcanary|smoke|canary|sample|demo|audit)/i.test(fn) || /test|canary|smoke|example/i.test(em)) return;
   var email = String(p.email||'').trim().toLowerCase();
   var phoneKey = String(p.phone||'').replace(/\D/g,'').slice(-10);
   var last = sh.getLastRow();
