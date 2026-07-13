@@ -548,6 +548,21 @@ export default {
       // CSV import (zip-enrichment file appended as new rows instead of merging).
       // Dry-run by default; &confirm=1 executes. See mergeImportStubs.
       if (url.pathname === '/admin/merge-import-stubs' && request.method === 'GET') return await mergeImportStubs(env, url);
+      // Rename an events-table record (e.g. after repurposing an event). All
+      // event_attendance mirror rows linked to it show the new name instantly.
+      if (url.pathname === '/admin/rename-event' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const from = (url.searchParams.get('from') || '').trim();
+        const to = (url.searchParams.get('to') || '').trim();
+        if (!from || !to) return json({ error: 'from and to required' }, 400);
+        const esc = from.replace(/'/g, "\\'");
+        const q = await at(env, `/${BASE}/${EVENTS_TBL}?filterByFormula=${encodeURIComponent(`{Name}='${esc}'`)}&maxRecords=2`);
+        if (!q.records.length) return json({ error: 'no event found', from });
+        if (q.records.length > 1) return json({ error: 'multiple events match — rename manually', from });
+        await at(env, `/${BASE}/${EVENTS_TBL}/${q.records[0].id}`, { method: 'PATCH', body: JSON.stringify({ fields: { Name: to }, typecast: true }) });
+        await invalidateReadCaches(env);
+        return json({ status: 'renamed', from, to, event_id: q.records[0].id });
+      }
       // One-shot fix: rename the organizer record at rec0OmDN68hlffkTn back to
       // "LaNeé Bridewell". Someone typed "Laci Horn" over it in Airtable, which
       // silently attributed 1,119 of LaNee's contacts to Laci on the scoreboard.
@@ -3640,6 +3655,16 @@ async function ingestS2W(request, env) {
         if (outcome) stamp.s2w_outcome = outcome;
         if (transcript) stamp.s2w_transcript = transcript;
         if (clean(lead.transcript_text || lead.conversation)) stamp.s2w_conversation = clean(lead.transcript_text || lead.conversation).slice(0, 90000);
+        if (tags.length) {
+          // s2w_tags is the FILTERABLE home for tags (multi-select on the contact;
+          // the log-note copy is just the audit trail). PATCH replaces multi-select
+          // values wholesale, so union with what's already on the record.
+          try {
+            const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
+            const have = Array.isArray(cur.fields.s2w_tags) ? cur.fields.s2w_tags : [];
+            stamp.s2w_tags = [...new Set(have.concat(tags))];
+          } catch (e) { stamp.s2w_tags = tags; }
+        }
         if (Object.keys(stamp).length) {
           try { await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: stamp, typecast: true }) }); } catch (e) {}
         }
@@ -3659,6 +3684,7 @@ async function ingestS2W(request, env) {
         if (outcome) fields.s2w_outcome = outcome;
         if (transcript) fields.s2w_transcript = transcript;
         if (clean(lead.transcript_text || lead.conversation)) fields.s2w_conversation = clean(lead.transcript_text || lead.conversation).slice(0, 90000);
+        if (tags.length) fields.s2w_tags = tags;
         const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
         cid = c.records[0].id; created++;
       }
