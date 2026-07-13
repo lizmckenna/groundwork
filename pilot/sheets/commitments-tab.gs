@@ -62,9 +62,14 @@ function ctBuildTab(){
   let sh = ss.getSheetByName(CT_TAB);
   if (!sh){ sh = ss.insertSheet(CT_TAB, CT_POS - 1); }
   ss.setActiveSheet(sh); ss.moveActiveSheet(CT_POS);
-  // banner
-  sh.getRange(1,1,1,CT_TOTAL).merge().setValue(
-    '🗳 EVERYONE WHO HAS COMMITTED TO ANYTHING, statewide — auto-refreshes; columns A–V come from the database (edits there are overwritten). ' +
+  // banner — A1:C1 stay OUT of the merge: Sheets refuses frozen columns that
+  // cut through a merged cell, and we freeze 3 columns below.
+  sh.getRange(1,1,1,CT_TOTAL).breakApart();
+  sh.getRange(1,1,1,CT_TOTAL).setBackground(CT_INK);
+  sh.getRange(1,1).setValue('🗳 COMMITMENTS')
+    .setFontFamily(CT_FONT).setFontWeight('bold').setFontSize(11).setFontColor('#ffffff').setVerticalAlignment('middle');
+  sh.getRange(1,4,1,CT_TOTAL-3).merge().setValue(
+    'EVERYONE WHO HAS COMMITTED TO ANYTHING, statewide — auto-refreshes; columns A–V come from the database (edits there are overwritten). ' +
     'The PLUM columns (Claimed by / Follow-up status / Notes) are YOURS and survive every refresh. Add new commitments via the 🗳 Commitments menu.')
     .setFontFamily(CT_FONT).setFontSize(10).setFontColor('#ffffff').setBackground(CT_INK).setWrap(true).setVerticalAlignment('middle');
   sh.setRowHeight(1, 44);
