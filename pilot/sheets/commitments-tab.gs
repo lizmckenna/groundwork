@@ -1,41 +1,46 @@
 /**
- * Groundwork — COMMITMENTS tab add-on.
+ * Groundwork — COMMITMENTS tracker add-on (v2).
  * Paste as a file in a spreadsheet's bound Apps Script project, set CT_TABS
  * for that sheet (two ready-made configs below), Save, run ctSetUp once.
  *
- * Tabs are driven by /export/commitments.csv buckets:
- *   bucket=commits        → people with ≥1 REAL commitment (vote-reminder-only
- *                           folks excluded; vote-reminder lines stripped from Other)
+ * Feed tabs come from /export/commitments.csv:
+ *   bucket=commits        → people with ≥1 REAL commitment. The worker derives
+ *                           Completed from actual work (logged amplifier
+ *                           conversations, hosted house meetings).
  *   bucket=votereminders  → everyone who asked for a vote reminder (GOTV list)
  *   region=kc|northland|… → only people who route to that region
  *
- * Manual follow-up columns (Claimed by / Follow-up status / Notes) survive
- * every refresh, keyed on the hidden contact_id column.
- * '🗳 Commitments' menu → search-first Add-a-commitment dialog: match an
- * existing contact and tick commitments; only net-new people need info typed.
+ * Sheet-side lifecycle: the five commitment columns are dropdowns
+ * (Committed / Planned / Completed / Cancelled). The feed seeds them; your
+ * manual upgrades WIN on refresh (except a DB-derived Completed beats a stale
+ * Committed). Organized By is a dropdown of live organizers, color-chipped,
+ * and manual assignments survive refresh. A 'Goals' tab shows commitments by
+ * type and an organizer leaderboard with % converted, RAG-colored.
  *
  * Every name is ct-prefixed: safe to paste alongside a region tracker's
  * existing script (shared global namespace, zero collisions).
  */
 
 // ==== PER-SHEET CONFIG — keep exactly one CT_TABS ==========================
-// ALL-commitments tracker (statewide, two tabs):
+// ALL-commitments tracker (statewide): Goals tab + two feed tabs.
+const CT_GOALS = true;   // build the Goals tab (position 1)
 const CT_TABS = [
-  { name: 'Commitments', pos: 1, params: 'bucket=commits',
-    banner: 'EVERYONE WITH A REAL COMMITMENT, statewide (vote-reminder-only folks live on the next tab) — auto-refreshes; columns A–V come from the database (edits there are overwritten). The PLUM columns are YOURS and survive every refresh. Add new commitments via the 🗳 Commitments menu.' },
-  { name: 'Vote reminders', pos: 2, params: 'bucket=votereminders',
-    banner: 'EVERYONE WHO ASKED FOR A VOTE REMINDER, statewide (the GOTV list; some also appear on the Commitments tab) — auto-refreshes; columns A–V come from the database. The PLUM columns are YOURS and survive every refresh.' },
+  { name: 'Commitments', pos: 2, params: 'bucket=commits', color: '#2F5E3D', fontColor: '#FFFFFF',
+    banner: 'EVERYONE WITH A REAL COMMITMENT, statewide (vote-reminder-only folks live on the next tab) — auto-refreshes. Commitment columns are dropdowns: your upgrades (Completed / Cancelled…) stick. The PLUM columns are YOURS too. Add new commitments via the 🗳 Commitments menu.' },
+  { name: 'Vote reminders', pos: 3, params: 'bucket=votereminders', color: '#3E4F6E', fontColor: '#FFFFFF',
+    banner: 'EVERYONE WHO ASKED FOR A VOTE REMINDER, statewide (the GOTV list; some also appear on the Commitments tab) — auto-refreshes. The PLUM columns are YOURS and survive every refresh.' },
 ];
-// Kansas City tracker (single tab, 3rd position) — use this CT_TABS instead:
+// Kansas City tracker (single tab, 3rd position, no Goals) — use instead:
+// const CT_GOALS = false;
 // const CT_TABS = [
-//   { name: 'Commitments', pos: 3, params: 'region=kc&bucket=commits',
-//     banner: 'KANSAS CITY commitments only (vote reminders live on the ALL tracker) — auto-refreshes; columns A–V come from the database (edits there are overwritten). The PLUM columns are YOURS and survive every refresh. Add new commitments via the 🗳 Commitments menu.' },
+//   { name: 'Commitments', pos: 3, params: 'region=kc&bucket=commits', color: '#2F5E3D', fontColor: '#FFFFFF',
+//     banner: 'KANSAS CITY commitments only (vote reminders live on the ALL tracker) — auto-refreshes. Commitment columns are dropdowns: your upgrades stick. The PLUM columns are YOURS too. Add new commitments via the 🗳 Commitments menu.' },
 // ];
 // ===========================================================================
 
 const CT_KEY    = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
 const CT_WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
-const CT_HDR    = 2, CT_FIRST = 3;   // banner row 1, header row 2, data from 3
+const CT_HDR    = 2, CT_FIRST = 3, CT_MAXR = 1000;   // banner row 1, header row 2, data 3..1000
 
 // Feed columns, in feed order (contact_id first). Manual columns appended after.
 const CT_FEED_COLS = ['contact_id','First','Last','Region','Organized By','Role','Email','Phone','School','District','County',
@@ -43,17 +48,26 @@ const CT_FEED_COLS = ['contact_id','First','Last','Region','Organized By','Role'
   'Attended Launch','Amp Training','HM Training','Attended Power Camp'];
 const CT_MANUAL = ['Claimed by','Follow-up status','Notes'];
 const CT_STATUS = ['Not started','Texted','Called','Left message','1-1 booked','Done','No answer','Declined'];
+const CT_COMMIT_STATUSES = ['Committed','Planned','Completed','Cancelled'];
 const CT_N_FEED = CT_FEED_COLS.length;            // 22
-const CT_M_START = CT_N_FEED + 1;                 // 23 = first manual col
-const CT_TOTAL = CT_N_FEED + CT_MANUAL.length;    // 25
+const CT_ORG_COL = 5;                             // E = Organized By
+const CT_C_START = 12, CT_C_END = 16;             // L..P = the five commitment columns
+const CT_M_START = CT_N_FEED + 1;                 // 23 = first manual col (W)
+const CT_TOTAL = CT_N_FEED + CT_MANUAL.length;    // 25 (Y)
 
-// brand (own copies — host constants may differ per region)
-const CT_FONT='Archivo', CT_PLUM='#3e4f6e', CT_INK='#1A2418', CT_PAPER='#E9E5CE';
-const CT_GREEN='#38761D', CT_COMMIT_BLUE='#6FA8DC', CT_YES_GREEN='#CDE9D5', CT_BAND='#F3F4F6', CT_ALERT='#FBE48A';
+// brand
+const CT_FONT='Archivo', CT_INK='#1A2418', CT_GOLD='#D5B069', CT_BAND='#F3F4F6';
+const CT_COMMIT_BLUE='#6FA8DC', CT_PLANNED_AMBER='#FBE8B0', CT_DONE_GREEN='#1F7A43', CT_CANC_GREY='#E0E0E0';
+const CT_YES_GREEN='#CDE9D5', CT_ALERT='#FBE48A', CT_RAG_RED='#F2C9C4', CT_RAG_AMBER='#FBE8B0', CT_RAG_GREEN='#CDE9D5';
+// organizer chip palette, assigned cyclically in feed order
+const CT_ORG_PALETTE = ['#FFCFC9','#FFE5A0','#FFF8B8','#D4EDBC','#BFE1F6','#C6DBE1','#E6CFF2','#FFC8AA','#F2C0D5','#D9D2E9',
+  '#B7E1CD','#FCE8B2','#F6C7B6','#CFE2F3','#D9EAD3','#EAD1DC','#FFF2CC','#D0E0E3','#F4CCCC','#E8EAED'];
 
 function ctSetUp(){
-  CT_TABS.forEach(ctBuildTab);
+  const orgs = ctFetchOrganizers();
+  CT_TABS.forEach(cfg => ctBuildTab(cfg, orgs));
   ctRefresh();
+  if (CT_GOALS) ctBuildGoals();
   // drop the blank default sheet if this is a fresh spreadsheet
   try {
     const ss = SpreadsheetApp.getActive();
@@ -77,7 +91,15 @@ function ctOnOpen(){
     .addToUi();
 }
 
-function ctBuildTab(cfg){
+function ctFetchOrganizers(){
+  try {
+    const resp = UrlFetchApp.fetch(CT_WORKER + '/export/organizers.csv?key=' + encodeURIComponent(CT_KEY), {muteHttpExceptions:true});
+    if (resp.getResponseCode() !== 200) return [];
+    return Utilities.parseCsv(resp.getContentText()).slice(1).map(r => String(r[0]||'').trim()).filter(Boolean);
+  } catch(e) { return []; }
+}
+
+function ctBuildTab(cfg, orgs){
   const ss = SpreadsheetApp.getActive();
   let sh = ss.getSheetByName(cfg.name);
   if (!sh){ sh = ss.insertSheet(cfg.name, cfg.pos - 1); }
@@ -85,31 +107,64 @@ function ctBuildTab(cfg){
   // banner — A1:C1 stay OUT of the merge: Sheets refuses frozen columns that
   // cut through a merged cell, and we freeze 3 columns below.
   sh.getRange(1,1,1,CT_TOTAL).breakApart();
-  sh.getRange(1,1,1,CT_TOTAL).setBackground(CT_INK);
+  sh.getRange(1,1,1,CT_TOTAL).setBackground(cfg.color);
   sh.getRange(1,1).setValue('🗳 ' + cfg.name.toUpperCase())
-    .setFontFamily(CT_FONT).setFontWeight('bold').setFontSize(11).setFontColor('#ffffff').setVerticalAlignment('middle');
+    .setFontFamily(CT_FONT).setFontWeight('bold').setFontSize(11).setFontColor(cfg.fontColor).setVerticalAlignment('middle');
   sh.getRange(1,4,1,CT_TOTAL-3).merge().setValue(cfg.banner)
-    .setFontFamily(CT_FONT).setFontSize(10).setFontColor('#ffffff').setBackground(CT_INK).setWrap(true).setVerticalAlignment('middle');
+    .setFontFamily(CT_FONT).setFontSize(10).setFontColor(cfg.fontColor).setBackground(cfg.color).setWrap(true).setVerticalAlignment('middle');
   sh.setRowHeight(1, 44);
-  // header
+  // header row in the tab's own color (lightened font stays readable)
   sh.getRange(CT_HDR,1,1,CT_N_FEED).setValues([CT_FEED_COLS])
-    .setFontFamily(CT_FONT).setFontWeight('bold').setFontColor('#ffffff').setBackground(CT_PLUM);
+    .setFontFamily(CT_FONT).setFontWeight('bold').setFontColor(cfg.fontColor).setBackground(cfg.color);
   sh.getRange(CT_HDR,CT_M_START,1,CT_MANUAL.length).setValues([CT_MANUAL])
-    .setFontFamily(CT_FONT).setFontWeight('bold').setFontColor('#ffffff').setBackground('#5b3a6e');
-  // commitment block header tint
-  sh.getRange(CT_HDR,12,1,7).setBackground(CT_GREEN);
+    .setFontFamily(CT_FONT).setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#5B3A6E');
   sh.setFrozenRows(CT_HDR); sh.setFrozenColumns(3);
   sh.hideColumns(1);                                    // contact_id
-  const widths = {2:90,3:110,4:150,5:130,6:90,7:190,8:110,9:150,10:180,11:130,12:86,13:86,14:96,15:80,16:104,17:230,18:120,19:110,20:96,21:92,22:130,23:120,24:130,25:220};
+  const widths = {2:90,3:110,4:150,5:150,6:90,7:190,8:110,9:150,10:180,11:130,12:96,13:96,14:96,15:90,16:104,17:230,18:120,19:110,20:96,21:92,22:130,23:120,24:130,25:220};
   Object.keys(widths).forEach(c => sh.setColumnWidth(Number(c), widths[c]));
-  // follow-up status dropdown
-  const rule = SpreadsheetApp.newDataValidation().requireValueInList(CT_STATUS, true).setAllowInvalid(true).build();
-  sh.getRange(CT_FIRST, CT_M_START+1, sh.getMaxRows()-CT_FIRST+1, 1).setDataValidation(rule);
-  if (!sh.getFilter()) sh.getRange(CT_HDR,1,sh.getMaxRows()-CT_HDR+1,CT_TOTAL).createFilter();
+  // dropdowns: commitment lifecycle, follow-up status, organizer
+  const nRows = CT_MAXR - CT_FIRST + 1;
+  const commitRule = SpreadsheetApp.newDataValidation().requireValueInList(CT_COMMIT_STATUSES, true).setAllowInvalid(true).build();
+  sh.getRange(CT_FIRST, CT_C_START, nRows, CT_C_END - CT_C_START + 1).setDataValidation(commitRule);
+  const statusRule = SpreadsheetApp.newDataValidation().requireValueInList(CT_STATUS, true).setAllowInvalid(true).build();
+  sh.getRange(CT_FIRST, CT_M_START+1, nRows, 1).setDataValidation(statusRule);
+  if (orgs && orgs.length){
+    const orgRule = SpreadsheetApp.newDataValidation().requireValueInList(orgs, true).setAllowInvalid(true).build();
+    sh.getRange(CT_FIRST, CT_ORG_COL, nRows, 1).setDataValidation(orgRule);
+  }
+  // ALL cell colors as conditional-format rules, so dropdown changes recolor live
+  const rules = [];
+  const commitRange = sh.getRange(CT_FIRST, CT_C_START, nRows, CT_C_END - CT_C_START + 1);
+  const mk = (val, bg, fc, strike) => {
+    let b = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(val).setBackground(bg).setRanges([commitRange]);
+    if (fc) b = b.setFontColor(fc);
+    if (strike) b = b.setStrikethrough(true);
+    return b.build();
+  };
+  rules.push(mk('Committed', CT_COMMIT_BLUE, CT_INK));
+  rules.push(mk('Planned', CT_PLANNED_AMBER, CT_INK));
+  rules.push(mk('Completed', CT_DONE_GREEN, '#FFFFFF'));
+  rules.push(mk('Cancelled', CT_CANC_GREY, '#666666', true));
+  const yesRange = sh.getRange(CT_FIRST, 19, nRows, 4);   // S..V attendance flags
+  rules.push(SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('Yes').setBackground(CT_YES_GREEN).setRanges([yesRange]).build());
+  const regRange = sh.getRange(CT_FIRST, 4, nRows, 1);
+  rules.push(SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('(unrouted)').setBackground(CT_ALERT).setRanges([regRange]).build());
+  // organizer chips — one color per person, cycled through the palette
+  const orgRange = sh.getRange(CT_FIRST, CT_ORG_COL, nRows, 1);
+  (orgs || []).forEach((nm, i) => {
+    rules.push(SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(nm)
+      .setBackground(CT_ORG_PALETTE[i % CT_ORG_PALETTE.length]).setRanges([orgRange]).build());
+  });
+  sh.setConditionalFormatRules(rules);
+  if (!sh.getFilter()) sh.getRange(CT_HDR,1,CT_MAXR-CT_HDR+1,CT_TOTAL).createFilter();
 }
 
 // Abort-safe refresh: NEVER clears a tab unless a valid non-empty feed is
-// confirmed (non-200, error body, or missing header → keep what's on screen).
+// confirmed. Preserved across refresh, keyed on contact_id:
+//   · manual columns (Claimed by / Follow-up status / Notes) — always yours
+//   · Organized By — your value wins over the feed when set
+//   · commitment cells — your value wins, EXCEPT a feed 'Completed' upgrades
+//     a stale 'Committed' (the DB saw them actually do the work)
 function ctRefresh(){
   const ss = SpreadsheetApp.getActive();
   CT_TABS.forEach(cfg => {
@@ -119,37 +174,106 @@ function ctRefresh(){
     const rows = Utilities.parseCsv(resp.getContentText());
     if (rows.length < 2) return;
     if (String(rows[0][0]).trim().toLowerCase() !== 'contact_id') return;
-    // preserve manual columns by contact_id
     const last = sh.getLastRow(), byId = {};
     if (last >= CT_FIRST){
-      const ids = sh.getRange(CT_FIRST,1,last-CT_FIRST+1,1).getValues();
-      const man = sh.getRange(CT_FIRST,CT_M_START,last-CT_FIRST+1,CT_MANUAL.length).getValues();
-      for (let i=0;i<ids.length;i++){ const id=String(ids[i][0]||'').trim(); if (id && man[i].some(v=>v!=='')) byId[id]=man[i]; }
+      const n = last - CT_FIRST + 1;
+      const ids = sh.getRange(CT_FIRST,1,n,1).getValues();
+      const org = sh.getRange(CT_FIRST,CT_ORG_COL,n,1).getValues();
+      const com = sh.getRange(CT_FIRST,CT_C_START,n,CT_C_END-CT_C_START+1).getValues();
+      const man = sh.getRange(CT_FIRST,CT_M_START,n,CT_MANUAL.length).getValues();
+      for (let i=0;i<n;i++){
+        const id=String(ids[i][0]||'').trim(); if (!id) continue;
+        byId[id]={ org:String(org[i][0]||'').trim(), com:com[i].map(v=>String(v||'').trim()), man:man[i] };
+      }
     }
     const body = rows.slice(1).map(r => { const o=r.slice(0,CT_N_FEED); while (o.length<CT_N_FEED) o.push(''); return o; });
     if (last >= CT_FIRST) sh.getRange(CT_FIRST,1,last-CT_FIRST+1,CT_TOTAL).clearContent();
-    sh.getRange(CT_FIRST,1,body.length,CT_N_FEED).setValues(body);
-    const man = body.map(r => byId[String(r[0]||'').trim()] || new Array(CT_MANUAL.length).fill(''));
-    sh.getRange(CT_FIRST,CT_M_START,body.length,CT_MANUAL.length).setValues(man);
-    ctBrand(sh, body.length);
+    const merged = body.map(r => {
+      const prev = byId[String(r[0]||'').trim()];
+      if (prev){
+        if (prev.org) r[CT_ORG_COL-1] = prev.org;
+        for (let k=0;k<prev.com.length;k++){
+          const cell = prev.com[k], feed = String(r[CT_C_START-1+k]||'').trim();
+          if (!cell) continue;                                   // no manual value → feed stands
+          r[CT_C_START-1+k] = (feed === 'Completed' && cell === 'Committed') ? 'Completed' : cell;
+        }
+      }
+      return r;
+    });
+    sh.getRange(CT_FIRST,1,merged.length,CT_N_FEED).setValues(merged);
+    const man = merged.map(r => (byId[String(r[0]||'').trim()] || {man:new Array(CT_MANUAL.length).fill('')}).man);
+    sh.getRange(CT_FIRST,CT_M_START,merged.length,CT_MANUAL.length).setValues(man);
+    ctBrand(sh, merged.length);
   });
 }
 
 function ctBrand(sh, n){
   if (n < 1) return;
-  const all = sh.getRange(CT_FIRST,1,n,CT_TOTAL);
-  all.setFontFamily(CT_FONT).setFontSize(10).setVerticalAlignment('middle');
-  // banding
+  sh.getRange(CT_FIRST,1,n,CT_TOTAL).setFontFamily(CT_FONT).setFontSize(10).setVerticalAlignment('middle');
   const bands = [];
   for (let i=0;i<n;i++) bands.push([(i%2) ? CT_BAND : '#FFFFFF']);
-  for (let c=1;c<=CT_TOTAL;c++) sh.getRange(CT_FIRST,c,n,1).setBackgrounds(bands.map(b=>[b[0]]));
-  // Committed cells blue, Yes flags green, unrouted region amber
-  const vals = sh.getRange(CT_FIRST,1,n,CT_N_FEED).getValues();
-  for (let i=0;i<n;i++){
-    for (let c=11;c<=15;c++) if (String(vals[i][c])==='Committed') sh.getRange(CT_FIRST+i,c+1).setBackground(CT_COMMIT_BLUE).setFontWeight('bold');
-    for (let c=18;c<=21;c++) if (String(vals[i][c])==='Yes') sh.getRange(CT_FIRST+i,c+1).setBackground(CT_YES_GREEN);
-    if (String(vals[i][3]) === '(unrouted)') sh.getRange(CT_FIRST+i,4).setBackground(CT_ALERT);
+  for (let c=1;c<=CT_TOTAL;c++) sh.getRange(CT_FIRST,c,n,1).setBackgrounds(bands);
+  // cell-value colors (statuses, chips, flags) are conditional-format rules set at build time
+}
+
+// ---------- Goals tab: commitments by type + organizer leaderboard ----------
+function ctBuildGoals(){
+  const ss = SpreadsheetApp.getActive();
+  const NAME = 'Goals';
+  let sh = ss.getSheetByName(NAME);
+  if (!sh){ sh = ss.insertSheet(NAME, 0); }
+  ss.setActiveSheet(sh); ss.moveActiveSheet(1);
+  sh.clear();
+  const W = 8;
+  sh.getRange(1,1,1,W).merge().setValue('🎯 GOALS — live from the Commitments tab: flip a dropdown there and these numbers move. % converted = Completed ÷ (Completed + still open). Red = needs follow-up.')
+    .setFontFamily(CT_FONT).setFontSize(10).setFontColor(CT_INK).setBackground(CT_GOLD).setWrap(true).setVerticalAlignment('middle');
+  sh.setRowHeight(1, 40);
+  // BY TYPE
+  sh.getRange(3,1).setValue('BY TYPE').setFontFamily(CT_FONT).setFontWeight('bold').setFontSize(12);
+  const th = ['Type','Committed','Planned','Completed','Cancelled','Total','Still open','% converted'];
+  sh.getRange(4,1,1,8).setValues([th]).setFontFamily(CT_FONT).setFontWeight('bold').setFontColor('#FFFFFF').setBackground(CT_INK);
+  const types = [['Amplifier','L'],['House Mtg','M'],['School Board','N'],['Canvass','O'],['Regional Team','P']];
+  types.forEach((t, i) => {
+    const r = 5 + i, L = t[1];
+    sh.getRange(r,1).setValue(t[0]);
+    sh.getRange(r,2).setFormula(`=COUNTIF(Commitments!${L}$3:${L}$${CT_MAXR},"Committed")`);
+    sh.getRange(r,3).setFormula(`=COUNTIF(Commitments!${L}$3:${L}$${CT_MAXR},"Planned")`);
+    sh.getRange(r,4).setFormula(`=COUNTIF(Commitments!${L}$3:${L}$${CT_MAXR},"Completed")`);
+    sh.getRange(r,5).setFormula(`=COUNTIF(Commitments!${L}$3:${L}$${CT_MAXR},"Cancelled")`);
+    sh.getRange(r,6).setFormula(`=SUM(B${r}:E${r})`);
+    sh.getRange(r,7).setFormula(`=B${r}+C${r}`);
+    sh.getRange(r,8).setFormula(`=IFERROR(D${r}/(D${r}+G${r}),"")`);
+  });
+  sh.getRange(10,1).setValue('TOTAL').setFontWeight('bold');
+  ['B','C','D','E','F','G'].forEach(col => sh.getRange(`${col}10`).setFormula(`=SUM(${col}5:${col}9)`).setFontWeight('bold'));
+  sh.getRange('H10').setFormula('=IFERROR(D10/(D10+G10),"")').setFontWeight('bold');
+  sh.getRange(11,1,1,2).setValues([['Commits with no organizer','']]).setFontStyle('italic');
+  sh.getRange('B11').setFormula(`=SUMPRODUCT((Commitments!$B$3:$B$${CT_MAXR}<>"")*(Commitments!$E$3:$E$${CT_MAXR}="")*(Commitments!$L$3:$P$${CT_MAXR}<>""))`).setFontStyle('italic');
+  // BY ORGANIZER
+  sh.getRange(13,1).setValue('BY ORGANIZER — leaderboard').setFontFamily(CT_FONT).setFontWeight('bold').setFontSize(12);
+  sh.getRange(14,1,1,5).setValues([['Organizer','Commits','Still open','Completed','% converted']])
+    .setFontFamily(CT_FONT).setFontWeight('bold').setFontColor('#FFFFFF').setBackground(CT_INK);
+  sh.getRange('A15').setFormula(`=IFERROR(SORT(UNIQUE(FILTER(Commitments!$E$3:$E$${CT_MAXR},Commitments!$E$3:$E$${CT_MAXR}<>""))),)`);
+  for (let r = 15; r <= 60; r++){
+    sh.getRange(r,2).setFormula(`=IF($A${r}="","",SUMPRODUCT((Commitments!$E$3:$E$${CT_MAXR}=$A${r})*(Commitments!$L$3:$P$${CT_MAXR}<>"")))`);
+    sh.getRange(r,3).setFormula(`=IF($A${r}="","",SUMPRODUCT((Commitments!$E$3:$E$${CT_MAXR}=$A${r})*((Commitments!$L$3:$P$${CT_MAXR}="Committed")+(Commitments!$L$3:$P$${CT_MAXR}="Planned"))))`);
+    sh.getRange(r,4).setFormula(`=IF($A${r}="","",SUMPRODUCT((Commitments!$E$3:$E$${CT_MAXR}=$A${r})*(Commitments!$L$3:$P$${CT_MAXR}="Completed")))`);
+    sh.getRange(r,5).setFormula(`=IF($A${r}="","",IF(B${r}=0,"",IFERROR(D${r}/(D${r}+C${r}),"")))`);
   }
+  // formats
+  sh.getRange('H5:H10').setNumberFormat('0%');
+  sh.getRange('E15:E60').setNumberFormat('0%');
+  sh.getRange(1,1,60,W).setFontFamily(CT_FONT);
+  [180,110,100,110,100,90,100,120].forEach((w,i)=>sh.setColumnWidth(i+1,w));
+  sh.setFrozenRows(1);
+  // RAG conditional formatting on both % columns: red <25%, amber <60%, green ≥60%
+  const rag = [sh.getRange('H5:H10'), sh.getRange('E15:E60')];
+  const rules = [
+    SpreadsheetApp.newConditionalFormatRule().whenNumberLessThan(0.25).setBackground(CT_RAG_RED).setRanges(rag).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenNumberBetween(0.25, 0.5999).setBackground(CT_RAG_AMBER).setRanges(rag).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThanOrEqualTo(0.6).setBackground(CT_RAG_GREEN).setRanges(rag).build(),
+  ];
+  sh.setConditionalFormatRules(rules);
 }
 
 // ---------- Add-a-commitment dialog ----------
