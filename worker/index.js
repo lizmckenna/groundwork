@@ -5044,6 +5044,23 @@ const LAUNCH_EVENTS = {
     location: 'The Combine, 2999 Troost Ave, Kansas City, MO',
     logistics: 'Appetizers provided. Drinks available for purchase.',
   },
+  // Southeast Missouri (Poplar Bluff) — two back-to-back community info sessions,
+  // same venue. NOT emergency-meeting launches: the RSVP form posts a "Poplar Bluff
+  // Info Session M/D" launch name (no "Emergency Meeting", so normalizeLaunch leaves
+  // it as-is) and launchConfig picks the session by the M/D token. One check-in link
+  // serves both nights (picks the session by the day it's used).
+  pbluff_714: {
+    name: 'No on Amendment 5 Community Information Session — Poplar Bluff',
+    date: '2026-07-14', start: '17:00', end: '18:30', dateLabel: 'Tuesday, July 14 · 5:00–6:30 PM CT',
+    location: 'Poplar Bluff Library — Theater Room, 318 N Main St, Poplar Bluff, MO 63901',
+    logistics: 'Join Parents for Missouri Public Schools to learn how we defeat Amendment 5 and fully fund our public schools.',
+  },
+  pbluff_715: {
+    name: 'No on Amendment 5 Community Information Session — Poplar Bluff',
+    date: '2026-07-15', start: '13:00', end: '14:30', dateLabel: 'Wednesday, July 15 · 1:00–2:30 PM CT',
+    location: 'Poplar Bluff Library — Theater Room, 318 N Main St, Poplar Bluff, MO 63901',
+    logistics: 'Join Parents for Missouri Public Schools to learn how we defeat Amendment 5 and fully fund our public schools.',
+  },
 };
 function launchConfig(launchName) {
   const s = String(launchName || '').toLowerCase();
@@ -5052,6 +5069,7 @@ function launchConfig(launchName) {
   if (s.includes('st. louis') || s.includes('st louis')) return LAUNCH_EVENTS.stl;
   if (s.includes('eastern jackson')) return LAUNCH_EVENTS.ejack;
   if (s.includes('kansas city')) return LAUNCH_EVENTS.kc;
+  if (s.includes('poplar bluff')) return s.includes('7/15') ? LAUNCH_EVENTS.pbluff_715 : LAUNCH_EVENTS.pbluff_714;
   return null;
 }
 function buildLaunchIcs(cfg, email, name) {
