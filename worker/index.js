@@ -8105,6 +8105,17 @@ async function sheetAddContact(request, env) {
 // =========================================================================
 async function commitmentsExportCsv(env, urlObj) {
   if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  // ?bucket=commits (default): people with at least one REAL commitment —
+  //   vote-reminder-only folks excluded, and vote-reminder lines stripped from
+  //   the Other column (they live on their own list).
+  // ?bucket=votereminders: everyone who asked for a vote reminder (whatever
+  //   else they committed to) — the GOTV texting list.
+  // ?region=kc|northland|…: only people who route to that REGIONS entry.
+  const bucket = (urlObj.searchParams.get('bucket') || 'commits').toLowerCase();
+  const regionParam = (urlObj.searchParams.get('region') || '').toLowerCase().trim();
+  const regionLabel = regionParam ? (REGIONS[regionParam] || {}).label : null;
+  if (regionParam && !regionLabel) return new Response('unknown region', { status: 404 });
+  const VOTE_RE = /vote\s*reminder/i;
   const isAtt = v => { v = String(v || '').toLowerCase(); return v === 'attended' || v === 'walk-in' || v === 'walk in'; };
   const ampFields = Object.values(EVENT_META).filter(e => e.type === 'amp').map(e => e.attendField);
   const hmFields  = Object.values(EVENT_META).filter(e => e.type === 'hm').map(e => e.attendField);
@@ -8184,18 +8195,25 @@ async function commitmentsExportCsv(env, urlObj) {
     const otherBits = [];
     for (const line of txt.split(/\n/)) { const t = line.trim(); if (t && !knownRe.test(t.toLowerCase())) otherBits.push(t); }
     for (const t of logSet) if (t && !knownRe.test(t.toLowerCase())) otherBits.push(t);
+    const otherReal = [...new Set(otherBits)].filter(t => !VOTE_RE.test(t));
+    const hasVote = VOTE_RE.test(lower) || VOTE_RE.test(logLower);
+    const flags = [flag(/amplif/), flag(/house meeting|host/), flag(/school board/), flag(/canvass/), flag(/regional team/)];
+    const hasReal = flags.some(Boolean) || otherReal.length > 0;
+    if (bucket === 'votereminders' ? !hasVote : !hasReal) continue;
+    const region = regionFor(f) || '(unrouted)';
+    if (regionLabel && region !== regionLabel) continue;
     let latest = logLatest[cid] || '';
     for (const m of txt.matchAll(/(\d{4}-\d{2}-\d{2})/g)) if (m[1] > latest) latest = m[1];
     rows.push({
       id: cid, first: fn, last: ln,
-      region: regionFor(f) || '(unrouted)',
+      region,
       organized_by: (f.assigned_organizer || []).map(id => ORGANIZER_NAME_BY_ID[id] || orgIdName[id] || '').filter(Boolean).join('; '),
       role: Array.isArray(f.role) ? f.role.join(', ') : (f.role || ''),
       email: f.email || '', phone: f.phone || '',
       school: f.school || '', district: f.district || '', county: f.county || '',
-      amplifier: flag(/amplif/), house_mtg: flag(/house meeting|host/), school_board: flag(/school board/),
-      canvass: flag(/canvass/), regional_team: flag(/regional team/),
-      other: [...new Set(otherBits)].join(' | '),
+      amplifier: flags[0], house_mtg: flags[1], school_board: flags[2],
+      canvass: flags[3], regional_team: flags[4],
+      other: (bucket === 'votereminders' ? [...new Set(otherBits)] : otherReal).join(' | '),
       latest,
       attended_launch: launchSet.has(cid) ? 'Yes' : '',
       amp_training: ampFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
