@@ -295,11 +295,14 @@ function pullAttendance(){
 // ============================================================================
 // COMMITMENTS — per-person feed, scoped to each session's attendees + that day.
 // ============================================================================
+// Commitments count from the day the links went live (not the session date) —
+// otherwise a commitment captured the day before the meeting silently vanishes.
+var COMMIT_SINCE = '2026-07-13';
 function pullCommitments(){
   for (var i=0;i<SESSIONS.length;i++){
     var s = SESSIONS[i];
     var url = WORKER + '/export/event-commitments.csv?details=1&key=' + encodeURIComponent(KEY)
-      + '&event=' + encodeURIComponent(s.event) + '&since=' + s.date + '&t=' + Date.now();
+      + '&event=' + encodeURIComponent(s.event) + '&since=' + COMMIT_SINCE + '&t=' + Date.now();
     var resp;
     try { resp = UrlFetchApp.fetch(url, { muteHttpExceptions:true }); } catch(e){ continue; }
     if (resp.getResponseCode() !== 200) continue;
