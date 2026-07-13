@@ -3977,7 +3977,7 @@ async function amplifierLog(request, env) {
   if (!voter_first || !voter_last) return json({ error: "voter first + last name are required" }, 400);
   if (!conversation_number) return json({ error: "pick which conversation (1, 2, or election day)" }, 400);
   const clean = (s) => String(s || '').replace(/^[^\w\s'.-]+/, '').trim();
-  const ampEmail = String(amplifier_email).toLowerCase().trim();
+  const ampEmail = ampEmailCanonical(amplifier_email);
   const cFirst = clean(voter_first);
   const cLast = clean(voter_last);
   const cPhone = voter_phone ? String(voter_phone).trim() : "";
@@ -4145,6 +4145,19 @@ async function amplifierLog(request, env) {
   });
 }
 
+// Amplifiers who gate into the amplifier-log page with a different email than
+// the one on their contact record. The page's whole identity model is "email →
+// contact → Name → logs", so an unknown email strands the amplifier from their
+// own list (Ellen 7/10: typed ellenginkc@, contact holds glover.ellen@ — her 6
+// voters read as zero). Map alternates → the contact-record email.
+const AMP_EMAIL_ALIASES = {
+  'ellenginkc@gmail.com': 'glover.ellen@gmail.com',   // Ellen Glover
+};
+function ampEmailCanonical(email) {
+  const e = String(email || '').toLowerCase().trim();
+  return AMP_EMAIL_ALIASES[e] || e;
+}
+
 // Resolve an amplifier's display Name — the string frozen into each conversation
 // log's notes as "Amplifier: <Name>" at write time. An amplifier's whole voter
 // list/progress is reconstructed by string-matching that name, so resolving it
@@ -4154,7 +4167,8 @@ async function amplifierLog(request, env) {
 // as the name: log notes never contain the email, so that always matches zero —
 // that silent-zero was the bug that made amplifier trackers appear wiped.
 async function resolveAmpName(env, email) {
-  const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email}'`)}&pageSize=10`);
+  const canon = ampEmailCanonical(email);
+  const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${canon}'`)}&pageSize=10`);
   const recs = r.records || [];
   const named = recs.filter((x) => (x.fields.Name || "").trim());
   const pick = named[0] || recs[0];
@@ -4253,7 +4267,7 @@ async function amplifierVoterUpdate(request, env) {
   const body = await request.json();
   const { amplifier_email, voter_id, voter_first, voter_last, voter_phone, voter_email, voter_zip, voter_city, voter_street } = body;
   if (!amplifier_email || !voter_id) return json({ error: "amplifier_email and voter_id required" }, 400);
-  let ampName = amplifier_email.toLowerCase().trim();
+  let ampName = ampEmailCanonical(amplifier_email);
   try {
     const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${ampName}'`)}&maxRecords=1`);
     if (r.records.length > 0) ampName = r.records[0].fields.Name || ampName;
