@@ -331,6 +331,10 @@ export default {
       if (url.pathname === '/launch-rsvp' && request.method === 'POST') return await launchRsvp(request, env);
       if (url.pathname === '/ingest/s2w' && request.method === 'POST') return await ingestS2W(request, env);
       if (url.pathname === '/event-checkin' && request.method === 'POST') return await eventCheckin(request, env);
+      // Fast commitment capture at a meeting: pick a person from the roster (or add
+      // a new one with just name + contact), tap commitment chips. Logs structured
+      // Commitment rows + an idempotent attendance row (committing = being there).
+      if (url.pathname === '/event-commit' && request.method === 'POST') return await eventCommit(request, env);
       if (url.pathname === '/event-roster-public' && request.method === 'GET') return await eventRosterPublic(env, url);
       if (url.pathname === '/remind-signup' && request.method === 'POST') return await remindSignup(request, env);
       if (url.pathname === '/house-meeting-hosts' && request.method === 'GET') return await houseMeetingHosts(env);
@@ -551,6 +555,78 @@ export default {
         return json({ status: 'renamed', from: oldName, to: 'LaNeé Bridewell' });
       }
       // Fetch specific contact_log rows by id (comma-separated).
+      // Recent S2W ingest — including the "matched existing contact" rows (where
+      // the S2W data landed on the existing contact record and in contact_log,
+      // but no new contact was created). Finds matches by scanning contact_log
+      // for 'S2W import' notes.
+      if (url.pathname === '/admin/s2w-matched' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const logRows = [];
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`FIND('S2W import',{notes}&'')>0`)}&pageSize=100&fields%5B%5D=Summary&fields%5B%5D=date&fields%5B%5D=result&fields%5B%5D=notes&fields%5B%5D=contact`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+          logRows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        // Sort newest first
+        logRows.sort((a, b) => String(b.fields.date || '').localeCompare(String(a.fields.date || '')));
+        // Enrich with contact info
+        const uniqueContactIds = new Set();
+        for (const r of logRows) for (const cid of (r.fields.contact || [])) uniqueContactIds.add(cid);
+        const contactData = {};
+        for (const cid of uniqueContactIds) {
+          try {
+            const c = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
+            contactData[cid] = {
+              name: c.fields.Name, email: c.fields.email, phone: c.fields.phone,
+              source: c.fields.source, s2w_outcome: c.fields.s2w_outcome,
+              city: c.fields.city, zip: c.fields.zip,
+            };
+          } catch (e) {}
+        }
+        return json({
+          total_log_rows: logRows.length,
+          unique_contacts: uniqueContactIds.size,
+          recent_30: logRows.slice(0, 30).map(r => ({
+            log_id: r.id, log_date: r.fields.date, log_summary: r.fields.Summary,
+            log_result: r.fields.result, log_notes: (r.fields.notes || '').slice(0, 200),
+            contact_id: (r.fields.contact || [])[0],
+            contact: contactData[(r.fields.contact || [])[0]] || null,
+          })),
+        });
+      }
+      // Recent S2W ingest records — verify Graeme's daily push landed in Airtable.
+      if (url.pathname === '/admin/s2w-recent' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const since = url.searchParams.get('since') || '';
+        const clauses = [`FIND('scale to win',LOWER({source}&''))>0`];
+        if (since) clauses.push(`IS_AFTER({Created},DATETIME_PARSE('${since}'))`);
+        const filter = clauses.length > 1 ? `AND(${clauses.join(',')})` : clauses[0];
+        const rows = [];
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(filter)}&pageSize=100&fields%5B%5D=Name&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone&fields%5B%5D=city&fields%5B%5D=zip&fields%5B%5D=source&fields%5B%5D=s2w_outcome&fields%5B%5D=Created&fields%5B%5D=assigned_organizer`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        // Sort newest first
+        rows.sort((a, b) => String(b.fields.Created || '').localeCompare(String(a.fields.Created || '')));
+        return json({
+          total: rows.length,
+          filter_since: since || 'all-time',
+          recent_20: rows.slice(0, 20).map(r => ({
+            id: r.id, name: r.fields.Name,
+            email: r.fields.email, phone: r.fields.phone,
+            city: r.fields.city, zip: r.fields.zip,
+            source: r.fields.source, s2w_outcome: r.fields.s2w_outcome,
+            created: r.fields.Created,
+          })),
+        });
+      }
       if (url.pathname === '/admin/contact-log-by-ids' && request.method === 'GET') {
         if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
         const ids = String(url.searchParams.get('ids') || '').split(',').filter(Boolean);
@@ -3077,6 +3153,133 @@ async function eventCheckin(request, env) {
   return json({ ok: true, checked_in: true, already, walk_in: walkIn, name: cFirst });
 }
 
+// =========================================================================
+// /event-commit — fast commitment capture at a meeting (public, rate-limited).
+// Organizer picks a person from the roster search (contact_id) OR adds a new
+// person with just name + email/phone. One structured Commitment log row per
+// bucket the contact doesn't already have (idempotent via commitmentSets — the
+// same proven scan the paper-card import uses), plus an idempotent attendance
+// row: someone making a commitment at the meeting is, by definition, there.
+// Fires the event's tracker webhooks with type:'commitment' for live updates.
+// Body: { event, contact_id? | (first,last,email?,phone?), commitments:[label…],
+//         notes?, website (honeypot) }
+// =========================================================================
+async function eventCommit(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:eventcommit:${ip}`;
+  let count = 0;
+  try { count = parseInt(await env.KV_BINDING.get(rlKey) || '0'); } catch {}
+  if (count >= 80) return json({ error: 'too many requests, try again later' }, 429, { 'Retry-After': '300' });
+  try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
+
+  const body = await request.json().catch(() => null);
+  if (!body) return json({ error: 'bad request' }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
+
+  const clean = (s) => String(s || '').replace(/^[^\w\s]+/, '').trim();
+  const event = clean(body.event);
+  if (!event) return json({ error: 'missing event' }, 400);
+  const wants = (Array.isArray(body.commitments) ? body.commitments : [])
+    .map(c => clean(c)).filter(Boolean).slice(0, 12);
+  if (!wants.length) return json({ error: 'pick at least one commitment' }, 400);
+  const cFirst = clean(body.first), cLast = clean(body.last);
+  const cEmail = body.email ? String(body.email).toLowerCase().trim() : '';
+  const cPhone = body.phone ? String(body.phone).trim() : '';
+  const today = todayCT();
+
+  // Resolve the contact: picked from roster, else email/phone match, else create.
+  let cid = body.contact_id ? String(body.contact_id).trim() : '';
+  let createdNew = false;
+  if (!cid) {
+    if (!cFirst || !cLast) return json({ error: 'first and last name are required' }, 400);
+    if (!cEmail && !cPhone) return json({ error: 'please add an email or a phone number' }, 400);
+    try {
+      if (cEmail) {
+        const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${cEmail}'`)}&maxRecords=1`);
+        if (r.records.length) cid = r.records[0].id;
+      }
+      if (!cid && cPhone) {
+        const digits = cPhone.replace(/\D/g, '').slice(-10);
+        if (digits.length === 10) {
+          const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+          if (r2.records.length) cid = r2.records[0].id;
+        }
+      }
+    } catch (e) { /* fall through and create — never lose a commitment */ }
+    if (!cid) {
+      try {
+        const fields = { first: cFirst, last: cLast, leader_ladder: 'Prospect', source: `commitment at ${event}`, events_signed_up: [event] };
+        if (cEmail) fields.email = cEmail;
+        if (cPhone) fields.phone = cPhone;
+        const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+        cid = created.records[0].id;
+        createdNew = true;
+      } catch (e) {
+        return json({ error: 'could not save — please try again or see a volunteer' }, 500);
+      }
+    }
+  }
+
+  // Idempotent attendance row (same shape as /event-checkin).
+  const evEsc = event.replace(/'/g, "\\'");
+  let attended = false;
+  try {
+    const q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    attended = (d.records || []).some(r => (r.fields.contact || []).includes(cid));
+  } catch (e) {}
+  if (!attended) {
+    try {
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
+        Summary: `${today} — Attended (via commitment): ${event}`,
+        date: today, method: 'Event attendance', result: 'Attended', rsvp_launch: event, contact: [cid],
+        notes: `Logged from commitment capture${createdNew ? ' | Walk-in' : ''}`,
+      } }] , typecast: true }) });
+      await mirrorWriteThrough(env, cid, event, 'Showed up');
+    } catch (e) {}
+  }
+
+  // One Commitment row per bucket the contact doesn't already have. Free-text
+  // "Other: …" entries (no bucket) are always logged — they can't collide.
+  let have = new Set();
+  try {
+    const sets = await commitmentSets(env);
+    for (const k of Object.keys(sets)) if (sets[k].has(cid)) have.add(k);
+  } catch (e) { /* on failure log everything; feed dedupes per contact per bucket */ }
+  const added = [], already = [];
+  const records = [];
+  for (const w of wants) {
+    const bucket = commitBucket(w);
+    if (bucket && have.has(bucket)) { already.push(w); continue; }
+    added.push(w);
+    if (bucket) have.add(bucket);   // no dupes within one submission either
+    records.push({ fields: {
+      Summary: `${today} — Commitment: ${w} (at ${event})`,
+      date: today, method: 'Commitment', result: 'Signed up', event: w, contact: [cid],
+      notes: `Commitment capture at ${event}${clean(body.notes) ? ' | ' + clean(body.notes) : ''}`,
+    } });
+  }
+  for (let i = 0; i < records.length; i += 10) {
+    try {
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: records.slice(i, i + 10), typecast: true }) });
+    } catch (e) { return json({ error: 'could not log the commitment — please see a volunteer' }, 500); }
+  }
+  await invalidateReadCaches(env);
+
+  // Live push to the session's tracker sheet(s) — one payload per commitment.
+  try {
+    let first = cFirst, last = cLast, email = cEmail, phone = cPhone;
+    if (body.contact_id) {
+      try { const c = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`); first = c.fields.first || first; last = c.fields.last || last; email = c.fields.email || email; phone = c.fields.phone || phone; } catch (e) {}
+    }
+    for (const w of added) {
+      await fireWebhooks(env, event, { type: 'commitment', event, first, last, email, phone, commitment: w, date: today, ts: Date.now() });
+    }
+  } catch (e) { /* non-fatal — hourly pull backfills */ }
+
+  return json({ ok: true, contact_id: cid, created_new: createdNew, added, already });
+}
+
 // Public name search for the check-in page: type a couple letters, get matching
 // registrants to pick from. Returns names + record ids only (no emails/phones) —
 // a paper sign-in sheet made digital. Cached per event so keystrokes are cheap.
@@ -3093,9 +3296,11 @@ async function eventRosterPublic(env, urlObj) {
 
 async function buildEventRoster(env, event) {
   const evEsc = event.replace(/'/g, "\\'");
+  // RSVPs AND attendance rows: walk-ins who checked in at the door have no RSVP
+  // row but should still be findable (e.g. on the commitment-capture page).
   const ids = []; const seen = new Set(); let off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
+    let q = `?filterByFormula=${encodeURIComponent(`AND(OR({method}='Event RSVP',{method}='Event attendance'),OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
     if (off) q += `&offset=${encodeURIComponent(off)}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
     for (const r of d.records) { const c = (r.fields.contact || [])[0]; if (c && !seen.has(c)) { seen.add(c); ids.push(c); } }
@@ -8256,6 +8461,7 @@ async function eventCommitmentsCsv(env, urlObj) {
   const seenNight = {};   // bucket -> Set(cid)  (on/after since)
   for (const b of COMMIT_BUCKETS) { seen[b.key] = new Set(); seenNight[b.key] = new Set(); }
   seen.other = new Set(); seenNight.other = new Set();
+  const nightRows = {};   // cid -> { bucketOrRawKey -> {label, date} } for details=1
   off = null;
   do {
     let q = `?filterByFormula=${encodeURIComponent("{method}='Commitment'")}&pageSize=100&fields%5B%5D=event&fields%5B%5D=contact&fields%5B%5D=date`;
@@ -8264,16 +8470,47 @@ async function eventCommitmentsCsv(env, urlObj) {
     for (const r of d.records) {
       const cid = (r.fields.contact || [])[0];
       if (!cid || !attendees.has(cid)) continue;
-      const key = commitBucket(r.fields.event) || 'other';
+      const bucket = commitBucket(r.fields.event);
+      const key = bucket || 'other';
       seen[key].add(cid);
       const dt = String(r.fields.date || r.createdTime || '').slice(0, 10);
-      if (since && dt && dt >= since) seenNight[key].add(cid);
-      else if (!since) seenNight[key].add(cid);
+      const isNight = since ? (dt && dt >= since) : true;
+      if (isNight) {
+        seenNight[key].add(cid);
+        // Per-person detail rows, deduped per contact per bucket ('other' keeps
+        // the raw text as its key so distinct free-text commitments both show).
+        const b = COMMIT_BUCKETS.find(x => x.key === bucket);
+        const label = b ? b.label : String(r.fields.event || 'Other commitment');
+        const rk = bucket || 'other:' + label.toLowerCase();
+        (nightRows[cid] = nightRows[cid] || {})[rk] = { label, date: dt };
+      }
     }
     off = d.offset;
   } while (off);
   const LABELS = {}; for (const b of COMMIT_BUCKETS) LABELS[b.key] = b.label; LABELS.other = 'Other commitment';
   const csvEsc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+
+  // details=1 → one row per person per commitment (made on/after `since`), with
+  // contact info, for the tracker's Commitments tab. Aggregate shape unchanged.
+  if (urlObj.searchParams.get('details')) {
+    const cidList = Object.keys(nightRows);
+    const info = {};
+    for (let i = 0; i < cidList.length; i += 40) {
+      const chunk = cidList.slice(i, i + 40);
+      const f = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone`);
+      for (const r of d.records) info[r.id] = r.fields;
+    }
+    const out = [['First Name', 'Last Name', 'Email', 'Phone', 'Commitment', 'Date'].join(',')];
+    for (const cid of cidList) {
+      const c = info[cid] || {};
+      for (const rk of Object.keys(nightRows[cid])) {
+        const row = nightRows[cid][rk];
+        out.push([c.first || '', c.last || '', c.email || '', c.phone || '', row.label, row.date].map(csvEsc).join(','));
+      }
+    }
+    return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+  }
   const out = [['key', 'label', 'count', 'count_night'].join(',')];
   const order = [...COMMIT_BUCKETS.map(b => b.key), 'other'];
   for (const k of order) {
