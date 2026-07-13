@@ -561,6 +561,131 @@ export default {
         return json({ status: 'renamed', from: oldName, to: 'LaNeé Bridewell' });
       }
       // Fetch specific contact_log rows by id (comma-separated).
+      // Bulk-ingest ActBlue donation CSV rows into contacts + donations tables.
+      // Body: { rows: [ {receipt_id, date, amount, first, last, email, phone, city,
+      //   state, zip, occupation, employer, custom_answer, campaign_page,
+      //   recurring, text_opt_in}... ], assign_to: 'Ellen Glover' (default),
+      //   apply: boolean (default false = dry run) }.
+      if (url.pathname === '/admin/ingest-actblue-donations' && request.method === 'POST') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const body = await request.json().catch(() => ({}));
+        const rows = Array.isArray(body.rows) ? body.rows : [];
+        const apply = body.apply === true || body.apply === 1;
+        const assignTo = (body.assign_to || 'Ellen Glover').toLowerCase().trim();
+        // Resolve assign-to organizer id
+        const orgMap = await orgNameById(env);
+        const assignId = Object.entries(orgMap).find(([, n]) => String(n).toLowerCase() === assignTo)?.[0]
+          || 'recLxOVc6xTdYGdB8'; // Ellen Glover fallback
+        // Get existing donation receipt_ids so we don't duplicate donations
+        const existingReceiptIds = new Set();
+        let off = null;
+        do {
+          let q = `?pageSize=100&fields%5B%5D=receipt_id`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${DONATIONS_TBL}${q}`);
+          for (const r of p.records) if (r.fields.receipt_id) existingReceiptIds.add(String(r.fields.receipt_id));
+          off = p.offset;
+        } while (off);
+        const summary = {
+          rows_in: rows.length,
+          contacts_created: 0, contacts_matched_by_email: 0, contacts_matched_by_phone: 0,
+          donations_created: 0, donations_skipped_duplicate: 0,
+          sms_opt_outs: 0, errors: [],
+          created_contact_names: [], matched_contact_names: [], opt_out_names: [],
+        };
+        const contactCache = new Map(); // key -> contact_id, avoids re-lookup per row
+        for (const r of rows) {
+          try {
+            const clean = (s) => String(s == null ? '' : s).trim();
+            const first = clean(r.first), last = clean(r.last);
+            const emailLower = clean(r.email).toLowerCase();
+            const phoneDigits = clean(r.phone).replace(/\D/g, '').slice(-10);
+            const receiptId = clean(r.receipt_id);
+            if (!receiptId) { summary.errors.push(`row missing receipt_id: ${first} ${last}`); continue; }
+            // Resolve/create contact
+            const cacheKey = emailLower || phoneDigits || `${first}|${last}`.toLowerCase();
+            let cid = contactCache.get(cacheKey);
+            let matchedBy = null;
+            if (!cid && emailLower) {
+              const rr = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${emailLower.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+              if (rr.records.length) { cid = rr.records[0].id; matchedBy = 'email'; summary.contacts_matched_by_email++; summary.matched_contact_names.push(`${first} ${last}`); }
+            }
+            if (!cid && phoneDigits.length === 10) {
+              const rr = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone}&'','\\\\D','')='${phoneDigits}'`)}&maxRecords=1`);
+              if (rr.records.length) { cid = rr.records[0].id; matchedBy = 'phone'; summary.contacts_matched_by_phone++; summary.matched_contact_names.push(`${first} ${last}`); }
+            }
+            if (!cid && apply) {
+              const fields = {
+                first, last, leader_ladder: 'Prospect',
+                source: 'Donor (ActBlue)',
+                assigned_organizer: [assignId],
+              };
+              if (emailLower) fields.email = emailLower;
+              if (phoneDigits) fields.phone = phoneDigits;
+              if (clean(r.city)) fields.city = clean(r.city);
+              if (clean(r.zip)) fields.zip = clean(r.zip).slice(0, 5);
+              const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+              cid = c.records[0].id;
+              summary.contacts_created++;
+              summary.created_contact_names.push(`${first} ${last}`);
+              matchedBy = 'created_new';
+            } else if (!cid) {
+              // dry-run — pretend we'd create
+              summary.contacts_created++;
+              summary.created_contact_names.push(`${first} ${last}`);
+            }
+            if (cid) contactCache.set(cacheKey, cid);
+            // SMS opt-out flag → note in `commitments_added` so the newsletter/text
+            // exporter can skip them (contacts don't have a proper sms_opt_out field yet).
+            const isOptOut = clean(r.text_opt_in).toLowerCase() === 'opt_out';
+            if (isOptOut && cid && apply) {
+              try {
+                // Read current commitments_added, append if missing
+                const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}?fields%5B%5D=commitments_added`);
+                const curVal = String(cur.fields.commitments_added || '');
+                if (!curVal.toLowerCase().includes('sms opt-out')) {
+                  const newVal = curVal ? `${curVal} · SMS opt-out (ActBlue)` : 'SMS opt-out (ActBlue)';
+                  await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: { commitments_added: newVal }, typecast: true }) });
+                }
+              } catch (e) { /* non-fatal */ }
+            }
+            if (isOptOut) { summary.sms_opt_outs++; summary.opt_out_names.push(`${first} ${last}`); }
+            // Create donation record if not already present
+            if (existingReceiptIds.has(receiptId)) { summary.donations_skipped_duplicate++; continue; }
+            if (apply) {
+              const donationFields = {
+                receipt_id: receiptId,
+                date: clean(r.date).slice(0, 10),
+                amount: parseFloat(r.amount) || 0,
+                recurring: !!(clean(r.recurring) && clean(r.recurring).toLowerCase() !== 'unlimited' ? true : (clean(r.recurring).toLowerCase() === 'unlimited')),
+                campaign_page: clean(r.campaign_page),
+                custom_answer: clean(r.custom_answer),
+                occupation: clean(r.occupation),
+                employer: clean(r.employer),
+                raw_first: first, raw_last: last, raw_email: emailLower, raw_phone: phoneDigits,
+                raw_city: clean(r.city),
+              };
+              if (cid) donationFields.contact = [cid];
+              await at(env, `/${BASE}/${DONATIONS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: donationFields }], typecast: true }) });
+            }
+            summary.donations_created++;
+            existingReceiptIds.add(receiptId);
+          } catch (e) { summary.errors.push(`row ${r.receipt_id || '?'}: ${e.message || String(e)}`); }
+        }
+        summary.dry_run = !apply;
+        return json(summary);
+      }
+      // Show donation table schema + a sample row.
+      if (url.pathname === '/admin/donations-schema' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const meta = await at(env, `/meta/bases/${BASE}/tables`);
+        const tbl = (meta.tables || []).find(t => t.id === DONATIONS_TBL);
+        const sample = await at(env, `/${BASE}/${DONATIONS_TBL}?maxRecords=2`);
+        return json({
+          table_name: tbl?.name, fields: (tbl?.fields || []).map(f => ({ name: f.name, type: f.type })),
+          sample_records: sample.records.map(r => ({ id: r.id, fields: r.fields })),
+        });
+      }
       // Recent S2W ingest — including the "matched existing contact" rows (where
       // the S2W data landed on the existing contact record and in contact_log,
       // but no new contact was created). Finds matches by scanning contact_log
@@ -8157,6 +8282,40 @@ async function commitmentsExportCsv(env, urlObj) {
     const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
     for (const r of d.records) recs[r.id] = r;
   }
+  // 2b) DERIVED COMPLETIONS. Doing the work beats promising it: anyone who has
+  // actually LOGGED amplifier conversations is a completed Amplifier commit, and
+  // anyone who has HOSTED a held house meeting is a completed House Mtg commit.
+  // Both signals live as names in log notes ('Amplifier: X' / 'Host: X'), so we
+  // match by contact Name — and pull in doers who never formally "committed".
+  const ampDoneNames = new Set(), hostDoneNames = new Set();
+  for (const nm of SEEDED_HOSTS) hostDoneNames.add(String(nm).toLowerCase().trim());
+  const nameScan = async (formula, re, set) => {
+    let o = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=notes`;
+      if (o) q += `&offset=${encodeURIComponent(o)}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+      for (const r of d.records) {
+        const m = String(r.fields.notes || '').match(re);
+        if (m && m[1]) set.add(m[1].trim().toLowerCase());
+      }
+      o = d.offset;
+    } while (o);
+  };
+  await nameScan(`{method}='Amplifier conversation'`, /Amplifier:\s*([^·\n]+?)(?:\s*·|$)/m, ampDoneNames);
+  await nameScan(`{method}='House meeting'`, /Host:\s*([^·\n]+?)(?:\s*·|$)/m, hostDoneNames);
+  // pull doers whose contact isn't in the union yet (match by Name; skip data-less dupes)
+  const haveNames = new Set(Object.values(recs).map(r => `${r.fields.first || ''} ${r.fields.last || ''}`.trim().toLowerCase()));
+  const missingDoers = [...new Set([...ampDoneNames, ...hostDoneNames])].filter(n => n && !haveNames.has(n));
+  for (let i = 0; i < missingDoers.length; i += 10) {
+    const f3 = 'OR(' + missingDoers.slice(i, i + 10).map(n => `LOWER({Name}&'')='${n.replace(/'/g, "\\'")}'`).join(',') + ')';
+    let q = `?filterByFormula=${encodeURIComponent(f3)}&pageSize=100`;
+    for (const f of allFields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+    try {
+      const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+      for (const r of d.records) if (!recs[r.id] && (r.fields.email || r.fields.phone)) recs[r.id] = r;
+    } catch (e) { }
+  }
   // 3) attendance flags. rsvp_launch is a LINK — match names server-side via
   // FIND against the stringified field (same pattern as regionExportCsv).
   const launchStrings = [];
@@ -8198,6 +8357,11 @@ async function commitmentsExportCsv(env, urlObj) {
     const otherReal = [...new Set(otherBits)].filter(t => !VOTE_RE.test(t));
     const hasVote = VOTE_RE.test(lower) || VOTE_RE.test(logLower);
     const flags = [flag(/amplif/), flag(/house meeting|host/), flag(/school board/), flag(/canvass/), flag(/regional team/)];
+    // doing the work upgrades (or creates) the commitment: logged amplifier
+    // conversations → Amplifier Completed; hosted a held meeting → House Mtg Completed
+    const fullName = `${fn} ${ln}`.trim().toLowerCase();
+    if (ampDoneNames.has(fullName)) flags[0] = 'Completed';
+    if (hostDoneNames.has(fullName)) flags[1] = 'Completed';
     const hasReal = flags.some(Boolean) || otherReal.length > 0;
     if (bucket === 'votereminders' ? !hasVote : !hasReal) continue;
     const region = regionFor(f) || '(unrouted)';
