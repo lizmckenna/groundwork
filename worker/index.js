@@ -507,6 +507,12 @@ export default {
       if (url.pathname === '/board/save' && request.method === 'POST') return await boardSave(request, env, url);
       if (url.pathname.startsWith('/board/') && request.method === 'GET') return boardPage(env, url);
       if (url.pathname === '/export/region.csv' && request.method === 'GET') return await regionExportCsv(env, url);
+      // Statewide commitments follow-up feed: everyone who committed to anything
+      // at any stage, with commitment + attendance columns and their routed region.
+      if (url.pathname === '/export/commitments.csv' && request.method === 'GET') return await commitmentsExportCsv(env, url);
+      // Typeahead + write path for the tracker "Add commitment" dialog.
+      if (url.pathname === '/contact-search' && request.method === 'GET') return await contactSearch(env, url);
+      if (url.pathname === '/commit-add' && request.method === 'POST') return await commitAdd(request, env);
       if (url.pathname === '/export/all.csv' && request.method === 'GET') return await allContactsExportCsv(env, url);
       if (url.pathname === '/sheet-region-update' && request.method === 'POST') return await sheetRegionUpdate(request, env);
       if (url.pathname === '/sheet-add-contact' && request.method === 'POST') return await sheetAddContact(request, env);
@@ -3853,10 +3859,16 @@ async function amplifierLog(request, env) {
   let ampId = null;
   let ampDisplayName = amplifier_name || "";
   try {
-    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${ampEmail}'`)}&maxRecords=1`);
-    if (r.records.length > 0) {
-      ampId = r.records[0].id;
-      if (!ampDisplayName) ampDisplayName = r.records[0].fields.Name || ampEmail;
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${ampEmail}'`)}&pageSize=10`);
+    const named = (r.records || []).filter((x) => (x.fields.Name || "").trim());
+    const pick = named[0] || r.records[0];
+    if (pick) {
+      ampId = pick.id;
+      // ALWAYS stamp the contact's canonical Name into the log notes, even when the
+      // form sent a typed name. The voter-list reader resolves this same Name by
+      // email — a nickname here ("Dee" vs contact "Deanna") strands every log it
+      // stamps and the amplifier's tracker reads permanently empty.
+      ampDisplayName = (pick.fields.Name || "").trim() || ampDisplayName || ampEmail;
     }
   } catch {
   }
@@ -8079,6 +8091,227 @@ async function sheetAddContact(request, env) {
   const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
   await invalidateReadCaches(env);
   return json({ contact_id: created.records[0].id, status: 'created', name: `${first} ${last}`.trim(), district: district || '' });
+}
+
+// =========================================================================
+// COMMITMENTS FOLLOW-UP FEED + tracker "Add commitment" dialog backend.
+// commitments.csv: one row per person who has committed to ANYTHING at any
+// stage — commitment text on the contact (amendment5/house_meeting/added) OR
+// a method='Commitment' log row — with the standard Committed columns, the
+// attendance flags, and the region each person routes to, so every
+// commitment has a follow-up owner. contact-search + commit-add power the
+// search-first add flow in the region trackers (match an existing contact,
+// tick commitments; only net-new people need info typed).
+// =========================================================================
+async function commitmentsExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const isAtt = v => { v = String(v || '').toLowerCase(); return v === 'attended' || v === 'walk-in' || v === 'walk in'; };
+  const ampFields = Object.values(EVENT_META).filter(e => e.type === 'amp').map(e => e.attendField);
+  const hmFields  = Object.values(EVENT_META).filter(e => e.type === 'hm').map(e => e.attendField);
+  const baseFields = ['first', 'last', 'role', 'email', 'phone', 'city', 'zip', 'school', 'district', 'county', 'state',
+    'assigned_organizer', 'amendment5_commitments', 'house_meeting_commitments', 'commitments_added', 'dnc_flag_date'];
+  const allFields = baseFields.concat(ampFields, hmFields);
+  // 1) contacts with commitment text on the record
+  const recs = {};
+  let off = null;
+  const textFormula = `OR({amendment5_commitments}!='',{house_meeting_commitments}!='',{commitments_added}!='')`;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(textFormula)}&pageSize=100`;
+    for (const f of allFields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) recs[r.id] = r;
+    off = d.offset;
+  } while (off);
+  // 2) method='Commitment' log rows — commitment types + latest date per contact
+  const logTypes = {}, logLatest = {};
+  off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`{method}='Commitment'`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=event&fields%5B%5D=date`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) for (const cid of (r.fields.contact || [])) {
+      (logTypes[cid] = logTypes[cid] || new Set()).add(String(r.fields.event || '').trim());
+      const dt = String(r.fields.date || '');
+      if (!logLatest[cid] || dt > logLatest[cid]) logLatest[cid] = dt;
+    }
+    off = d.offset;
+  } while (off);
+  // pull the log-only contacts the text pass didn't fetch
+  const missing = Object.keys(logTypes).filter(cid => !recs[cid]);
+  for (let i = 0; i < missing.length; i += 12) {
+    const f2 = 'OR(' + missing.slice(i, i + 12).map(id => `RECORD_ID()='${id}'`).join(',') + ')';
+    let q = `?filterByFormula=${encodeURIComponent(f2)}&pageSize=100`;
+    for (const f of allFields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) recs[r.id] = r;
+  }
+  // 3) attendance flags. rsvp_launch is a LINK — match names server-side via
+  // FIND against the stringified field (same pattern as regionExportCsv).
+  const launchStrings = [];
+  for (const r of Object.values(REGIONS)) for (const s of (Array.isArray(r.launchEvent) ? r.launchEvent : [r.launchEvent])) if (s) launchStrings.push(s);
+  const nameClause = names => 'OR(' + names.map(n => `FIND('${String(n).replace(/'/g, "\\'")}',{rsvp_launch}&'')>0`).join(',') + ')';
+  const attSet = async names => {
+    const set = new Set();
+    let o = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',${nameClause(names)})`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=result`;
+      if (o) q += `&offset=${encodeURIComponent(o)}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+      for (const r of d.records) if (isAtt(r.fields.result)) (r.fields.contact || []).forEach(id => set.add(id));
+      o = d.offset;
+    } while (o);
+    return set;
+  };
+  const launchSet = await attSet(launchStrings);
+  const ppcSet = await attSet(['Parent Power Camp']);
+  // 4) rows
+  const orgIdName = await orgNameById(env);
+  const knownRe = /amplif|house meeting|host|school board|canvass|regional team/;
+  const rows = [];
+  for (const [cid, r] of Object.entries(recs)) {
+    const f = r.fields;
+    if (String(f.dnc_flag_date || '').trim()) continue;
+    const fn = String(f.first || ''), ln = String(f.last || '');
+    if (/^(test|smoke|sample|audit|final|demo)\b/i.test(fn) || /^(test|smoke|sample|audit|final|demo)\b/i.test(ln)) continue;
+    if (/test|smoke|example/i.test(String(f.email || ''))) continue;
+    const txt = `${f.amendment5_commitments || ''}\n${f.house_meeting_commitments || ''}\n${f.commitments_added || ''}`;
+    const lower = txt.toLowerCase();
+    const logSet = logTypes[cid] || new Set();
+    const logLower = [...logSet].join(' ').toLowerCase();
+    const flag = re => (re.test(lower) || re.test(logLower)) ? 'Committed' : '';
+    // commitments outside the five standard types, verbatim, so nothing typed is lost
+    const otherBits = [];
+    for (const line of txt.split(/\n/)) { const t = line.trim(); if (t && !knownRe.test(t.toLowerCase())) otherBits.push(t); }
+    for (const t of logSet) if (t && !knownRe.test(t.toLowerCase())) otherBits.push(t);
+    let latest = logLatest[cid] || '';
+    for (const m of txt.matchAll(/(\d{4}-\d{2}-\d{2})/g)) if (m[1] > latest) latest = m[1];
+    rows.push({
+      id: cid, first: fn, last: ln,
+      region: regionFor(f) || '(unrouted)',
+      organized_by: (f.assigned_organizer || []).map(id => ORGANIZER_NAME_BY_ID[id] || orgIdName[id] || '').filter(Boolean).join('; '),
+      role: Array.isArray(f.role) ? f.role.join(', ') : (f.role || ''),
+      email: f.email || '', phone: f.phone || '',
+      school: f.school || '', district: f.district || '', county: f.county || '',
+      amplifier: flag(/amplif/), house_mtg: flag(/house meeting|host/), school_board: flag(/school board/),
+      canvass: flag(/canvass/), regional_team: flag(/regional team/),
+      other: [...new Set(otherBits)].join(' | '),
+      latest,
+      attended_launch: launchSet.has(cid) ? 'Yes' : '',
+      amp_training: ampFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
+      hm_training: hmFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
+      ppc: ppcSet.has(cid) ? 'Yes' : '',
+    });
+  }
+  rows.sort((a, b) => (a.region + '|' + a.last + a.first).toLowerCase().localeCompare((b.region + '|' + b.last + b.first).toLowerCase()));
+  const cols = [['contact_id', 'id'], ['First', 'first'], ['Last', 'last'], ['Region', 'region'], ['Organized By', 'organized_by'],
+    ['Role', 'role'], ['Email', 'email'], ['Phone', 'phone'], ['School', 'school'], ['District', 'district'], ['County', 'county'],
+    ['Amplifier', 'amplifier'], ['House Mtg', 'house_mtg'], ['School Board', 'school_board'], ['Canvass', 'canvass'], ['Regional Team', 'regional_team'],
+    ['Other commitments', 'other'], ['Latest commitment', 'latest'],
+    ['Attended Launch', 'attended_launch'], ['Amp Training', 'amp_training'], ['HM Training', 'hm_training'], ['Attended Power Camp', 'ppc']];
+  const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const out = [cols.map(c => c[0]).join(',')];
+  for (const r of rows) out.push(cols.map(c => esc(r[c[1]])).join(','));
+  return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Typeahead for the tracker "Add commitment" dialog. Key-gated — the region
+// sheets already hold the key; requests come from Apps Script server-side.
+async function contactSearch(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+  const q = String(urlObj.searchParams.get('q') || '').toLowerCase().trim();
+  if (q.length < 2) return json({ ok: true, matches: [] });
+  const formula = `AND({dnc_flag_date}='',FIND('${q.replace(/'/g, "\\'")}',LOWER({first}&' '&{last}&' '&{email}&''))>0)`;
+  const fields = ['first', 'last', 'email', 'phone', 'school', 'district', 'city', 'county', 'zip', 'state', 'commitments_added'];
+  let qs = `?filterByFormula=${encodeURIComponent(formula)}&maxRecords=12`;
+  for (const f of fields) qs += `&fields%5B%5D=${encodeURIComponent(f)}`;
+  const d = await at(env, `/${BASE}/${CONTACTS_TBL}${qs}`);
+  const matches = d.records.map(r => {
+    const f = r.fields;
+    return {
+      id: r.id, name: `${f.first || ''} ${f.last || ''}`.trim(),
+      email: f.email || '', phone: f.phone || '',
+      school: f.school || '', district: f.district || '', city: f.city || '',
+      region: regionFor(f) || '',
+      has_commitments: !!String(f.commitments_added || '').trim(),
+    };
+  });
+  return json({ ok: true, matches });
+}
+
+// Write path for the "Add commitment" dialog. Matches an existing contact
+// (by id, else email, else phone — never creates a double) or creates one
+// with structured fields, then logs one method='Commitment' row per type and
+// appends dated lines to commitments_added (which seeds the Committed
+// columns on every region feed and this commitments feed).
+async function commitAdd(request, env) {
+  let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad json' }, 400); }
+  if (!env.EXPORT_KEY || body.key !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+  const ALLOWED = ['Amplifier', 'House Meeting', 'School Board', 'Canvass', 'Regional Team'];
+  const commitments = (Array.isArray(body.commitments) ? body.commitments : []).map(s => String(s).trim()).filter(c => ALLOWED.includes(c));
+  const otherText = String(body.other || '').trim();
+  if (!commitments.length && !otherText) return json({ error: 'pick at least one commitment' }, 400);
+  const today = todayCT();
+  let cid = null, name = '', status = 'matched';
+  if (body.contact_id && /^rec[A-Za-z0-9]{14,}$/.test(String(body.contact_id))) {
+    try {
+      const r = await at(env, `/${BASE}/${CONTACTS_TBL}/${body.contact_id}`);
+      cid = r.id; name = `${r.fields.first || ''} ${r.fields.last || ''}`.trim();
+    } catch (e) { return json({ error: 'contact not found' }, 404); }
+  } else {
+    const first = String(body.first || '').trim(), last = String(body.last || '').trim();
+    const email = body.email ? String(body.email).toLowerCase().trim() : '';
+    const phone = body.phone ? String(body.phone).trim() : '';
+    if (!first || !last || (!email && !phone)) return json({ error: 'need first, last, and an email or phone' }, 400);
+    if (email) {
+      const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+      if (r.records.length) cid = r.records[0].id;
+    }
+    if (!cid && phone) {
+      const digits = phone.replace(/\D/g, '').slice(-10);
+      if (digits.length === 10) {
+        const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+        if (r2.records.length) cid = r2.records[0].id;
+      }
+    }
+    if (cid) { name = `${first} ${last}`.trim(); }
+    else {
+      const fields = { first, last, source: 'tracker commitment add', last_attempt_date: today, leader_ladder: 'Supporter' };
+      if (email) fields.email = email;
+      if (phone) fields.phone = phone;
+      const zip = body.zip ? String(body.zip).trim() : '';
+      if (zip) { fields.zip = zip; const c = zipToCounty(zip.slice(0, 5)); if (c) fields.county = c; const dz = zipToDistrict(zip); if (dz) fields.district = dz; }
+      if (body.school) fields.school = String(body.school).trim();
+      if (body.district) fields.district = String(body.district).trim();
+      const created = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+      cid = created.records[0].id; name = `${first} ${last}`.trim(); status = 'created';
+    }
+  }
+  const who = String(body.logged_by || '').trim();
+  const via = `via ${String(body.sheet || 'tracker').trim()}${who ? ` (${who})` : ''}`;
+  const note = String(body.note || '').trim();
+  const labels = commitments.concat(otherText ? [otherText] : []);
+  const logRecords = labels.map(c => ({
+    fields: {
+      Summary: `${today} — commitment: ${c}`,
+      date: today, method: 'Commitment', result: 'Committed', event: c, contact: [cid],
+      notes: `Logged ${via}${note ? ` · ${note}` : ''}`,
+    }
+  }));
+  for (let i = 0; i < logRecords.length; i += 10) {
+    await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: logRecords.slice(i, i + 10), typecast: true }) });
+  }
+  // append dated lines to commitments_added; skip any line already present (double-submit safe)
+  try {
+    const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
+    const prev = String(cur.fields.commitments_added || '').trim();
+    const newLines = labels.map(c => `${today} · ${c}`).filter(l => !prev.includes(l));
+    const patch = { last_attempt_date: today };
+    if (newLines.length) patch.commitments_added = (prev ? prev + '\n' : '') + newLines.join('\n');
+    await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: patch, typecast: true }) });
+  } catch (e) { }
+  await invalidateReadCaches(env);
+  return json({ ok: true, contact_id: cid, name, status, commitments: labels });
 }
 
 async function sheetRegionUpdate(request, env) {
