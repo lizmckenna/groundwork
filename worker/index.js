@@ -8058,7 +8058,7 @@ async function regionExportCsv(env, urlObj) {
   const hmFields  = Object.values(EVENT_META).filter(e => e.type === 'hm').map(e => e.attendField);
   const baseFields = ['first', 'last', 'role', 'email', 'phone', 'street_address', 'city', 'zip', 'school', 'district', 'county',
     'assigned_organizer', 'amendment5_commitments', 'house_meeting_commitments', 'commitments_added',
-    'amplifier_status', 'house_mtg_status', 'school_board_status', 'canvass_status', 'regional_team_status'];
+    'commit_amplifier', 'commit_house_mtg', 'commit_school_board', 'commit_canvass', 'commit_regional_team'];
   const allFields = baseFields.concat(ampFields, hmFields);
   // launch attendance set (skip entirely if the region has no launch event — avoids matching blank rsvp_launch)
   const launchSet = new Set();
@@ -8106,9 +8106,9 @@ async function regionExportCsv(env, urlObj) {
       email: f.email || '', phone: f.phone || '', address: f.street_address || '', city: f.city || '', zip: f.zip || '',
       school: f.school || '', district: f.district || '', county: f.county || '',
       // organizer-set status (from the work tabs, synced to the DB) wins; text-seed only fills where no status exists
-      amplifier: f.amplifier_status || seed(/amplif/), house_mtg: f.house_mtg_status || seed(/house meeting|host/),
-      school_board: f.school_board_status || seed(/school board/),
-      canvass: f.canvass_status || seed(/canvass/), regional_team: f.regional_team_status || seed(/regional team/),
+      amplifier: f.commit_amplifier || seed(/amplif/), house_mtg: f.commit_house_mtg || seed(/house meeting|host/),
+      school_board: f.commit_school_board || seed(/school board/),
+      canvass: f.commit_canvass || seed(/canvass/), regional_team: f.commit_regional_team || seed(/regional team/),
       attended_launch: launchSet.has(r.id) ? 'Yes' : '',
       ppc: ppcSet.has(r.id) ? 'Yes' : '',
       amp_training: ampFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
@@ -8430,7 +8430,7 @@ async function commitmentsExportCsv(env, urlObj) {
   const hmFields  = Object.values(EVENT_META).filter(e => e.type === 'hm').map(e => e.attendField);
   const baseFields = ['first', 'last', 'role', 'email', 'phone', 'city', 'zip', 'school', 'district', 'county', 'state',
     'assigned_organizer', 'amendment5_commitments', 'house_meeting_commitments', 'commitments_added', 'dnc_flag_date',
-    'amplifier_status', 'house_mtg_status', 'school_board_status', 'canvass_status', 'regional_team_status'];
+    'commit_amplifier', 'commit_house_mtg', 'commit_school_board', 'commit_canvass', 'commit_regional_team'];
   const allFields = baseFields.concat(ampFields, hmFields);
   // 1) contacts with commitment text on the record
   const recs = {};
@@ -8549,7 +8549,7 @@ async function commitmentsExportCsv(env, urlObj) {
     if (hostDoneNames.has(fullName)) flags[1] = 'Completed';
     // …but the organizer-set status from the work tabs (synced to the DB) beats
     // everything — the tabs are where follow-through is actually tracked.
-    const statusFields = [f.amplifier_status, f.house_mtg_status, f.school_board_status, f.canvass_status, f.regional_team_status];
+    const statusFields = [f.commit_amplifier, f.commit_house_mtg, f.commit_school_board, f.commit_canvass, f.commit_regional_team];
     for (let k = 0; k < 5; k++) if (statusFields[k]) flags[k] = statusFields[k];
     const hasReal = flags.some(Boolean) || otherReal.length > 0;
     if (bucket === 'votereminders' ? !hasVote : !hasReal) continue;
@@ -8694,7 +8694,7 @@ async function sheetRegionUpdate(request, env) {
   // truth for statuses (Liz 7/13): organizers track follow-through there, and
   // these fields make that visible to the Dashboard/Commitments feeds. Single
   // selects → typecast creates options; empty cell clears with null.
-  const STATUS_FIELDS = { amplifier_status: 1, house_mtg_status: 1, school_board_status: 1, canvass_status: 1, regional_team_status: 1 };
+  const STATUS_FIELDS = { commit_amplifier: 1, commit_house_mtg: 1, commit_school_board: 1, commit_canvass: 1, commit_regional_team: 1 };
   let n = 0;
   for (const u of (body.updates || [])) {
     if (!u.contact_id) continue;

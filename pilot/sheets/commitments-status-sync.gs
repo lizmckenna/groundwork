@@ -6,7 +6,7 @@
  * Makes the WORK TABS (school tabs in KC, district tabs elsewhere) the source
  * of truth for commitment status (Liz 7/13). The five status dropdowns —
  * Amplifier / House Mtg / School Board / Canvass / Regional Team — now write
- * to matching database fields (amplifier_status … regional_team_status) the
+ * to matching database fields (commit_amplifier … commit_regional_team) the
  * moment an organizer edits them, via the same worker endpoint that already
  * syncs contact-info edits. The region + commitments feeds read those fields
  * back, so the Dashboard, the Commitments tab, and the database all agree.
@@ -23,8 +23,8 @@
 
 const CTS_KEY    = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
 const CTS_WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
-const CTS_MAP = { 'Amplifier': 'amplifier_status', 'House Mtg': 'house_mtg_status',
-  'School Board': 'school_board_status', 'Canvass': 'canvass_status', 'Regional Team': 'regional_team_status' };
+const CTS_MAP = { 'Amplifier': 'commit_amplifier', 'House Mtg': 'commit_house_mtg',
+  'School Board': 'commit_school_board', 'Canvass': 'commit_canvass', 'Regional Team': 'commit_regional_team' };
 const CTS_ID_RE = /^rec[A-Za-z0-9]{14,}$/;
 
 function ctsSetUp(){
