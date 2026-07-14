@@ -34,7 +34,7 @@ const CT_TABS = [
 // const CT_GOALS = false;
 // const CT_TABS = [
 //   { name: 'Commitments', pos: 3, params: 'region=kc&bucket=commits', color: '#2F5E3D', fontColor: '#FFFFFF',
-//     banner: 'KANSAS CITY commitments only (vote reminders live on the ALL tracker) — auto-refreshes. Commitment columns are dropdowns: your upgrades stick. The PLUM columns are YOURS too. Add new commitments via the 🗳 Commitments menu.' },
+//     banner: '👁️ ROLLUP of every KC commitment, pulled from the database: web forms, S2W texts, amplifier + house-meeting logs. READ-ONLY — do your work in your school tab; this updates on its own. Two exceptions: the PLUM columns are yours, and ➕ Add a commitment in the 🗳 menu logs new commitments properly.' },
 // ];
 // ===========================================================================
 
