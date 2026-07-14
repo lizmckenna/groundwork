@@ -8057,7 +8057,8 @@ async function regionExportCsv(env, urlObj) {
   const ampFields = Object.values(EVENT_META).filter(e => e.type === 'amp').map(e => e.attendField);
   const hmFields  = Object.values(EVENT_META).filter(e => e.type === 'hm').map(e => e.attendField);
   const baseFields = ['first', 'last', 'role', 'email', 'phone', 'street_address', 'city', 'zip', 'school', 'district', 'county',
-    'assigned_organizer', 'amendment5_commitments', 'house_meeting_commitments', 'commitments_added'];
+    'assigned_organizer', 'amendment5_commitments', 'house_meeting_commitments', 'commitments_added',
+    'amplifier_status', 'house_mtg_status', 'school_board_status', 'canvass_status', 'regional_team_status'];
   const allFields = baseFields.concat(ampFields, hmFields);
   // launch attendance set (skip entirely if the region has no launch event — avoids matching blank rsvp_launch)
   const launchSet = new Set();
@@ -8104,8 +8105,10 @@ async function regionExportCsv(env, urlObj) {
       role: Array.isArray(f.role) ? f.role.join(', ') : (f.role || ''),
       email: f.email || '', phone: f.phone || '', address: f.street_address || '', city: f.city || '', zip: f.zip || '',
       school: f.school || '', district: f.district || '', county: f.county || '',
-      amplifier: seed(/amplif/), house_mtg: seed(/house meeting|host/), school_board: seed(/school board/),
-      canvass: seed(/canvass/), regional_team: seed(/regional team/),
+      // organizer-set status (from the work tabs, synced to the DB) wins; text-seed only fills where no status exists
+      amplifier: f.amplifier_status || seed(/amplif/), house_mtg: f.house_mtg_status || seed(/house meeting|host/),
+      school_board: f.school_board_status || seed(/school board/),
+      canvass: f.canvass_status || seed(/canvass/), regional_team: f.regional_team_status || seed(/regional team/),
       attended_launch: launchSet.has(r.id) ? 'Yes' : '',
       ppc: ppcSet.has(r.id) ? 'Yes' : '',
       amp_training: ampFields.some(ff => isAtt(f[ff])) ? 'Yes' : '',
@@ -8426,7 +8429,8 @@ async function commitmentsExportCsv(env, urlObj) {
   const ampFields = Object.values(EVENT_META).filter(e => e.type === 'amp').map(e => e.attendField);
   const hmFields  = Object.values(EVENT_META).filter(e => e.type === 'hm').map(e => e.attendField);
   const baseFields = ['first', 'last', 'role', 'email', 'phone', 'city', 'zip', 'school', 'district', 'county', 'state',
-    'assigned_organizer', 'amendment5_commitments', 'house_meeting_commitments', 'commitments_added', 'dnc_flag_date'];
+    'assigned_organizer', 'amendment5_commitments', 'house_meeting_commitments', 'commitments_added', 'dnc_flag_date',
+    'amplifier_status', 'house_mtg_status', 'school_board_status', 'canvass_status', 'regional_team_status'];
   const allFields = baseFields.concat(ampFields, hmFields);
   // 1) contacts with commitment text on the record
   const recs = {};
@@ -8543,6 +8547,10 @@ async function commitmentsExportCsv(env, urlObj) {
     const fullName = `${fn} ${ln}`.trim().toLowerCase();
     if (ampDoneNames.has(fullName)) flags[0] = 'Completed';
     if (hostDoneNames.has(fullName)) flags[1] = 'Completed';
+    // …but the organizer-set status from the work tabs (synced to the DB) beats
+    // everything — the tabs are where follow-through is actually tracked.
+    const statusFields = [f.amplifier_status, f.house_mtg_status, f.school_board_status, f.canvass_status, f.regional_team_status];
+    for (let k = 0; k < 5; k++) if (statusFields[k]) flags[k] = statusFields[k];
     const hasReal = flags.some(Boolean) || otherReal.length > 0;
     if (bucket === 'votereminders' ? !hasVote : !hasReal) continue;
     const region = regionFor(f) || '(unrouted)';
@@ -8682,9 +8690,20 @@ async function sheetRegionUpdate(request, env) {
   if (!env.EXPORT_KEY || body.key !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
   const ALLOWED = { first: 'first', last: 'last', email: 'email', phone: 'phone', school: 'school',
     district: 'district', city: 'city', zip: 'zip', address: 'street_address', county: 'county' };
+  // Commitment-status columns from the work tabs. The tabs are the source of
+  // truth for statuses (Liz 7/13): organizers track follow-through there, and
+  // these fields make that visible to the Dashboard/Commitments feeds. Single
+  // selects → typecast creates options; empty cell clears with null.
+  const STATUS_FIELDS = { amplifier_status: 1, house_mtg_status: 1, school_board_status: 1, canvass_status: 1, regional_team_status: 1 };
   let n = 0;
   for (const u of (body.updates || [])) {
     if (!u.contact_id) continue;
+    if (STATUS_FIELDS[u.field]) {
+      const v = String(u.value == null ? '' : u.value).trim();
+      const fields = {}; fields[u.field] = v || null;
+      try { await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`, { method: 'PATCH', body: JSON.stringify({ fields, typecast: true }) }); n++; } catch (e) {}
+      continue;
+    }
     if (u.field === 'organized_by') {   // Organized By -> assigned_organizer. Match-only: a known organizer writes; an unknown/typo name stays sheet-only (no junk organizer created).
       const v = String(u.value || '').trim();
       if (!v) { try { await at(env, `/${BASE}/${CONTACTS_TBL}/${u.contact_id}`, { method: 'PATCH', body: JSON.stringify({ fields: { assigned_organizer: [] } }) }); n++; } catch (e) {} continue; }
