@@ -8042,6 +8042,32 @@ const REGIONS = {
   },
 };
 
+// Who has actually DONE the work, matched by contact Name from log notes:
+// logged amplifier conversations ('Amplifier: X') → completed Amplifier commit;
+// hosted a held house meeting ('Host: X', plus the seeded host list) → completed
+// House Mtg commit. Shared by the region and commitments feeds so every surface
+// (work tabs, Dashboard, Commitments tabs) derives Completed identically.
+async function commitDoneNameSets(env) {
+  const ampDoneNames = new Set(), hostDoneNames = new Set();
+  for (const nm of SEEDED_HOSTS) hostDoneNames.add(String(nm).toLowerCase().trim());
+  const nameScan = async (formula, re, set) => {
+    let o = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=notes`;
+      if (o) q += `&offset=${encodeURIComponent(o)}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+      for (const r of d.records) {
+        const m = String(r.fields.notes || '').match(re);
+        if (m && m[1]) set.add(m[1].trim().toLowerCase());
+      }
+      o = d.offset;
+    } while (o);
+  };
+  await nameScan(`{method}='Amplifier conversation'`, /Amplifier:\s*([^·\n]+?)(?:\s*·|$)/m, ampDoneNames);
+  await nameScan(`{method}='House meeting'`, /Host:\s*([^·\n]+?)(?:\s*·|$)/m, hostDoneNames);
+  return { ampDoneNames, hostDoneNames };
+}
+
 async function regionExportCsv(env, urlObj) {
   if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
   const region = REGIONS[(urlObj.searchParams.get('region') || 'northland').toLowerCase()];
@@ -8091,11 +8117,15 @@ async function regionExportCsv(env, urlObj) {
   const junkDist = d => { const s = String(d || '').toLowerCase().replace(/[’']/g, '').trim(); return !s || /^(i\s*dont\s*know|dont\s*know|unknown|n\/?a|none|tbd|\?+)$/.test(s); };
   const isUnrouted = f => !String(f.county || '').trim() && !String(f.city || '').trim() && junkDist(f.district);
   const orgIdName = await orgNameById(env);
+  // done-ness derivation shared with the commitments feed: same people read
+  // Completed here (→ work tabs + Dashboard) as on the Commitments tabs
+  const { ampDoneNames, hostDoneNames } = await commitDoneNameSets(env);
   const buildRow = r => {
     const f = r.fields;
     const fn = String(f.first || ''), ln = String(f.last || '');
     if (/^(test|smoke|sample|audit|final|demo)\b/i.test(fn) || /^(test|smoke|sample|audit|final|demo)\b/i.test(ln)) return null;
     if (/test|smoke|example/i.test(String(f.email || ''))) return null;
+    const fullName = `${fn} ${ln}`.trim().toLowerCase();
     const txt = `${f.amendment5_commitments || ''} ${f.house_meeting_commitments || ''} ${f.commitments_added || ''}`.toLowerCase();
     const seed = re => re.test(txt) ? 'Committed' : '';
     return {
@@ -8105,8 +8135,10 @@ async function regionExportCsv(env, urlObj) {
       role: Array.isArray(f.role) ? f.role.join(', ') : (f.role || ''),
       email: f.email || '', phone: f.phone || '', address: f.street_address || '', city: f.city || '', zip: f.zip || '',
       school: f.school || '', district: f.district || '', county: f.county || '',
-      // organizer-set status (from the work tabs, synced to the DB) wins; text-seed only fills where no status exists
-      amplifier: f.commit_amplifier || seed(/amplif/), house_mtg: f.commit_house_mtg || seed(/house meeting|host/),
+      // status precedence: organizer-set (work tabs, synced to DB) > derived
+      // Completed (they actually did the work) > text-seed 'Committed'
+      amplifier: f.commit_amplifier || (ampDoneNames.has(fullName) ? 'Completed' : seed(/amplif/)),
+      house_mtg: f.commit_house_mtg || (hostDoneNames.has(fullName) ? 'Completed' : seed(/house meeting|host/)),
       school_board: f.commit_school_board || seed(/school board/),
       canvass: f.commit_canvass || seed(/canvass/), regional_team: f.commit_regional_team || seed(/regional team/),
       attended_launch: launchSet.has(r.id) ? 'Yes' : '',
@@ -8467,28 +8499,9 @@ async function commitmentsExportCsv(env, urlObj) {
     const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
     for (const r of d.records) recs[r.id] = r;
   }
-  // 2b) DERIVED COMPLETIONS. Doing the work beats promising it: anyone who has
-  // actually LOGGED amplifier conversations is a completed Amplifier commit, and
-  // anyone who has HOSTED a held house meeting is a completed House Mtg commit.
-  // Both signals live as names in log notes ('Amplifier: X' / 'Host: X'), so we
-  // match by contact Name — and pull in doers who never formally "committed".
-  const ampDoneNames = new Set(), hostDoneNames = new Set();
-  for (const nm of SEEDED_HOSTS) hostDoneNames.add(String(nm).toLowerCase().trim());
-  const nameScan = async (formula, re, set) => {
-    let o = null;
-    do {
-      let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=notes`;
-      if (o) q += `&offset=${encodeURIComponent(o)}`;
-      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
-      for (const r of d.records) {
-        const m = String(r.fields.notes || '').match(re);
-        if (m && m[1]) set.add(m[1].trim().toLowerCase());
-      }
-      o = d.offset;
-    } while (o);
-  };
-  await nameScan(`{method}='Amplifier conversation'`, /Amplifier:\s*([^·\n]+?)(?:\s*·|$)/m, ampDoneNames);
-  await nameScan(`{method}='House meeting'`, /Host:\s*([^·\n]+?)(?:\s*·|$)/m, hostDoneNames);
+  // 2b) DERIVED COMPLETIONS — shared with regionExportCsv so the school tabs,
+  // Dashboard, and this feed all say Completed for the same people.
+  const { ampDoneNames, hostDoneNames } = await commitDoneNameSets(env);
   // pull doers whose contact isn't in the union yet (match by Name; skip data-less dupes)
   const haveNames = new Set(Object.values(recs).map(r => `${r.fields.first || ''} ${r.fields.last || ''}`.trim().toLowerCase()));
   const missingDoers = [...new Set([...ampDoneNames, ...hostDoneNames])].filter(n => n && !haveNames.has(n));
