@@ -548,6 +548,25 @@ export default {
       // CSV import (zip-enrichment file appended as new rows instead of merging).
       // Dry-run by default; &confirm=1 executes. See mergeImportStubs.
       if (url.pathname === '/admin/merge-import-stubs' && request.method === 'GET') return await mergeImportStubs(env, url);
+      // Set leader_ladder on specific contacts (?ids=rec1,rec2&value=Core%20Leader).
+      // Used to mark team members' contact records so callableExclusions hides
+      // them from every call list. Key-gated; value must be a known ladder rung.
+      if (url.pathname === '/admin/set-ladder' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const ids = String(url.searchParams.get('ids') || '').split(',').map(s => s.trim()).filter(s => /^rec[A-Za-z0-9]{14}$/.test(s));
+        const value = String(url.searchParams.get('value') || 'Core Leader');
+        const ALLOWED = ['Core Leader', 'Not a prospect', 'Prospect', 'Member', 'Leader'];
+        if (!ids.length) return json({ error: 'ids required' }, 400);
+        if (!ALLOWED.includes(value)) return json({ error: `value must be one of: ${ALLOWED.join(', ')}` }, 400);
+        let updated = 0;
+        for (let i = 0; i < ids.length; i += 10) {
+          const batch = ids.slice(i, i + 10).map(id => ({ id, fields: { leader_ladder: value } }));
+          await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+          updated += batch.length;
+        }
+        await invalidateReadCaches(env);
+        return json({ ok: true, updated, value });
+      }
       // Rename an events-table record (e.g. after repurposing an event). All
       // event_attendance mirror rows linked to it show the new name instantly.
       if (url.pathname === '/admin/rename-event' && request.method === 'GET') {
@@ -4580,6 +4599,10 @@ function callableExclusions(organizerName_) {
     `NOT({leader_ladder}='Not a prospect')`,
     `NOT({last_attempt_result}='Do not contact')`,
     `NOT({last_attempt_result}='Removed from list')`,
+    // Must have a name. Email-only S2W ad leads (and any other nameless stubs)
+    // stay OUT of every call list until the texting funnel yields a name —
+    // then they surface automatically. Policy: Liz 7/15 ("a!!!").
+    `OR(TRIM({first}&'')!='',TRIM({last}&'')!='')`,
     ...EXCLUDED_SCHOOL_PATTERNS.map(p => `FIND('${p}',LOWER({school}&''))=0`),
     ...EXCLUDED_ROLES.map(r => `FIND('${r}',{role}&'')=0`),
     `FIND('county, ks',LOWER({county}&''))=0`,   // MO only — never call Kansas-side (KS) contacts (Liz 6/23)
