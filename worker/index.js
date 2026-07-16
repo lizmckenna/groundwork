@@ -4661,6 +4661,11 @@ function prospectsFilter(organizerName_) {
     ...onboardingSignupExclusions(),
     `NOT({last_attempt_result}='Skipped')`,
     `NOT({last_attempt_result}='Wrong number')`,
+    // S2W ad leads stay out of COLD lists — they're mid-text-funnel and cold
+    // calls cross wires (Stephanie 7/16). Deliberately NOT in callableExclusions:
+    // once they attend a training/commit they belong in the follow-up lists,
+    // which key on participation regardless of source.
+    `FIND('scale to win',LOWER({source}&''))=0`,
     ...callableExclusions(organizerName_),
   ].join(',')})`;
 }
@@ -4763,6 +4768,8 @@ async function getCallList(env, urlObj) {
       `{last_attempt_date}!=BLANK()`,
       `DATETIME_DIFF(TODAY(),{last_attempt_date},'days')>=4`,
       `OR({attempt_count}=BLANK(),{attempt_count}<5)`,
+      // Same S2W cold-list exclusion as fresh (see prospectsFilter).
+      `FIND('scale to win',LOWER({source}&''))=0`,
       ...onboardingSignupExclusions(),
       ...callableExclusions(organizer),
     ].join(',')})`;
