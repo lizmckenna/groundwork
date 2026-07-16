@@ -9578,7 +9578,7 @@ async function getEventsOverview(env) {
   for (const m of metas) confirmByEvent[m.confirmEvent] = new Set();
   const launches = {};            // name -> {rsvp,pizza,childcare,rsvpIds}
   const launchConfirm = {};       // name -> Set(confirmed contact ids)
-  const launchAttendByName = {};  // name -> attended count (merged only if it's a known launch)
+  const launchAttendByName = {};  // name -> Set(contact ids) — UNIQUE people, not log rows (a door check-in + a sheet mark on the same person must count once)
   {
     const orClauses = [
       `{method}='Event RSVP'`,
@@ -9604,7 +9604,11 @@ async function getEventsOverview(env) {
           if (f.rsvp_childcare === 'Yes') { launches[name].childcare_families++; launches[name].childcare_kids += countKids(f.rsvp_childcare_kids); }
         } else if (f.method === 'Event attendance') {
           const name = f.rsvp_launch || f.event;
-          if (name) launchAttendByName[name] = (launchAttendByName[name] || 0) + 1;
+          if (name) {
+            const s = (launchAttendByName[name] = launchAttendByName[name] || new Set());
+            const cid = (f.contact || [])[0];
+            s.add(cid || 'row:' + s.size);   // contact-less rows still count, once each
+          }
         } else if (f.result === 'Confirmed') {
           const cid = (f.contact || [])[0];
           if (f.event && confirmByEvent[f.event]) {
@@ -9643,7 +9647,7 @@ async function getEventsOverview(env) {
       date: date || '', past: !!(date && date < today),
       time: null, rsvp: l.rsvp, confirmed, unconfirmed: Math.max(0, l.rsvp - confirmed),
       pizza: l.pizza, childcare: l.childcare_kids, childcare_families: l.childcare_families,
-      attended: launchAttendByName[name] || 0,
+      attended: launchAttendByName[name] ? launchAttendByName[name].size : 0,
     });
   }
   events.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
