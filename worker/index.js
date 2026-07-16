@@ -548,6 +548,39 @@ export default {
       // CSV import (zip-enrichment file appended as new rows instead of merging).
       // Dry-run by default; &confirm=1 executes. See mergeImportStubs.
       if (url.pathname === '/admin/merge-import-stubs' && request.method === 'GET') return await mergeImportStubs(env, url);
+      // Re-stamp contact_log rows from one event name to another (?from=&to=&confirm=1).
+      // For rescheduled/renamed events whose check-in link or tracker still wrote the
+      // old name (e.g. St. Charles 7/11 → 7/15). Patches rsvp_launch and event fields
+      // on matching rows. Dry-run without confirm. Key-gated.
+      if (url.pathname === '/admin/rebrand-event' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const from = String(url.searchParams.get('from') || '').trim();
+        const to = String(url.searchParams.get('to') || '').trim();
+        if (!from || !to || from === to) return json({ error: 'need distinct from + to' }, 400);
+        const fEsc = from.replace(/'/g, "\\'");
+        const hits = [];
+        let off2 = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`OR({rsvp_launch}='${fEsc}',{event}='${fEsc}')`)}&pageSize=100&fields%5B%5D=rsvp_launch&fields%5B%5D=event&fields%5B%5D=method`;
+          if (off2) q += `&offset=${encodeURIComponent(off2)}`;
+          const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+          for (const r of d.records) hits.push({ id: r.id, fields: {
+            ...(r.fields.rsvp_launch === from ? { rsvp_launch: to } : {}),
+            ...(r.fields.event === from ? { event: to } : {}),
+          }, method: r.fields.method });
+          off2 = d.offset;
+        } while (off2);
+        const byMethod = hits.reduce((a, h) => { a[h.method] = (a[h.method] || 0) + 1; return a; }, {});
+        if (url.searchParams.get('confirm') !== '1') return json({ ok: true, dry_run: true, from, to, rows: hits.length, by_method: byMethod });
+        let patched = 0;
+        for (let i = 0; i < hits.length; i += 10) {
+          const batch = hits.slice(i, i + 10).map(h => ({ id: h.id, fields: h.fields }));
+          await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+          patched += batch.length;
+        }
+        await invalidateReadCaches(env);
+        return json({ ok: true, dry_run: false, from, to, patched, by_method: byMethod });
+      }
       // Set leader_ladder on specific contacts (?ids=rec1,rec2&value=Core%20Leader).
       // Used to mark team members' contact records so callableExclusions hides
       // them from every call list. Key-gated; value must be a known ladder rung.
