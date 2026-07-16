@@ -6937,6 +6937,7 @@ async function computeRollupMetrics(env) {
   const scalar = ['amendment5_commitments', 'house_meeting_commitments', 'house_meeting_date', 'one_on_one_booked', 'attempt_count', 'last_attempt_result'];
   const fields = [...new Set([...onbAttend, ...hmAttend, ...ampAttend, ...trainSignup, ...scalar])];
   const m = { attempts: 0, onb: 0, hm: 0, amp: 0, a5: 0, hmc: 0, oo: 0, remind: 0, a5fu: 0, hmfu: 0 };
+  const a5Ids = new Set();   // union: field-based + log-row committers, deduped by contact
   let off = null;
   do {
     let q = `?pageSize=100` + fields.map(f => `&fields%5B%5D=${encodeURIComponent(f)}`).join('');
@@ -6949,7 +6950,7 @@ async function computeRollupMetrics(env) {
       if (ampAttend.some(k => att(f[k]))) m.amp++;
       const a5 = String(f.amendment5_commitments || '').trim() !== '';
       const hmc = String(f.house_meeting_commitments || '').trim() !== '' || String(f.house_meeting_date || '').trim() !== '';
-      if (a5) m.a5++;
+      if (a5) { m.a5++; a5Ids.add(r.id); }
       if (hmc) m.hmc++;
       if (f.one_on_one_booked) m.oo++;
       m.attempts += Number(f.attempt_count) || 0;
@@ -6965,11 +6966,13 @@ async function computeRollupMetrics(env) {
   let ampConvos = 0; const launchSet = new Set();
   off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`OR({method}='Amplifier conversation',{method}='Event attendance')`)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=contact&fields%5B%5D=rsvp_launch`;
+    let q = `?filterByFormula=${encodeURIComponent(`OR({method}='Amplifier conversation',{method}='Event attendance',{method}='Commitment')`)}&pageSize=100&fields%5B%5D=method&fields%5B%5D=result&fields%5B%5D=contact&fields%5B%5D=rsvp_launch`;
     if (off) q += `&offset=${off}`;
     const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
     for (const r of d.records) {
       if (r.fields.method === 'Amplifier conversation') { ampConvos++; continue; }
+      // A Commitment log row = a committer, even if the denormalized field was never set.
+      if (r.fields.method === 'Commitment') { (r.fields.contact || []).forEach(id => a5Ids.add(id)); continue; }
       // Regional launches only: an in-person launch RSVP/check-in carries rsvp_launch
       // (onboardings + trainings do not). Exclude Parent Power Camps, which also use it.
       const rl = String(r.fields.rsvp_launch || '');
@@ -6987,7 +6990,7 @@ async function computeRollupMetrics(env) {
     ['hm_trained', 'Attended a House Meeting training', m.hm],
     ['amp_trained', 'Attended an Amplifier training', m.amp],
     ['amp_convos', 'Amplifier conversations logged', ampConvos],
-    ['a5_commitments', 'Amendment 5 commitments made', m.a5],
+    ['a5_commitments', 'People who made a commitment', a5Ids.size],   // union of field + log rows, deduped by person
     ['hm_commitments', 'House meeting commitments made', m.hmc],
     ['one_on_ones', '1-1s booked', m.oo],
     ['a5_followed_up', 'A5 commitments followed up on', m.a5fu],
