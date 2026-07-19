@@ -106,6 +106,9 @@ function eventMeta(key){ return EVENT_META[key] || EVENT_META['5_26']; }
 function nextOnboardingKey(today){
   const obs = Object.entries(EVENT_META).filter(([k,m]) => m.type === 'onboarding').sort((a,b) => a[1].date.localeCompare(b[1].date));
   const up = obs.find(([k,m]) => m.date > today);   // strictly future: today's event has already happened
+  // After the FINAL onboarding (7/21), the default event rolls to the 7/29
+  // Final Push All-In Strategy Call instead of pointing at a past onboarding.
+  if (!up && today > '2026-07-21') return 'hm_7_29';
   return (up || obs[obs.length-1] || ['6_9'])[0];
 }
 // Outcome key (dashboard) → event meta key, generated for every event with a
