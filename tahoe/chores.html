@@ -369,7 +369,7 @@
       const top = totals.filter(t => t.count > 0).slice(0, 6);
       if (top.length === 0) {
         document.getElementById("kids-board").innerHTML =
-          `<div class="card">No kid heroes yet. Leo is leading the imagined future.</div>`;
+          `<div class="card">No kid heroes yet. Be first!</div>`;
         return;
       }
       document.getElementById("kids-board").innerHTML = top.map((row, i) => {
