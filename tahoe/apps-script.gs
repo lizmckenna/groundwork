@@ -39,6 +39,14 @@ const SHEET_SCHEDULE    = "schedule";
 const SHEET_COMPLETIONS = "chore_completions";
 
 function doGet(e) {
+  // ?action=album&token=XXXX → proxy an iCloud Shared Album's photo list
+  // (the site can't call iCloud directly from the browser; this can)
+  if (e && e.parameter && e.parameter.action === "album" && e.parameter.token) {
+    return ContentService
+      .createTextOutput(JSON.stringify(fetchICloudAlbum(e.parameter.token)))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const payload = {
     people:       readPeople(ss),
@@ -51,6 +59,78 @@ function doGet(e) {
   return ContentService
     .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ---------- iCloud Shared Album proxy ----------
+// Uses the same public web-stream endpoints the icloud.com shared-album page
+// uses. Cached 10 minutes so repeat visitors don't hammer it. If Apple changes
+// the endpoints this returns {photos: []} and the site falls back to plain
+// album links.
+
+function fetchICloudAlbum(token) {
+  token = token.replace(/[^A-Za-z0-9_-]/g, ""); // paranoia: token is URL-path material
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get("album:" + token);
+  if (cached) return JSON.parse(cached);
+
+  try {
+    let host = "p23-sharedstreams.icloud.com";
+    const streamOpts = {
+      method: "post",
+      contentType: "text/plain",
+      payload: JSON.stringify({ streamCtag: null }),
+      muteHttpExceptions: true,
+    };
+    let res = UrlFetchApp.fetch("https://" + host + "/" + token + "/sharedstreams/webstream", streamOpts);
+    if (res.getResponseCode() === 330) {
+      // Apple redirects to the right partition host in the body
+      const body = JSON.parse(res.getContentText());
+      if (body["X-Apple-MMe-Host"]) {
+        host = body["X-Apple-MMe-Host"];
+        res = UrlFetchApp.fetch("https://" + host + "/" + token + "/sharedstreams/webstream", streamOpts);
+      }
+    }
+    if (res.getResponseCode() !== 200) return { photos: [] };
+
+    const stream = JSON.parse(res.getContentText());
+    const photos = (stream.photos || []).slice(0, 100); // cap for speed
+    const guids = photos.map(function (p) { return p.photoGuid; });
+    if (guids.length === 0) return { photos: [] };
+
+    const aRes = UrlFetchApp.fetch("https://" + host + "/" + token + "/sharedstreams/webasseturls", {
+      method: "post",
+      contentType: "text/plain",
+      payload: JSON.stringify({ photoGuids: guids }),
+      muteHttpExceptions: true,
+    });
+    if (aRes.getResponseCode() !== 200) return { photos: [] };
+    const items = (JSON.parse(aRes.getContentText()) || {}).items || {};
+
+    const out = [];
+    photos.forEach(function (p) {
+      const derivs = p.derivatives || {};
+      // pick smallest usable as thumb, largest as full
+      let thumb = null, full = null;
+      Object.keys(derivs).forEach(function (k) {
+        const d = derivs[k];
+        const loc = items[d.checksum];
+        if (!loc || !loc.url_location) return;
+        const url = "https://" + loc.url_location + loc.url_path;
+        const w = parseInt(d.width || 0, 10);
+        if (!thumb || w < thumb.w) thumb = { url: url, w: w };
+        if (!full || w > full.w) full = { url: url, w: w };
+      });
+      if (thumb && full) {
+        out.push({ thumb: thumb.url, full: full.url, caption: p.caption || "" });
+      }
+    });
+
+    const result = { photos: out };
+    try { cache.put("album:" + token, JSON.stringify(result), 600); } catch (ignored) {}
+    return result;
+  } catch (err) {
+    return { photos: [], error: String(err) };
+  }
 }
 
 function doPost(e) {
@@ -222,9 +302,14 @@ function readSchedule(ss) {
       const date = (dateRaw instanceof Date)
         ? Utilities.formatDate(dateRaw, Session.getScriptTimeZone(), "yyyy-MM-dd")
         : dateRaw.toString();
+      // Sheets often stores times as Date objects; format them readably
+      const timeRaw = r[1];
+      const time = (timeRaw instanceof Date)
+        ? Utilities.formatDate(timeRaw, Session.getScriptTimeZone(), "H:mm")
+        : (timeRaw || "").toString();
       return {
         date,
-        time:  (r[1] || "").toString(),
+        time,
         title: (r[2] || "").toString(),
         lead:  (r[3] || "").toString(),
         kind:  (r[4] || "").toString(),

@@ -25,7 +25,7 @@
   </section>
 
   <footer class="foot">
-    <div>📸 Take more photos this year, and tag the kids when you upload.</div>
+    <div>📸 Take more photos this year.</div>
   </footer>
 
 </main>
@@ -55,7 +55,7 @@
 
 <script src="config.js"></script>
 <script>
-  (function () {
+  (async function () {
     const cfg = window.TAHOE_CONFIG;
     const grid = document.getElementById("album-grid");
     const albums = cfg.photoAlbums || [];
@@ -63,13 +63,49 @@
       grid.innerHTML = `<div class="card">No albums yet. Drop a Google Photos / Drive / iCloud link into <code>config.js</code> to add one.</div>`;
       return;
     }
-    grid.innerHTML = albums.map(a => `
-      <a class="album-card" href="${a.url}" target="_blank" rel="noopener">
-        <span class="year">${a.year}</span>
-        <div class="title">${a.label}</div>
-        <div class="open">Open ${a.kind === "icloud" ? "iCloud" : a.kind === "google" ? "Google" : "album"} →</div>
-      </a>
+
+    // Render link cards immediately so the page is never empty,
+    // then try to swell each iCloud album into a real photo grid.
+    grid.innerHTML = albums.map((a, i) => `
+      <div class="album-block" id="album-${i}" style="grid-column: 1 / -1;">
+        <a class="album-card" href="${a.url}" target="_blank" rel="noopener">
+          <span class="year">${a.year}</span>
+          <div class="title">${a.label}</div>
+          <div class="open">Open ${a.kind === "icloud" ? "iCloud" : a.kind === "google" ? "Google" : "album"} →</div>
+        </a>
+        <div class="photo-grid" id="photo-grid-${i}" style="display: none; grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 6px; margin-top: 10px;"></div>
+      </div>
     `).join("");
+
+    function icloudToken(url) {
+      const m = (url || "").match(/#([A-Za-z0-9_-]+)/);
+      return m ? m[1] : null;
+    }
+
+    async function loadAlbum(a, i) {
+      if (a.kind !== "icloud" || !cfg.appsScriptUrl) return;
+      const token = icloudToken(a.url);
+      if (!token) return;
+      try {
+        const res = await fetch(cfg.appsScriptUrl + "?action=album&token=" + encodeURIComponent(token));
+        if (!res.ok) return;
+        const data = await res.json();
+        const photos = data.photos || [];
+        if (photos.length === 0) return;
+        const el = document.getElementById("photo-grid-" + i);
+        el.innerHTML = photos.map(p => `
+          <a href="${p.full}" target="_blank" rel="noopener" style="display:block;">
+            <img src="${p.thumb}" loading="lazy" alt="${(p.caption || "family photo").replace(/"/g, "&quot;")}"
+                 style="width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:9px; display:block;">
+          </a>
+        `).join("");
+        el.style.display = "grid";
+      } catch (err) {
+        // leave the link card as-is
+      }
+    }
+
+    albums.forEach((a, i) => loadAlbum(a, i));
   })();
 </script>
 
