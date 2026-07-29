@@ -8906,6 +8906,27 @@ async function activeSinceCsv(env, urlObj) {
     off = d.offset;
   } while (off);
 
+  // Optional: &donors=1 folds in unique donors (DONATIONS rows on/after `since`),
+  // deduped into the same per-contact map so the total stays one-row-per-person.
+  if (urlObj.searchParams.get('donors') === '1') {
+    let doff = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(`AND({date}!=BLANK(),NOT(IS_BEFORE({date},'${since}')))`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=date`;
+      if (doff) q += `&offset=${encodeURIComponent(doff)}`;
+      const d = await at(env, `/${BASE}/${DONATIONS_TBL}${q}`);
+      for (const r of d.records) {
+        const cid = (r.fields.contact || [])[0];
+        if (!cid) continue;
+        const p = per[cid] || (per[cid] = { count: 0, events: new Set(), methods: new Set(), first: '', last: '' });
+        p.count++;
+        p.methods.add('Donation');
+        const dt = String(r.fields.date || '');
+        if (dt) { if (!p.first || dt < p.first) p.first = dt; if (dt > p.last) p.last = dt; }
+      }
+      doff = d.offset;
+    } while (doff);
+  }
+
   // 2. Join contact details, 40 record-ids per filterByFormula call.
   const cids = Object.keys(per);
   const info = {};
