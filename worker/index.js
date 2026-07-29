@@ -100,6 +100,9 @@ const EVENT_META = {
   // Know Your Neighbor (KC) — Kathryn owns reminders per the PMOPS flow (6/11 email)
   'kyn_6_23': { type: 'kyn', inPerson: true, date: '2026-06-23', time: '3:00pm CT',  label: 'Know Your Neighbor 6/23', confirmEvent: 'Confirm KYN 6/23', attendEvent: 'Know Your Neighbor 6/23', confirmField: 'confirm_kyn_6_23_status', attendField: 'attendance_kyn_6_23_status', signupField: 'signup_kyn_6_23_status', confirmTag: 'kyn 6/23 confirm', attendTag: 'kyn 6/23' },
   'kyn_7_25': { type: 'kyn', inPerson: true, date: '2026-07-25', time: '10:00am CT', label: 'Know Your Neighbor 7/25', confirmEvent: 'Confirm KYN 7/25', attendEvent: 'Know Your Neighbor 7/25', confirmField: 'confirm_kyn_7_25_status', attendField: 'attendance_kyn_7_25_status', signupField: 'signup_kyn_7_25_status', confirmTag: 'kyn 7/25 confirm', attendTag: 'kyn 7/25' },
+  // Post-election debrief (Ellen 7/28). type 'makeup' on purpose — same no-Airtable-fields
+  // pattern as 6/30 + Voices: flows through events_signed_up + contact_log + auto email/ICS.
+  'debrief_8_6': { type: 'makeup', date: '2026-08-06', time: '7:00pm CT', label: 'Election Debrief 8/6', emailTitle: 'Election Debrief and Meaning Making', confirmEvent: 'Confirm Debrief 8/6', attendEvent: 'Election Debrief and Meaning Making 8/6', confirmField: null, attendField: null, signupField: null, confirmTag: 'debrief 8/6 confirm', attendTag: 'debrief 8/6', icsTitle: 'Election Debrief and Meaning Making (Parents for Missouri Public Schools)' },
 };
 function eventMeta(key){ return EVENT_META[key] || EVENT_META['5_26']; }
 // The soonest upcoming onboarding key (so nothing is ever hardcoded to a past date).
