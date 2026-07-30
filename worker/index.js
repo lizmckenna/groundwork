@@ -3822,6 +3822,7 @@ async function ingestS2W(request, env) {
           const evKey = S2W_EVENT_TAGS[tagLc]();
           const meta = EVENT_META[evKey];
           if (!meta || (!meta.signupField && !meta.attendEvent)) continue;
+          if (meta.date && meta.date < todayCT()) continue;   // never register (or "You're in"-email) for a past event
           const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
           if (meta.signupField && cur.fields[meta.signupField] === 'Signed up') continue;   // already registered — don't re-email
           let evs = cur.fields.events_signed_up || [];
