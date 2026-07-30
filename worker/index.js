@@ -606,6 +606,32 @@ export default {
         await invalidateReadCaches(env);
         return json({ ok: true, updated, value });
       }
+      // One-shot: create the contact fields backing the S2W election tags
+      // (the searchable vote_plan select; the 8/6 debrief needs no per-event
+      // fields — it registers via events_signed_up like every makeup event).
+      // Idempotent — skips fields that already exist.
+      if (url.pathname === '/admin/create-election-tag-fields' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const meta = await at(env, `/meta/bases/${BASE}/tables`);
+        const tbl = (meta.tables || []).find(t => t.id === CONTACTS_TBL);
+        const have = new Set((tbl?.fields || []).map(f => f.name));
+        const wanted = [
+          { name: 'vote_plan', type: 'singleSelect', options: { choices: [
+            { name: 'Already voted', color: 'greenLight2' },
+            { name: 'Vote early', color: 'blueLight2' },
+            { name: 'Election Day', color: 'yellowLight2' },
+          ] } },
+        ];
+        const created = [], skipped = [], failed = [];
+        for (const f of wanted) {
+          if (have.has(f.name)) { skipped.push(f.name); continue; }
+          try {
+            await at(env, `/meta/bases/${BASE}/tables/${CONTACTS_TBL}/fields`, { method: 'POST', body: JSON.stringify(f) });
+            created.push(f.name);
+          } catch (e) { failed.push(`${f.name}: ${String(e.message || e).slice(0, 120)}`); }
+        }
+        return json({ created, skipped, failed });
+      }
       // Rename an events-table record (e.g. after repurposing an event). All
       // event_attendance mirror rows linked to it show the new name instantly.
       if (url.pathname === '/admin/rename-event' && request.method === 'GET') {
@@ -3762,24 +3788,49 @@ async function ingestS2W(request, env) {
         } }], typecast: true }) });
       }
       // Tag -> action mapping (kept on OUR side so STW/TMC never change).
-      // 'wants-onboarding' = auto-register for the next Tuesday onboarding:
-      // signup field + events list + confirmation email w/ Zoom link + mirror row.
-      // Add more tags here as the team defines them.
+      // Event tags auto-register (signup field + events list + confirmation email
+      // w/ Zoom link + mirror row). Voting-plan tags set the searchable
+      // `vote_plan` select on the contact. Tags per "MO Ongoing Tag Needs" sheet.
+      const S2W_EVENT_TAGS = {
+        'wants-onboarding': () => nextOnboardingKey(todayCT()),
+        '7/29 all in call': () => 'hm_7_29',
+        '8/6 election meaning making': () => 'debrief_8_6',
+      };
+      const S2W_VOTE_PLAN_TAGS = {
+        'already voted': 'Already voted',
+        'election day': 'Election Day',
+        'vote early': 'Vote early',
+      };
       for (const tag of tags) {
-        if (tag.toLowerCase() !== 'wants-onboarding') continue;
+        const tagLc = String(tag).toLowerCase().trim();
+        // ── voting-plan tags ──
+        if (S2W_VOTE_PLAN_TAGS[tagLc]) {
+          try {
+            const plan = S2W_VOTE_PLAN_TAGS[tagLc];
+            await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: { vote_plan: plan }, typecast: true }) });
+            await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
+              Summary: `${todayCT()} — S2W vote plan: ${plan} (${first} ${last})`,
+              date: todayCT(), method: 'Text', result: 'Conversation',
+              notes: `vote_plan set via S2W tag "${tag}"`, contact: [cid],
+            } }], typecast: true }) });
+          } catch (e) { errors.push('vote-plan tag: ' + String(e.message || e).slice(0, 100)); }
+          continue;
+        }
+        // ── event-registration tags ──
+        if (!S2W_EVENT_TAGS[tagLc]) continue;
         try {
-          const evKey = nextOnboardingKey(todayCT());
+          const evKey = S2W_EVENT_TAGS[tagLc]();
           const meta = EVENT_META[evKey];
-          if (!meta || !meta.signupField) break;
+          if (!meta || !meta.signupField) continue;
           const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
-          if (cur.fields[meta.signupField] === 'Signed up') break;   // already registered — don't re-email
+          if (cur.fields[meta.signupField] === 'Signed up') continue;   // already registered — don't re-email
           let evs = cur.fields.events_signed_up || [];
           if (!evs.includes(meta.attendEvent)) evs = evs.concat([meta.attendEvent]);
           await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: { [meta.signupField]: 'Signed up', events_signed_up: evs }, typecast: true }) });
           await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
             Summary: `${todayCT()} — S2W tag signup: ${meta.attendEvent} (${first} ${last})`,
             date: todayCT(), method: 'Event attendance', result: 'Signed up', event: meta.attendEvent,
-            notes: `registered via S2W tag wants-onboarding`, contact: [cid],
+            notes: `registered via S2W tag "${tag}"`, contact: [cid],
           } }], typecast: true }) });
           if (email) { try { await sendConfirmationEmail(env, email, first, cid, null, evKey); } catch (e) {} }
           await mirrorWriteThrough(env, cid, meta.attendEvent, 'Registered');
