@@ -3821,12 +3821,17 @@ async function ingestS2W(request, env) {
         try {
           const evKey = S2W_EVENT_TAGS[tagLc]();
           const meta = EVENT_META[evKey];
-          if (!meta || !meta.signupField) continue;
+          if (!meta || (!meta.signupField && !meta.attendEvent)) continue;
           const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
-          if (cur.fields[meta.signupField] === 'Signed up') continue;   // already registered — don't re-email
+          if (meta.signupField && cur.fields[meta.signupField] === 'Signed up') continue;   // already registered — don't re-email
           let evs = cur.fields.events_signed_up || [];
+          // makeup-style events (no per-contact signup field, e.g. the 8/6
+          // debrief) live only in events_signed_up — that list IS the dedupe.
+          if (!meta.signupField && evs.includes(meta.attendEvent)) continue;
           if (!evs.includes(meta.attendEvent)) evs = evs.concat([meta.attendEvent]);
-          await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: { [meta.signupField]: 'Signed up', events_signed_up: evs }, typecast: true }) });
+          const patch = { events_signed_up: evs };
+          if (meta.signupField) patch[meta.signupField] = 'Signed up';
+          await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: patch, typecast: true }) });
           await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
             Summary: `${todayCT()} — S2W tag signup: ${meta.attendEvent} (${first} ${last})`,
             date: todayCT(), method: 'Event attendance', result: 'Signed up', event: meta.attendEvent,
