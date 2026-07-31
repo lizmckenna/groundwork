@@ -325,7 +325,12 @@ async function invalidateReadCaches(env) {
 // and upserts registrants so the door check-in roster recognizes them.
 // Populate with each rally's published/link-shared response-sheet CSV URL.
 const GOTV_RSVP_FEEDS = [
-  // { event: 'Eastern Jackson County GOTV Rally 8/1', csv: 'https://docs.google.com/...' },
+  // Per-region GOTV turnout trackers (link-viewable Google Form response sheets),
+  // found in column H of the "P4MOPS Tracker of Trackers". St. Charles shares St. Louis's.
+  { event: 'Northland GOTV Rally 8/1', csv: 'https://docs.google.com/spreadsheets/d/1A2F8hQ06mtUqmuGGvQwPeRwX0yxQmB2rxLSb0W8D7Bo/gviz/tq?tqx=out:csv' },
+  { event: 'Eastern Jackson County GOTV Rally 8/1', csv: 'https://docs.google.com/spreadsheets/d/11GyDoP2lzDOaHwSAf5swRw8Q1mVsi0H0MxyZRgkza7k/gviz/tq?tqx=out:csv' },
+  { event: 'Kansas City GOTV Rally 8/1', csv: 'https://docs.google.com/spreadsheets/d/1XxXxncdU0cfZPB-nRJEqqm-h8ITGSRcKaoBkr3ZmEbQ/gviz/tq?tqx=out:csv' },
+  { event: 'St. Louis GOTV Rally 8/1', csv: 'https://docs.google.com/spreadsheets/d/1GDgozM3SM_hUmzlkjE3JbemZvOaPwRvSh2GLDgQ68Es/gviz/tq?tqx=out:csv' },
 ];
 
 // Tolerant Google-Form header mapping: finds name/email/phone/zip columns.
