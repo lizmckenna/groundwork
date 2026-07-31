@@ -115,10 +115,12 @@ function nextOnboardingKey(today){
   return (up || obs[obs.length-1] || ['6_9'])[0];
 }
 // Outcome key (dashboard) → event meta key, generated for every event with a
-// signup field ('signed-up-hm-6-16' → 'hm_6_16').
+// signup field ('signed-up-hm-6-16' → 'hm_6_16'). Makeup-style events (no
+// per-contact signup field, e.g. the 8/6 debrief) are included too — they
+// register via events_signed_up instead.
 const SIGNUP_OUTCOME_EVENTS = Object.fromEntries(
   Object.keys(EVENT_META)
-    .filter(k => EVENT_META[k].signupField)
+    .filter(k => EVENT_META[k].signupField || (EVENT_META[k].type === 'makeup' && EVENT_META[k].attendEvent))
     .map(k => ['signed-up-' + k.replace(/_/g, '-'), k])
 );
 const LANEE_ID = 'rec0OmDN68hlffkTn';
@@ -605,6 +607,35 @@ export default {
         }
         await invalidateReadCaches(env);
         return json({ ok: true, updated, value });
+      }
+      // Event roster CSV: everyone signed up for an event, with email/phone and
+      // attendance status — the follow-up-email workhorse. &event=<key>.
+      if (url.pathname === '/admin/event-roster.csv' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const ev = url.searchParams.get('event') || 'hm_7_29';
+        const meta = eventMeta(ev);
+        if (!meta.signupField) return json({ error: `event ${ev} has no signup field` }, 400);
+        const rows = [];
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`{${meta.signupField}}='Signed up'`)}&pageSize=100&fields%5B%5D=Name&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone&fields%5B%5D=city&fields%5B%5D=district&fields%5B%5D=${encodeURIComponent(meta.attendField)}&fields%5B%5D=${encodeURIComponent(meta.confirmField)}&fields%5B%5D=assigned_organizer`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const p = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          rows.push(...p.records);
+          off = p.offset;
+        } while (off);
+        const orgMap = await orgNameById(env);
+        const qc = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+        const out = [['Name','First','Last','Email','Phone','City','District','Attendance','Confirm status','Assigned organizer'].join(',')];
+        for (const r of rows.sort((a, b) => String(a.fields.Name || '').localeCompare(String(b.fields.Name || '')))) {
+          const f = r.fields;
+          const raw = f.assigned_organizer;
+          const ids = (Array.isArray(raw) ? raw : (raw ? [raw] : [])).map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+          out.push([f.Name || '', f.first || '', f.last || '', f.email || '', f.phone || '', f.city || '', f.district || '',
+            f[meta.attendField] || '', f[meta.confirmField] || '',
+            ids.map(id => orgMap[id] || ORGANIZER_NAME_BY_ID[id] || id).join('; ')].map(qc).join(','));
+        }
+        return new Response(out.join('\n'), { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="event-roster-${ev}.csv"` } });
       }
       // One-shot: create the contact fields backing the S2W election tags
       // (the searchable vote_plan select; the 8/6 debrief needs no per-event
@@ -5389,8 +5420,18 @@ async function logOutcome(request, env) {
   };
   // Event-specific denormalized status field — so each event has its own
   // confirm queue without colliding on last_attempt_result.
+  let makeupAttendEvent = null, makeupAlready = false;
   if (signupEventKey && eventMeta(signupEventKey).signupField) {
     contactFields[eventMeta(signupEventKey).signupField] = 'Signed up';
+  } else if (signupEventKey && eventMeta(signupEventKey).attendEvent) {
+    // Makeup-style event: events_signed_up IS the registration record.
+    makeupAttendEvent = eventMeta(signupEventKey).attendEvent;
+    try {
+      const cur2 = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`);
+      const evs = Array.isArray(cur2.fields.events_signed_up) ? cur2.fields.events_signed_up : [];
+      makeupAlready = evs.includes(makeupAttendEvent);
+      if (!makeupAlready) contactFields.events_signed_up = evs.concat([makeupAttendEvent]);
+    } catch (e) {}
   }
   if (attemptCount != null) contactFields.attempt_count = attemptCount;
   if (outcome === 'oneonone') contactFields.one_on_one_booked = true;
@@ -5426,9 +5467,10 @@ async function logOutcome(request, env) {
     method: 'PATCH',
     body: JSON.stringify({ fields: contactFields, typecast: true })
   });
+  if (makeupAttendEvent && !makeupAlready) await mirrorWriteThrough(env, contact_id, makeupAttendEvent, 'Registered');
 
   let confirmation_email_sent = false;
-  if (AUTO_CONFIRM_EMAIL && (outcome === 'signed-up' || outcome === 'signed-up-5-26' || signupEventKey)) {
+  if (AUTO_CONFIRM_EMAIL && !makeupAlready && (outcome === 'signed-up' || outcome === 'signed-up-5-26' || signupEventKey)) {
     const eventKey = signupEventKey || '5_26';
     try {
       const contact = await at(env, `/${BASE}/${CONTACTS_TBL}/${contact_id}`);
@@ -6085,17 +6127,21 @@ async function getConfirmees(env, urlObj) {
   // Pick which "signed up" field gates the queue. Default is 5/26 for back-compat.
   // 5/26 still uses {last_attempt_result}='Signed up' because that's the
   // historical source of truth before we introduced denormalized status fields.
+  // Makeup-style events (no signup field, e.g. the 8/6 debrief) gate on
+  // events_signed_up — that list is their registration record.
   const meta = eventMeta(eventParam);
   const signupClause = meta.signupField
     ? `{${meta.signupField}}='Signed up'`
-    : `{last_attempt_result}='Signed up'`;
+    : meta.type === 'makeup' && meta.attendEvent
+      ? `FIND('${String(meta.attendEvent).replace(/'/g, "\\'")}',ARRAYJOIN({events_signed_up}))>0`
+      : `{last_attempt_result}='Signed up'`;
   const orgFullName = organizerName(organizer);
   const filter = orgFullName
     ? `AND(${signupClause},FIND('${orgFullName}',{assigned_organizer}&'')>0)`
     : signupClause;
   const fields = ['Name','first','last','phone','email','school','district','last_attempt_date','source','signup_6_9_status'];
   if (meta.signupField && !fields.includes(meta.signupField)) fields.push(meta.signupField);
-  if (!fields.includes(meta.attendField)) fields.push(meta.attendField);
+  if (meta.attendField && !fields.includes(meta.attendField)) fields.push(meta.attendField);
   // Paginate fully — no hard cap. Each page = 100 records.
   const allContacts = [];
   {
@@ -11139,6 +11185,34 @@ async function walkinSignup(request, env) {
     created = true;
   }
 
+  // Adding someone to a FUTURE event isn't a walk-in — it's a registration
+  // (Stephanie 7/30: "folks trying to sign up" for the 8/6 debrief). Register
+  // them via events_signed_up + confirmation email with the Zoom link, exactly
+  // like the public signup path. Day-of and past events keep walk-in semantics.
+  if (wMeta.date && wMeta.date > date) {
+    let registered = false, emailed = false;
+    try {
+      const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`);
+      const evs = Array.isArray(cur.fields.events_signed_up) ? cur.fields.events_signed_up : [];
+      if (!evs.includes(wMeta.attendEvent)) {
+        const rf = { events_signed_up: evs.concat([wMeta.attendEvent]) };
+        if (wMeta.signupField) rf[wMeta.signupField] = 'Signed up';
+        await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, { method: 'PATCH', body: JSON.stringify({ fields: rf, typecast: true }) });
+        await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
+          Summary: `${date} — Registered (${wMeta.attendTag})`,
+          date, method: 'Event attendance', result: 'Signed up', event: wMeta.attendEvent, contact: [contactId],
+          notes: created ? 'Registered by organizer (new contact)' : `Registered by organizer (matched existing: ${existingName || contactId})`,
+        } }], typecast: true }) });
+        const em = cur.fields.email || (email ? String(email).toLowerCase().trim() : '');
+        if (em) { try { await sendConfirmationEmail(env, em, cur.fields.first || cFirst, contactId, null, String(body.event)); emailed = true; } catch (e) {} }
+        await mirrorWriteThrough(env, contactId, wMeta.attendEvent, 'Registered');
+        registered = true;
+      }
+    } catch (e) {}
+    await invalidateReadCaches(env);
+    return json({ ok: true, contact_id: contactId, created, matched_existing: !created, existing_name: existingName, registered, already_registered: !registered, confirmation_email_sent: emailed });
+  }
+
   // Always create the attendance log marked Attended (walk-ins by definition attended)
   await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, {
     method: 'POST',
@@ -11157,7 +11231,7 @@ async function walkinSignup(request, env) {
   });
   // Patch the denormalized status field
   try {
-    await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
+    if (wMeta.attendField) await at(env, `/${BASE}/${CONTACTS_TBL}/${contactId}`, {
       method: 'PATCH',
       body: JSON.stringify({ fields: { [wMeta.attendField]: 'Walk-in' }, typecast: true }),
     });
