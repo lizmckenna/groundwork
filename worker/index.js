@@ -564,69 +564,14 @@ export default {
         if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
         const body = await request.json().catch(() => null);
         if (!body || !body.event || !Array.isArray(body.people)) return json({ error: 'need {event, people[]}' }, 400);
-        const event = String(body.event).trim();
-        const dry = !!body.dry;
-        const evEsc = event.replace(/'/g, "\\'");
-        // existing RSVP'd contact ids for this event (idempotency)
-        const already = new Set();
-        let ro = null;
-        do {
-          let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
-          if (ro) q += `&offset=${encodeURIComponent(ro)}`;
-          const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
-          for (const r of d.records) { const c = (r.fields.contact || [])[0]; if (c) already.add(c); }
-          ro = d.offset;
-        } while (ro);
-        const today = todayCT();
-        let matched = 0, created = 0, skipped = 0, logged = 0;
-        const logRecords = [];
-        for (const p of body.people.slice(0, 500)) {
-          const first = String(p.first || '').trim(), last = String(p.last || '').trim();
-          const email = String(p.email || '').toLowerCase().trim();
-          const phone = String(p.phone || '').trim();
-          if (!first || (!email && !phone)) { skipped++; continue; }
-          let cid = null;
-          try {
-            if (email) {
-              const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
-              if (r.records.length) cid = r.records[0].id;
-            }
-            if (!cid && phone) {
-              const digits = phone.replace(/\D/g, '').slice(-10);
-              if (digits.length === 10) {
-                const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
-                if (r2.records.length) cid = r2.records[0].id;
-              }
-            }
-          } catch (e) {}
-          if (cid) matched++;
-          else if (!dry) {
-            try {
-              const fields = { first, last, leader_ladder: 'Prospect', source: `gotv rsvp import · ${event}`, events_signed_up: [event] };
-              if (email) fields.email = email;
-              if (phone) fields.phone = phone;
-              if (String(p.zip || '').trim()) { fields.zip = String(p.zip).trim(); const c2 = zipToCounty(String(p.zip).trim().slice(0,5)); if (c2) fields.county = c2; }
-              const cr = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
-              cid = cr.records[0].id; created++;
-            } catch (e) { skipped++; continue; }
-          } else created++;   // dry: would create
-          if (!cid || already.has(cid)) continue;
-          already.add(cid);
-          logged++;
-          if (!dry) logRecords.push({ fields: {
-            Summary: `${today} — RSVP (form import): ${event} (${first} ${last})`,
-            date: today, method: 'Event RSVP', result: 'Signed up', event, rsvp_launch: event, contact: [cid],
-            notes: 'Imported from Google Form registrations',
-          } });
-        }
-        if (!dry) {
-          for (let i = 0; i < logRecords.length; i += 10) {
-            await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: logRecords.slice(i, i + 10), typecast: true }) });
-          }
-          await invalidateReadCaches(env);
-          try { await env.KV_BINDING.delete('cache:roster:' + event); } catch (e) {}
-        }
-        return json({ ok: true, event, dry, matched_existing: matched, created_new: created, rsvp_rows_logged: logged, skipped });
+        const r = await importRsvpPeople(env, String(body.event).trim(), body.people, !!body.dry);
+        return json({ ok: true, event: String(body.event).trim(), dry: !!body.dry, ...r });
+      }
+      // Pull every configured GOTV form-response feed right now (same job the
+      // hourly cron runs) — use before doors open so last-minute RSVPs land.
+      if (url.pathname === '/admin/sync-gotv-rsvps' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        return json({ ok: true, report: await syncGotvRsvps(env) });
       }
       // Re-stamp contact_log rows from one event name to another (?from=&to=&confirm=1).
       // For rescheduled/renamed events whose check-in link or tracker still wrote the
@@ -2795,6 +2740,127 @@ export default {
   },
   // Cron: pre-event signup-pipeline self-test. Signs up a synthetic user ~36h before
   // each event and emails an alert if the confirmation or the record fails to land.
+// ── GOTV RSVP live sync ──────────────────────────────────────────────────
+// Google-Form registrations keep arriving until doors open, so the worker pulls
+// each form's response sheet hourly (and via /admin/sync-gotv-rsvps on demand)
+// and upserts registrants so the door check-in roster recognizes them.
+// Populate with each rally's published/link-shared response-sheet CSV URL.
+const GOTV_RSVP_FEEDS = [
+  // { event: 'Eastern Jackson County GOTV Rally 8/1', csv: 'https://docs.google.com/...' },
+];
+
+// Tolerant Google-Form header mapping: finds name/email/phone/zip columns.
+function mapFormRows(csvText) {
+  const rows = [];
+  { // minimal CSV parse
+    let cur = [''], col = 0, inQ = false;
+    for (let i = 0; i < csvText.length; i++) {
+      const c = csvText[i], n = csvText[i + 1];
+      if (inQ) { if (c === '"' && n === '"') { cur[col] += '"'; i++; } else if (c === '"') inQ = false; else cur[col] += c; }
+      else { if (c === '"') inQ = true; else if (c === ',') { col++; cur[col] = ''; } else if (c === '\r') {} else if (c === '\n') { rows.push(cur); cur = ['']; col = 0; } else cur[col] += c; }
+    }
+    if (cur.length > 1 || cur[0] !== '') rows.push(cur);
+  }
+  if (rows.length < 2) return { people: [], columns: rows[0] || [] };
+  const hd = rows[0].map(s => String(s || '').toLowerCase());
+  const ix = (...cands) => { for (const c of cands) { const i = hd.findIndex(x => x.includes(c)); if (i >= 0) return i; } return -1; };
+  const iFirst = ix('first'), iLast = ix('last'), iName = ix('full name', 'name'),
+        iEmail = ix('email'), iPhone = ix('phone', 'cell'), iZip = ix('zip', 'postal');
+  const people = [];
+  for (const r of rows.slice(1)) {
+    let first = iFirst >= 0 ? (r[iFirst] || '').trim() : '';
+    let last = iLast >= 0 ? (r[iLast] || '').trim() : '';
+    if (!first && iName >= 0) {
+      const parts = String(r[iName] || '').trim().split(/\s+/);
+      first = parts[0] || ''; last = parts.slice(1).join(' ');
+    }
+    people.push({ first, last,
+      email: iEmail >= 0 ? (r[iEmail] || '').trim() : '',
+      phone: iPhone >= 0 ? (r[iPhone] || '').trim() : '',
+      zip: iZip >= 0 ? (r[iZip] || '').trim() : '' });
+  }
+  return { people, columns: rows[0] };
+}
+
+// Shared core for /admin/import-rsvps and the GOTV feed sync. Match by email
+// then phone; create missing contacts; one Event RSVP row per contact per event.
+async function importRsvpPeople(env, event, people, dry) {
+  const evEsc = event.replace(/'/g, "\\'");
+  const already = new Set();
+  let ro = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
+    if (ro) q += `&offset=${encodeURIComponent(ro)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) { const c = (r.fields.contact || [])[0]; if (c) already.add(c); }
+    ro = d.offset;
+  } while (ro);
+  const today = todayCT();
+  let matched = 0, created = 0, skipped = 0, logged = 0;
+  const logRecords = [];
+  for (const p of people.slice(0, 500)) {
+    const first = String(p.first || '').trim(), last = String(p.last || '').trim();
+    const email = String(p.email || '').toLowerCase().trim();
+    const phone = String(p.phone || '').trim();
+    if (!first || (!email && !phone)) { skipped++; continue; }
+    let cid = null;
+    try {
+      if (email) {
+        const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+        if (r.records.length) cid = r.records[0].id;
+      }
+      if (!cid && phone) {
+        const digits = phone.replace(/\D/g, '').slice(-10);
+        if (digits.length === 10) {
+          const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+          if (r2.records.length) cid = r2.records[0].id;
+        }
+      }
+    } catch (e) {}
+    if (cid) matched++;
+    else if (!dry) {
+      try {
+        const fields = { first, last, leader_ladder: 'Prospect', source: `gotv rsvp import · ${event}`, events_signed_up: [event] };
+        if (email) fields.email = email;
+        if (phone) fields.phone = phone;
+        if (String(p.zip || '').trim()) { fields.zip = String(p.zip).trim(); const c2 = zipToCounty(String(p.zip).trim().slice(0,5)); if (c2) fields.county = c2; }
+        const cr = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+        cid = cr.records[0].id; created++;
+      } catch (e) { skipped++; continue; }
+    } else created++;
+    if (!cid || already.has(cid)) continue;
+    already.add(cid);
+    logged++;
+    if (!dry) logRecords.push({ fields: {
+      Summary: `${today} — RSVP (form import): ${event} (${first} ${last})`,
+      date: today, method: 'Event RSVP', result: 'Signed up', event, rsvp_launch: event, contact: [cid],
+      notes: 'Imported from Google Form registrations',
+    } });
+  }
+  if (!dry) {
+    for (let i = 0; i < logRecords.length; i += 10) {
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: logRecords.slice(i, i + 10), typecast: true }) });
+    }
+    await invalidateReadCaches(env);
+    try { await env.KV_BINDING.delete('cache:roster:' + event); } catch (e) {}
+  }
+  return { matched_existing: matched, created_new: created, rsvp_rows_logged: logged, skipped };
+}
+
+async function syncGotvRsvps(env) {
+  const report = [];
+  for (const feed of GOTV_RSVP_FEEDS) {
+    try {
+      const resp = await fetch(feed.csv);
+      if (!resp.ok) { report.push({ event: feed.event, error: 'fetch ' + resp.status }); continue; }
+      const { people, columns } = mapFormRows(await resp.text());
+      const r = await importRsvpPeople(env, feed.event, people, false);
+      report.push({ event: feed.event, rows: people.length, columns, ...r });
+    } catch (e) { report.push({ event: feed.event, error: String(e) }); }
+  }
+  return report;
+}
+
   async scheduled(event, env, ctx) {
     // Hourly cron: attendance-mirror sync + the EXPORT_KEY drift check. Running
     // the export canary hourly (not just on the daily run) is what turns an
@@ -2803,6 +2869,7 @@ export default {
     if (event.cron === '0 * * * *') {
       ctx.waitUntil(syncAttendanceMirror(env).catch(() => {}));
       ctx.waitUntil(runExportCanary(env).catch(() => {}));
+      ctx.waitUntil(syncGotvRsvps(env).catch(() => {}));   // live GOTV form-RSVP pull
       return;
     }
     ctx.waitUntil(runSignupCanary(env).catch(() => {}));
