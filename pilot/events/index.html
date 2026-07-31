@@ -214,6 +214,25 @@
   </div>
 
   <div class="summary" id="summary"></div>
+
+  <!-- 8/6 Debrief quick check + register (Stephanie 7/30). Uses PUBLIC endpoints
+       (roster search + training-signup), so it works even while overview loads. -->
+  <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin:18px 0">
+    <div style="font-weight:700;font-size:15px;margin-bottom:4px">8/6 Debrief — quick check &amp; register</div>
+    <div style="font-size:12.5px;color:var(--text-tertiary);margin-bottom:10px">Type a name to see if they're registered for the Election Debrief. Not there? Add them below — they instantly get the confirmation email with the Zoom link.</div>
+    <input id="dbq" placeholder="Search a name…" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-primary);font:inherit">
+    <div id="dbq-res" style="margin:8px 0 0;font-size:13.5px"></div>
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;font-size:13px;color:var(--text-secondary)">＋ Register someone for the debrief</summary>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+        <input id="dba-first" placeholder="First name" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-primary);font:inherit">
+        <input id="dba-last" placeholder="Last name" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-primary);font:inherit">
+        <input id="dba-email" type="email" placeholder="Email" style="grid-column:1/-1;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-primary);font:inherit">
+      </div>
+      <button id="dba-go" class="icon-btn" style="margin-top:8px">Register them →</button>
+      <span id="dba-msg" style="font-size:13px;margin-left:10px"></span>
+    </details>
+  </div>
   <div class="updated" id="updated"><span class="pulse"></span><span id="updated-txt">Loading…</span></div>
 
   <div id="sections"></div>
@@ -489,6 +508,42 @@ document.getElementById('copy-btn').addEventListener('click', () => {
 
 document.getElementById('refresh-btn').addEventListener('click', () => { load(); loadCommitments(); loadConversion(); });
 document.getElementById('signout-btn').addEventListener('click', () => { localStorage.removeItem('gw-session'); localStorage.removeItem('gw-email'); location.reload(); });
+
+// --- 8/6 Debrief quick panel (public endpoints; no session required) ---
+const DEBRIEF_EVENT = 'Election Debrief and Meaning Making 8/6';
+let dbqT = null;
+document.getElementById('dbq').addEventListener('input', () => {
+  clearTimeout(dbqT);
+  const q = document.getElementById('dbq').value.trim();
+  const res = document.getElementById('dbq-res');
+  if (q.length < 2) { res.textContent = ''; return; }
+  res.textContent = 'Searching…';
+  dbqT = setTimeout(async () => {
+    try {
+      const r = await fetch(`${WORKER}/event-roster-public?event=${encodeURIComponent(DEBRIEF_EVENT)}&q=${encodeURIComponent(q)}`);
+      const d = await r.json();
+      res.innerHTML = (d.matches && d.matches.length)
+        ? d.matches.map(m => `<div>✓ <b>${m.name}</b> — registered</div>`).join('')
+        : 'No match — not registered yet (newly added people can take ~2 min to appear here).';
+    } catch(e){ res.textContent = 'Search failed — try again.'; }
+  }, 250);
+});
+document.getElementById('dba-go').addEventListener('click', async () => {
+  const first = document.getElementById('dba-first').value.trim();
+  const last = document.getElementById('dba-last').value.trim();
+  const email = document.getElementById('dba-email').value.trim();
+  const msg = document.getElementById('dba-msg');
+  if (!first || !last || !email) { msg.textContent = 'Need first, last, and email.'; msg.style.color = 'var(--red, #c0504d)'; return; }
+  msg.style.color = 'var(--text-tertiary)'; msg.textContent = 'Registering…';
+  try {
+    const r = await fetch(`${WORKER}/training-signup`, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ first, last, email, events:[DEBRIEF_EVENT], source:'organizer quick-add · events page' }) });
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error(d.error || 'failed');
+    msg.style.color = 'var(--green, #3d7a4f)'; msg.textContent = `✓ ${first} registered — confirmation + Zoom link sent.`;
+    document.getElementById('dba-first').value=''; document.getElementById('dba-last').value=''; document.getElementById('dba-email').value='';
+  } catch(e){ msg.style.color = 'var(--red, #c0504d)'; msg.textContent = 'Could not register — try again.'; }
+});
 
 // ---- auth ----
 function showLogin(msg){ document.getElementById('login-overlay').style.display='flex'; if (msg){ const m=document.getElementById('login-msg'); m.textContent=msg; m.style.display='block'; m.style.color='var(--gw-red)'; } }
