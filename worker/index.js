@@ -487,6 +487,9 @@ export default {
       // Who has attended/checked in (by email) — lets the turnout Sheet fill its
       // Attendance column live from check-ins without shifting any columns.
       if (url.pathname === '/export/attendance.csv' && request.method === 'GET') return await attendanceExportCsv(env, url);
+      // Campaign-era "attended anything 5/26+" list, categorized — feeds the regional
+      // trackers' post-election impact tab (Ellen G). ?region=<slug> or all.
+      if (url.pathname === '/export/attended.csv' && request.method === 'GET') return await attendedExportCsv(env, url);
       // Commitments made by attendees of a given event (Amplifier / Canvass / Regional team, etc.),
       // for the turnout Sheet's "commitments made that night" block. Intersects method='Commitment'
       // rows with the event's attendee set; optional since=YYYY-MM-DD limits to that night's cards.
@@ -8519,6 +8522,116 @@ function regionFor(f) {
   }
   for (const [re, region] of SCHOOL_REGION) if (school && re.test(school)) return region;   // school -> region fallback for the geo-blank
   return '';
+}
+
+// Campaign-era attendance list for the regional trackers (Ellen G's post-election
+// checklist): one row per routed contact who attended ANYTHING 5/26+, categorized
+// Onboarding call / Training / In-person / Other. Feeds an IMPORTDATA tab per region
+// sheet. ?region=<slug> filters by the same match rules as region.csv; omit for all.
+async function attendedExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const regionParam = (urlObj.searchParams.get('region') || '').toLowerCase();
+  const region = regionParam && regionParam !== 'all' ? REGIONS[regionParam] : null;
+  if (regionParam && regionParam !== 'all' && !region) return new Response('unknown region', { status: 404 });
+  const isAtt = v => { v = String(v || '').toLowerCase(); return v === 'attended' || v === 'walk-in' || v === 'walk in' || v === 'yes' || v === 'true'; };
+
+  // launch-name substrings (region launches; used to classify "In-person")
+  const launchNames = [];
+  for (const r of Object.values(REGIONS)) for (const s of (Array.isArray(r.launchEvent) ? r.launchEvent : [r.launchEvent])) if (s) launchNames.push(s.toLowerCase());
+  const classify = (name) => {
+    const s = String(name || '').toLowerCase();
+    if (!s) return null;
+    if (launchNames.some(l => s.includes(l.toLowerCase())) || /gotv rally|power camp|know your neighbor|kyn|info session|teacher meeting|parent action meeting/.test(s)) return 'inperson';
+    if (/onboarding|orientation|strategy call|emergency meeting|emergency mtg/.test(s)) return 'onboarding';
+    if (/training|amplify|voices for small schools/.test(s)) return 'training';
+    return 'other';
+  };
+  const A5_START = '2026-05-24';
+
+  // per-contact event history: attendance mirror + contact_log, campaign window only
+  const evBy = {};   // cid -> { event -> date }
+  const addEv = (cid, ev, dt) => { if (!cid || !ev) return; (evBy[cid] = evBy[cid] || {})[ev] = dt || evBy[cid][ev] || ''; };
+  {
+    const f = `AND(OR({attended}='Yes',{attended}='Attended',{attended}='Walk-in',{attended}=TRUE()),{date}!=BLANK(),IS_AFTER({date},'2026-05-23'))`;
+    let o = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=event&fields%5B%5D=date`;
+      if (o) q += `&offset=${encodeURIComponent(o)}`;
+      const d = await at(env, `/${BASE}/${EVENT_ATTENDANCE_TBL}${q}`);
+      for (const r of d.records) for (const cid of (r.fields.contact || [])) addEv(cid, String(r.fields.event || '').trim(), String(r.fields.date || ''));
+      o = d.offset;
+    } while (o);
+  }
+  {
+    const f = `AND({method}='Event attendance',OR({result}='Attended',{result}='Walk-in'))`;
+    let o = null;
+    do {
+      let q = `?filterByFormula=${encodeURIComponent(f)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=event&fields%5B%5D=rsvp_launch&fields%5B%5D=date`;
+      if (o) q += `&offset=${encodeURIComponent(o)}`;
+      const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+      for (const r of d.records) {
+        const dt = String(r.fields.date || '');
+        if (dt && dt.slice(0, 10) < A5_START) continue;   // campaign window only
+        const ev = String(r.fields.event || r.fields.rsvp_launch || '').trim();
+        for (const cid of (r.fields.contact || [])) addEv(cid, ev, dt.slice(0, 10));
+      }
+      o = d.offset;
+    } while (o);
+  }
+
+  // contacts: region filter + per-event attendField mirrors (belt & suspenders)
+  const metas = Object.values(EVENT_META).filter(m => m.attendField);
+  const baseFields = ['first', 'last', 'email', 'phone', 'school', 'district', 'county', 'dnc_flag_date'];
+  const allFields = baseFields.concat(metas.map(m => m.attendField));
+  let formula = `{dnc_flag_date}=''`;
+  if (region) {
+    const escF = s => String(s).replace(/'/g, "\\'");
+    const clauses = [];
+    for (const c of region.match.county)   clauses.push(`FIND('${escF(c)}',LOWER({county}&''))`);
+    for (const c of region.match.city)     clauses.push(`FIND('${escF(c)}',LOWER({city}&''))`);
+    for (const c of region.match.district) clauses.push(`FIND('${escF(c)}',LOWER({district}&''))`);
+    for (const c of (region.match.school || [])) clauses.push(`FIND('${escF(c)}',LOWER({school}&''))`);
+    formula = `AND({dnc_flag_date}='',OR(${clauses.join(',')}))`;
+  }
+  const rows = [];
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
+    for (const fl of allFields) q += `&fields%5B%5D=${encodeURIComponent(fl)}`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) {
+      const f = r.fields;
+      const fn = String(f.first || ''), ln = String(f.last || '');
+      if (/^(test|smoke|sample|audit|final|demo)\b/i.test(fn) || /^(test|smoke|sample|audit|final|demo)\b/i.test(ln)) continue;
+      if (/test|smoke|example/i.test(String(f.email || ''))) continue;
+      const events = { ...(evBy[r.id] || {}) };
+      for (const m of metas) if (isAtt(f[m.attendField])) events[m.attendEvent || m.label] = events[m.attendEvent || m.label] || m.date || '';
+      const cats = new Set();
+      for (const ev of Object.keys(events)) { const c = classify(ev); if (c) cats.add(c); }
+      if (!cats.size) continue;   // attended nothing since 5/26 — not on this list
+      rows.push({
+        id: r.id, first: fn, last: ln, email: f.email || '', phone: f.phone || '',
+        school: f.school || '', district: f.district || '', county: f.county || '',
+        any: 'Yes',
+        onboarding: cats.has('onboarding') ? 'Yes' : '',
+        training: cats.has('training') ? 'Yes' : '',
+        inperson: cats.has('inperson') ? 'Yes' : '',
+        other: cats.has('other') ? 'Yes' : '',
+        events: Object.entries(events).sort((a, b) => String(b[1]).localeCompare(String(a[1]))).map(e => e[0]).join('; '),
+      });
+    }
+    off = d.offset;
+  } while (off);
+  rows.sort((a, b) => (a.last + a.first).toLowerCase().localeCompare((b.last + b.first).toLowerCase()));
+  const cols = [['contact_id', 'id'], ['First', 'first'], ['Last', 'last'], ['Email', 'email'], ['Phone', 'phone'],
+    ['School', 'school'], ['District', 'district'], ['County', 'county'],
+    ['Attended any event 5/26+', 'any'], ['Onboarding call', 'onboarding'], ['Training', 'training'],
+    ['In-person (launch/canvass/camp)', 'inperson'], ['Other', 'other'], ['Events attended', 'events']];
+  const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const out = [cols.map(c => c[0]).join(',')];
+  for (const r of rows) out.push(cols.map(c => esc(r[c[1]])).join(','));
+  return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=300', 'Access-Control-Allow-Origin': '*' } });
 }
 
 // Whole-database cleaning feed: every contact + which region they route to + a duplicate hint.
