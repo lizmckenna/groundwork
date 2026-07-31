@@ -556,6 +556,78 @@ export default {
       // CSV import (zip-enrichment file appended as new rows instead of merging).
       // Dry-run by default; &confirm=1 executes. See mergeImportStubs.
       if (url.pathname === '/admin/merge-import-stubs' && request.method === 'GET') return await mergeImportStubs(env, url);
+      // Bulk-import event RSVPs (e.g. Google Form responses) so the door check-in
+      // roster recognizes registrants. Body: {event, dry?, people:[{first,last,email,phone,zip}]}.
+      // Match by email then phone; create missing contacts; one Event RSVP log row
+      // per contact per event (idempotent). Key-gated.
+      if (url.pathname === '/admin/import-rsvps' && request.method === 'POST') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const body = await request.json().catch(() => null);
+        if (!body || !body.event || !Array.isArray(body.people)) return json({ error: 'need {event, people[]}' }, 400);
+        const event = String(body.event).trim();
+        const dry = !!body.dry;
+        const evEsc = event.replace(/'/g, "\\'");
+        // existing RSVP'd contact ids for this event (idempotency)
+        const already = new Set();
+        let ro = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event RSVP',OR({rsvp_launch}='${evEsc}',{event}='${evEsc}'))`)}&pageSize=100&fields%5B%5D=contact`;
+          if (ro) q += `&offset=${encodeURIComponent(ro)}`;
+          const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+          for (const r of d.records) { const c = (r.fields.contact || [])[0]; if (c) already.add(c); }
+          ro = d.offset;
+        } while (ro);
+        const today = todayCT();
+        let matched = 0, created = 0, skipped = 0, logged = 0;
+        const logRecords = [];
+        for (const p of body.people.slice(0, 500)) {
+          const first = String(p.first || '').trim(), last = String(p.last || '').trim();
+          const email = String(p.email || '').toLowerCase().trim();
+          const phone = String(p.phone || '').trim();
+          if (!first || (!email && !phone)) { skipped++; continue; }
+          let cid = null;
+          try {
+            if (email) {
+              const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+              if (r.records.length) cid = r.records[0].id;
+            }
+            if (!cid && phone) {
+              const digits = phone.replace(/\D/g, '').slice(-10);
+              if (digits.length === 10) {
+                const r2 = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+                if (r2.records.length) cid = r2.records[0].id;
+              }
+            }
+          } catch (e) {}
+          if (cid) matched++;
+          else if (!dry) {
+            try {
+              const fields = { first, last, leader_ladder: 'Prospect', source: `gotv rsvp import · ${event}`, events_signed_up: [event] };
+              if (email) fields.email = email;
+              if (phone) fields.phone = phone;
+              if (String(p.zip || '').trim()) { fields.zip = String(p.zip).trim(); const c2 = zipToCounty(String(p.zip).trim().slice(0,5)); if (c2) fields.county = c2; }
+              const cr = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+              cid = cr.records[0].id; created++;
+            } catch (e) { skipped++; continue; }
+          } else created++;   // dry: would create
+          if (!cid || already.has(cid)) continue;
+          already.add(cid);
+          logged++;
+          if (!dry) logRecords.push({ fields: {
+            Summary: `${today} — RSVP (form import): ${event} (${first} ${last})`,
+            date: today, method: 'Event RSVP', result: 'Signed up', event, rsvp_launch: event, contact: [cid],
+            notes: 'Imported from Google Form registrations',
+          } });
+        }
+        if (!dry) {
+          for (let i = 0; i < logRecords.length; i += 10) {
+            await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: logRecords.slice(i, i + 10), typecast: true }) });
+          }
+          await invalidateReadCaches(env);
+          try { await env.KV_BINDING.delete('cache:roster:' + event); } catch (e) {}
+        }
+        return json({ ok: true, event, dry, matched_existing: matched, created_new: created, rsvp_rows_logged: logged, skipped });
+      }
       // Re-stamp contact_log rows from one event name to another (?from=&to=&confirm=1).
       // For rescheduled/renamed events whose check-in link or tracker still wrote the
       // old name (e.g. St. Charles 7/11 → 7/15). Patches rsvp_launch and event fields
