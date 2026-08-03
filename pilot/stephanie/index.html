@@ -1858,7 +1858,7 @@ async function fetchEventTracking() {
             <div class="qname"><a href="${airtableUrl(c.id)}" target="_blank" rel="noopener" title="Open in Airtable to edit" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border-hover);">${escapeHtml(c.name || '(no name)')}</a>${confirmStatusPill(cf.status)}${attPill}${zoomChip}</div>
             <div class="qmeta">${metaLine(c)}</div>
             <span class="qsignal" style="background:var(--gw-green-soft);color:var(--gw-green);">${evMeta.short} signed up · ${escapeHtml(c.last_attempt_date || 'unknown date')}</span>
-            ${c.source ? `<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase;">source: ${escapeHtml(c.source)}</div>` : ''}
+            ${(c.source || c.organizer) ? `<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase;">${c.source ? 'source: ' + escapeHtml(c.source) : ''}${c.source && c.organizer ? ' · ' : ''}${c.organizer ? 'organizer: ' + escapeHtml(c.organizer) : ''}</div>` : ''}
           </div>
           <div class="qcontact"><div>${phoneHtml}</div><div>${emailHtml}</div></div>
           <div class="qchecks-col">

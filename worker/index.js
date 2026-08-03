@@ -6268,7 +6268,7 @@ async function undoSave(request, env) {
 async function getConfirmees(env, urlObj) {
   const organizer = urlObj ? urlObj.searchParams.get('organizer') : null;
   const eventParam = urlObj ? (urlObj.searchParams.get('event') || '5_26') : '5_26';
-  const cacheKey = `cache:confirmees:${eventParam}:${organizer || 'all'}`;
+  const cacheKey = `cache:confirmees:v2:${eventParam}:${organizer || 'all'}`;   // v2: + organizer field
   const cached = await cacheGet(env, cacheKey);
   if (cached) return json(cached);
 
@@ -6287,7 +6287,7 @@ async function getConfirmees(env, urlObj) {
   const filter = orgFullName
     ? `AND(${signupClause},FIND('${orgFullName}',{assigned_organizer}&'')>0)`
     : signupClause;
-  const fields = ['Name','first','last','phone','email','school','district','last_attempt_date','source','signup_6_9_status'];
+  const fields = ['Name','first','last','phone','email','school','district','last_attempt_date','source','signup_6_9_status','assigned_organizer'];
   if (meta.signupField && !fields.includes(meta.signupField)) fields.push(meta.signupField);
   if (meta.attendField && !fields.includes(meta.attendField)) fields.push(meta.attendField);
   // Paginate fully — no hard cap. Each page = 100 records.
@@ -6363,6 +6363,7 @@ async function getConfirmees(env, urlObj) {
     district: r.fields.district || '',
     last_attempt_date: r.fields.last_attempt_date || '',
     source: r.fields.source || '',
+    organizer: (r.fields.assigned_organizer || []).map(id => ORGANIZER_NAME_BY_ID[id] || '').filter(Boolean).join('; '),
     confirm: stateByContact[r.id] || { email_sent: false, text_sent: false, call_made: false, status: null, last_date: null },
     attendance: r.fields[meta.attendField] || attendanceByContact[r.id]?.result || null,
     signup_6_9: r.fields.signup_6_9_status || null,
