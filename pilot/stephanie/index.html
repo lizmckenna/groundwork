@@ -1811,7 +1811,11 @@ async function fetchEventTracking() {
   chost.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-tertiary);">Loading…</div>`;
   try {
     const evType = EVENTS[activeEventKey]?.type;
-    const orgParam = (ORGANIZER === 'kathryn' && (evType === 'hm' || evType === 'amp' || evType === 'kyn')) ? '' : `&organizer=${ORGANIZER}`;
+    // Stephanie owns ALL 8/6 debrief reminder calls, so her debrief tab shows every
+    // signup regardless of assigned organizer (Emily Omohundro was invisible 8/3
+    // because she's assigned to Ellen G). Kathryn's hm/amp/kyn tabs work the same way.
+    const orgParam = ((ORGANIZER === 'kathryn' && (evType === 'hm' || evType === 'amp' || evType === 'kyn'))
+      || (ORGANIZER === 'stephanie' && activeEventKey === 'debrief_8_6')) ? '' : `&organizer=${ORGANIZER}`;
     const res = await authFetch(`${WORKER}/confirmees?event=${activeEventKey}${orgParam}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const list = await res.json();
