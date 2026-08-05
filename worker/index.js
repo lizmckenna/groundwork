@@ -4147,7 +4147,9 @@ async function reflectionsExportCsv(env, urlObj) {
   const rows = [];
   let off = null;
   do {
-    let q = `?filterByFormula=${encodeURIComponent(`{reflection_date}!=BLANK()`)}&pageSize=100`;
+    // NB: `{date}!=BLANK()` matches EMPTY dates too (Airtable quirk) — plain
+    // truthiness is the reliable "field is set" test.
+    let q = `?filterByFormula=${encodeURIComponent(`{reflection_date}`)}&pageSize=100`;
     for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
     if (off) q += `&offset=${encodeURIComponent(off)}`;
     const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
