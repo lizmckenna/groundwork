@@ -661,6 +661,8 @@ export default {
       if (url.pathname === '/export/commitments.csv' && request.method === 'GET') return await commitmentsExportCsv(env, url);
       // Typeahead + write path for the tracker "Add commitment" dialog.
       if (url.pathname === '/contact-search' && request.method === 'GET') return await contactSearch(env, url);
+      if (url.pathname === '/reflect' && request.method === 'POST') return await reflectSubmit(request, env);
+      if (url.pathname === '/export/reflections.csv' && request.method === 'GET') return await reflectionsExportCsv(env, url);
       if (url.pathname === '/commit-add' && request.method === 'POST') return await commitAdd(request, env);
       if (url.pathname === '/export/all.csv' && request.method === 'GET') return await allContactsExportCsv(env, url);
       if (url.pathname === '/sheet-region-update' && request.method === 'POST') return await sheetRegionUpdate(request, env);
@@ -808,6 +810,30 @@ export default {
             { name: 'Vote early', color: 'blueLight2' },
             { name: 'Election Day', color: 'yellowLight2' },
           ] } },
+        ];
+        const created = [], skipped = [], failed = [];
+        for (const f of wanted) {
+          if (have.has(f.name)) { skipped.push(f.name); continue; }
+          try {
+            await at(env, `/meta/bases/${BASE}/tables/${CONTACTS_TBL}/fields`, { method: 'POST', body: JSON.stringify(f) });
+            created.push(f.name);
+          } catch (e) { failed.push(`${f.name}: ${String(e.message || e).slice(0, 120)}`); }
+        }
+        return json({ created, skipped, failed });
+      }
+      // One-shot: contact fields backing the post-election reflection form
+      // (/reflect). Idempotent — skips fields that already exist.
+      if (url.pathname === '/admin/create-reflection-fields' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const meta = await at(env, `/meta/bases/${BASE}/tables`);
+        const tbl = (meta.tables || []).find(t => t.id === CONTACTS_TBL);
+        const have = new Set((tbl?.fields || []).map(f => f.name));
+        const wanted = [
+          { name: 'reflection_date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+          { name: 'reflection_leadership', type: 'multilineText' },
+          { name: 'reflection_power', type: 'multilineText' },
+          { name: 'reflection_forward', type: 'multilineText' },
+          { name: 'reflection_supports', type: 'multilineText' },
         ];
         const created = [], skipped = [], failed = [];
         for (const f of wanted) {
@@ -4034,6 +4060,113 @@ async function ingestS2W(request, env) {
   }
   await invalidateReadCaches(env);
   return json({ ok: true, received: leads.length, created, matched, skipped, errors: errors.slice(0, 10) });
+}
+
+// =========================================================================
+// /reflect — post-election reflection form (public page at /reflect/ on the
+// website). Four open-text answers stored on the contact record
+// (reflection_* fields, created via /admin/create-reflection-fields) plus a
+// contact_log row for history. Dedupe by email then phone; unknown people
+// are created and geo-routed like every other intake. Re-submitting
+// overwrites the reflection fields (latest wins) and adds a new log row.
+// =========================================================================
+async function reflectSubmit(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:reflect:${ip}`;
+  let count = 0;
+  try { count = parseInt(await env.KV_BINDING.get(rlKey) || '0'); } catch {}
+  if (count >= 20) return json({ error: 'too many requests, try again later' }, 429, { 'Retry-After': '300' });
+  try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
+  const body = await request.json().catch(() => null);
+  if (!body) return json({ error: 'bad json' }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
+  const clean = (s) => String(s == null ? '' : s).trim();
+  const first = clean(body.first), last = clean(body.last);
+  const email = clean(body.email).toLowerCase();
+  const phone = clean(body.phone);
+  if (!first || !last) return json({ error: 'first and last name are required' }, 400);
+  if (!email && !phone) return json({ error: 'please give an email or a phone number' }, 400);
+  const answers = {
+    reflection_leadership: clean(body.q_leadership).slice(0, 10000),
+    reflection_power: clean(body.q_power).slice(0, 10000),
+    reflection_forward: clean(body.q_forward).slice(0, 10000),
+    reflection_supports: clean(body.q_supports).slice(0, 10000),
+  };
+  if (!Object.values(answers).some(Boolean)) return json({ error: 'please answer at least one question' }, 400);
+  const date = todayCT();
+  // Dedupe by email then phone — same rules as every intake.
+  let cid = null;
+  try {
+    if (email) {
+      const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+      if (r.records.length) cid = r.records[0].id;
+    }
+    if (!cid && phone) {
+      const digits = phone.replace(/\D/g, '').slice(-10);
+      if (digits.length === 10) {
+        const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+        if (r.records.length) cid = r.records[0].id;
+      }
+    }
+  } catch (e) { /* lookup failed — create rather than lose the reflection */ }
+  if (cid) {
+    await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: { reflection_date: date, ...answers }, typecast: true }) });
+  } else {
+    const zip = clean(body.zip).slice(0, 5), city = clean(body.city);
+    const fields = { first, last, leader_ladder: 'Prospect', source: 'election reflection form', reflection_date: date, ...answers };
+    if (email) fields.email = email;
+    if (phone) fields.phone = phone;
+    if (city) fields.city = city;
+    if (zip) { fields.zip = zip; const county = zipToCounty(zip); if (county) fields.county = county; }
+    const orgId = deriveOrganizerId({ county: fields.county, city, zip });
+    if (orgId) fields.assigned_organizer = [orgId];
+    const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+    cid = c.records[0].id;
+  }
+  const qa = [
+    ['What did you learn about your own leadership?', answers.reflection_leadership],
+    ['What does the outcome tell us about power?', answers.reflection_power],
+    ['What should we prioritize / what excites you?', answers.reflection_forward],
+    ['Trainings or supports needed?', answers.reflection_supports],
+  ].filter(([, v]) => v).map(([q, v]) => `${q}\n${v}`).join('\n\n');
+  await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
+    Summary: `${date} — Election reflection: ${first} ${last}`,
+    date, method: 'Other', result: 'Reflection submitted',
+    notes: `ELECTION REFLECTION 2026\n\n${qa}`, contact: [cid],
+  } }], typecast: true }) });
+  await invalidateReadCaches(env);
+  return json({ ok: true });
+}
+
+// CSV of every reflection, newest first — feeds the "Election Reflections"
+// Google Sheet (same live-refresh pattern as the turnout trackers).
+async function reflectionsExportCsv(env, urlObj) {
+  if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+  const fields = ['first', 'last', 'email', 'phone', 'school', 'district', 'county', 'city', 'reflection_date',
+    'reflection_leadership', 'reflection_power', 'reflection_forward', 'reflection_supports'];
+  const rows = [];
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`{reflection_date}!=BLANK()`)}&pageSize=100`;
+    for (const f of fields) q += `&fields%5B%5D=${encodeURIComponent(f)}`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) rows.push(r.fields);
+    off = d.offset;
+  } while (off);
+  rows.sort((a, b) => String(b.reflection_date || '').localeCompare(String(a.reflection_date || '')));
+  const cols = [['Date', 'reflection_date'], ['First', 'first'], ['Last', 'last'], ['Region', '_region'], ['Email', 'email'], ['Phone', 'phone'],
+    ['School', 'school'], ['District', 'district'],
+    ['Leadership: what did you learn?', 'reflection_leadership'],
+    ['Power: what does the outcome tell us?', 'reflection_power'],
+    ['Priorities / excited for', 'reflection_forward'],
+    ['Trainings or supports needed', 'reflection_supports']];
+  const out = [cols.map(c => c[0]).join(',')];
+  for (const f of rows) {
+    f._region = regionFor(f) || '';
+    out.push(cols.map(c => csvEsc(f[c[1]])).join(','));
+  }
+  return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
 }
 
 async function launchRsvp(request, env) {
