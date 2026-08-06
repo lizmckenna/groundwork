@@ -849,6 +849,27 @@ export default {
         }
         return json({ created, skipped, failed });
       }
+      // One-shot cleanup: delete the synthetic smoke-test contact created while
+      // testing /fall-commit (email x@y.z) + its contact_log rows. Hardcoded to
+      // that exact email so it can never touch a real person.
+      if (url.pathname === '/admin/delete-fallcommit-test' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='x@y.z'`)}&maxRecords=2&fields%5B%5D=Name&fields%5B%5D=contact_log`);
+        if (!r.records.length) return json({ status: 'nothing to delete' });
+        const deleted = [];
+        for (const rec of r.records) {
+          const logIds = Array.isArray(rec.fields.contact_log) ? rec.fields.contact_log : [];
+          for (let i = 0; i < logIds.length; i += 10) {
+            const params = new URLSearchParams();
+            for (const id of logIds.slice(i, i + 10)) params.append('records[]', id);
+            try { await at(env, `/${BASE}/${CONTACT_LOG_TBL}?${params.toString()}`, { method: 'DELETE' }); } catch (e) {}
+          }
+          await at(env, `/${BASE}/${CONTACTS_TBL}?records[]=${rec.id}`, { method: 'DELETE' });
+          deleted.push({ id: rec.id, name: rec.fields.Name, logs_deleted: logIds.length });
+        }
+        await invalidateReadCaches(env);
+        return json({ status: 'deleted', deleted });
+      }
       // Rename an events-table record (e.g. after repurposing an event). All
       // event_attendance mirror rows linked to it show the new name instantly.
       if (url.pathname === '/admin/rename-event' && request.method === 'GET') {
