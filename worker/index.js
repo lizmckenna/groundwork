@@ -472,6 +472,7 @@ export default {
       if (url.pathname === '/amplifier-voters' && request.method === 'GET') return await amplifierVoters(request, env, url);
       if (url.pathname === '/amplifier-voter-update' && request.method === 'POST') return await amplifierVoterUpdate(request, env);
       if (url.pathname === '/amendment5-signup' && request.method === 'POST') return await amendment5Signup(request, env);
+      if (url.pathname === '/fall-commit' && request.method === 'POST') return await fallCommit(request, env);
       if (url.pathname === '/training-signup' && request.method === 'POST') return await trainingSignup(request, env);
       if (url.pathname === '/search-contact-public' && request.method === 'GET') return await searchContactPublic(request, env, url);
       if (url.pathname === '/list-fellows-public' && request.method === 'GET') return await listFellowsPublic(env);
@@ -3298,6 +3299,81 @@ async function houseMeetingSignup(request, env) {
 // Date-aware: before 5/27 → counts as 5/26 attendance, after → 6/9.
 // Each commitment becomes its own contact_log row (method=Commitment).
 // =========================================================================
+// Fall-organizing commitment form (8/6 debrief). Same dedupe + commitment-log
+// convention as the amendment5 form, but with the fall asks and WITHOUT the
+// auto-event-registration/email side effects (those pointed at campaign events).
+async function fallCommit(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:fallcommit:${ip}`;
+  let count = 0;
+  try { count = parseInt(await env.KV_BINDING.get(rlKey) || '0'); } catch {}
+  if (count >= 30) return json({ error: 'too many requests, try again later' }, 429);
+  try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
+  const body = await request.json().catch(() => ({}));
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
+  const clean = (s) => String(s || '').replace(/^[^\w\s@'.-]+/, '').trim();
+  const first = clean(body.first), last = clean(body.last);
+  const email = body.email ? String(body.email).toLowerCase().trim() : '';
+  const phone = body.phone ? String(body.phone).replace(/\D/g, '').slice(-10) : '';
+  if (!first || !last || (!email && !phone)) {
+    return json({ error: 'first and last name, plus an email or phone, are required' }, 400);
+  }
+  const ALLOWED = ['Join or build a team', 'Lobby day lead', 'Engage legislative candidates'];
+  const commitments = (Array.isArray(body.commitments) ? body.commitments : [])
+    .map(c => String(c).trim()).filter(c => ALLOWED.includes(c));
+  if (!commitments.length) return json({ error: 'pick at least one commitment' }, 400);
+  const teamLevels = (Array.isArray(body.team_levels) ? body.team_levels : [])
+    .map(x => String(x).trim()).filter(x => ['School', 'District', 'Regional'].includes(x));
+  // Dedupe by email then phone; create if new.
+  let cid = null;
+  if (email) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+    if (r.records.length) cid = r.records[0].id;
+  }
+  if (!cid && phone.length === 10) {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone}&'','\\\\D','')='${phone}'`)}&maxRecords=1`);
+    if (r.records.length) cid = r.records[0].id;
+  }
+  const today = todayCT();
+  if (!cid) {
+    const fields = { first, last, leader_ladder: 'Prospect', source: 'fall commitment form (8/6 debrief)' };
+    if (email) fields.email = email;
+    if (phone) fields.phone = phone;
+    if (clean(body.zip)) fields.zip = clean(body.zip).slice(0, 5);
+    if (clean(body.district)) fields.district = clean(body.district);
+    if (clean(body.school)) fields.school = clean(body.school);
+    const county = zipToCounty(clean(body.zip).slice(0, 5)) || '';
+    if (county) fields.county = county;
+    const orgId = deriveOrganizerId({ county, city: '', zip: fields.zip, district: fields.district });
+    if (orgId) fields.assigned_organizer = [orgId];
+    const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+    cid = c.records[0].id;
+  }
+  // Append to commitments_added (dated), one contact_log row per commitment.
+  const labelFor = (c) => c === 'Join or build a team' && teamLevels.length
+    ? `Join or build a team (${teamLevels.join('/')})` : c;
+  try {
+    const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}?fields%5B%5D=commitments_added`);
+    const curVal = String(cur.fields.commitments_added || '');
+    const addition = `${today} · ${commitments.map(labelFor).join('; ')}`;
+    const newVal = curVal ? `${curVal}\n${addition}` : addition;
+    await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: { commitments_added: newVal }, typecast: true }) });
+  } catch (e) { /* non-fatal */ }
+  for (const c of commitments) {
+    try {
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
+        Summary: `${today} — commitment: ${labelFor(c)}`,
+        date: today, method: 'Commitment', result: 'Committed',
+        event: labelFor(c),
+        notes: 'From fall commitment form (8/6 debrief)',
+        contact: [cid],
+      } }], typecast: true }) });
+    } catch (e) { /* per-row non-fatal */ }
+  }
+  await invalidateReadCaches(env);
+  return json({ ok: true, contact_id: cid, commitments: commitments.map(labelFor) });
+}
+
 async function amendment5Signup(request, env) {
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   const rlKey = `rl:am5signup:${ip}`;
