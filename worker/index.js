@@ -8846,6 +8846,7 @@ async function attendedExportCsv(env, urlObj) {
       o = d.offset;
     } while (o);
   }
+
   {
     const f = `AND({method}='Event attendance',OR({result}='Attended',{result}='Walk-in'))`;
     let o = null;
