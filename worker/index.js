@@ -1851,12 +1851,21 @@ export default {
           .flatMap(n => [String(n).toLowerCase().trim(), _cleanForIgnore(n)]));
         if (!attendees.length) return json({ error: 'attendees required' }, 400);
         const meta = eventMeta(ev);
-        if (!meta.signupField) return json({ error: `event ${ev} has no signup field` }, 400);
+        // Makeup-style events (no per-event Airtable fields, e.g. the 8/6 debrief)
+        // register via events_signed_up; attendance is recorded as contact_log rows
+        // + the mirror instead of a contact field patch.
+        const isMakeup = !meta.signupField;
+        if (isMakeup && !meta.attendEvent) return json({ error: `event ${ev} has no signup field or attendEvent` }, 400);
         // Fetch all signed-up contacts for the event
         const rows = [];
         let off = null;
         do {
-          let q = `?filterByFormula=${encodeURIComponent(`{${meta.signupField}}='Signed up'`)}&pageSize=100&fields%5B%5D=Name&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone&fields%5B%5D=${encodeURIComponent(meta.confirmField)}&fields%5B%5D=${encodeURIComponent(meta.attendField)}`;
+          const signupClause = isMakeup
+            ? `FIND('${String(meta.attendEvent).replace(/'/g, "\\'")}',ARRAYJOIN({events_signed_up}))>0`
+            : `{${meta.signupField}}='Signed up'`;
+          let q = `?filterByFormula=${encodeURIComponent(signupClause)}&pageSize=100&fields%5B%5D=Name&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone`;
+          if (meta.confirmField) q += `&fields%5B%5D=${encodeURIComponent(meta.confirmField)}`;
+          if (meta.attendField) q += `&fields%5B%5D=${encodeURIComponent(meta.attendField)}`;
           if (off) q += `&offset=${encodeURIComponent(off)}`;
           const p = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
           rows.push(...p.records);
@@ -1918,13 +1927,37 @@ export default {
         if (apply) {
           const patchAttField = meta.attendField;
           const mirrorEv = mirrorEventName(meta);
-          for (let i = 0; i < attendedIds.length; i += 10) {
-            const batch = attendedIds.slice(i, i + 10).map(id => ({ id, fields: { [patchAttField]: 'Attended' } }));
-            await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+          if (patchAttField) {
+            for (let i = 0; i < attendedIds.length; i += 10) {
+              const batch = attendedIds.slice(i, i + 10).map(id => ({ id, fields: { [patchAttField]: 'Attended' } }));
+              await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+            }
+            for (let i = 0; i < noShowIds.length; i += 10) {
+              const batch = noShowIds.slice(i, i + 10).map(id => ({ id, fields: { [patchAttField]: 'No-show' } }));
+              await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+            }
           }
-          for (let i = 0; i < noShowIds.length; i += 10) {
-            const batch = noShowIds.slice(i, i + 10).map(id => ({ id, fields: { [patchAttField]: 'No-show' } }));
-            await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+          // Makeup events: attendance lives in contact_log (what rosters, dashboards
+          // and attended.csv read for these events). Idempotent: skip contacts that
+          // already have an Event-attendance row for this event.
+          if (isMakeup) {
+            const evEsc = String(meta.attendEvent).replace(/'/g, "\\'");
+            const existing = new Set();
+            let lo = null;
+            do {
+              let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{event}='${evEsc}')`)}&pageSize=100&fields%5B%5D=contact`;
+              if (lo) q += `&offset=${encodeURIComponent(lo)}`;
+              const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+              for (const r of d.records) (r.fields.contact || []).forEach(id => existing.add(id));
+              lo = d.offset;
+            } while (lo);
+            const today = todayCT();
+            const mkRows = [];
+            for (const id of attendedIds) if (!existing.has(id)) mkRows.push({ fields: { Summary: `${today} — Attended: ${meta.attendEvent}`, date: today, method: 'Event attendance', result: 'Attended', event: meta.attendEvent, contact: [id], notes: 'zoom participants batch' } });
+            for (const id of noShowIds) if (!existing.has(id)) mkRows.push({ fields: { Summary: `${today} — No-show: ${meta.attendEvent}`, date: today, method: 'Event attendance', result: 'No-show', event: meta.attendEvent, contact: [id], notes: 'zoom participants batch' } });
+            for (let i = 0; i < mkRows.length; i += 10) {
+              await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: mkRows.slice(i, i + 10), typecast: true }) });
+            }
           }
           // Also write through to the event_attendance mirror so grid views reflect
           // reality. Mirror uses "Showed up" / "No show" (contacts uses "Attended" /
@@ -1964,8 +1997,14 @@ export default {
                 const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
                 cid = c.records[0].id;
               }
-              // Patch attendance status on the contact
-              await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: { [patchAttField]: 'Walk-in' }, typecast: true }) });
+              // Patch attendance status on the contact (field events) or log a
+              // Walk-in attendance row (makeup events)
+              if (patchAttField) {
+                await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: { [patchAttField]: 'Walk-in' }, typecast: true }) });
+              } else if (isMakeup) {
+                const today = todayCT();
+                await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: { Summary: `${today} — Walk-in: ${meta.attendEvent}`, date: today, method: 'Event attendance', result: 'Walk-in', event: meta.attendEvent, contact: [cid], notes: 'zoom participants batch (not pre-registered)' } }], typecast: true }) });
+              }
               // Write-through to the mirror as "Showed up" (walk-in is still a show)
               await mirrorWriteThrough(env, cid, mirrorEv, 'Showed up');
             } catch (e) { /* per-walk-in errors non-fatal */ }
