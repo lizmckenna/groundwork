@@ -1945,7 +1945,7 @@ export default {
             const existing = new Set();
             let lo = null;
             do {
-              let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{event}='${evEsc}')`)}&pageSize=100&fields%5B%5D=contact`;
+              let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{event}='${evEsc}',OR({result}='Attended',{result}='No-show',{result}='Walk-in'))`)}&pageSize=100&fields%5B%5D=contact`;
               if (lo) q += `&offset=${encodeURIComponent(lo)}`;
               const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
               for (const r of d.records) (r.fields.contact || []).forEach(id => existing.add(id));
