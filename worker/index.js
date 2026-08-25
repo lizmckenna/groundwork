@@ -242,13 +242,16 @@ const CANARY_ALERT_TO = ['emckenna@hks.harvard.edu'];
 // refresh silently 403s and shows stale counts (the 2026-07-08 incident). The
 // daily export canary asserts they still match and emails CANARY_ALERT_TO if not.
 const SHEET_EXPORT_KEY = 'p4mps-rKItacZ0arZKMy12UZuRBYwJVP_LJ4iU';
-const REPLY_TO_CONFIRM = 'lanee4kckids@gmail.com';
+const REPLY_TO_CONFIRM = 'ellenginkc@gmail.com';   // Ellen Glover (was LaNeé — all outgoing email signs as Ellen per Liz, 8/28)
 // Per-organizer profile used by sendConfirmationEmail.
-// Key is the lowercase organizer slug the dashboard sends (e.g. 'lanee', 'stephanie').
-// If missing → falls back to LaNeé.
+// Key is the lowercase organizer slug the dashboard sends (e.g. 'stephanie').
+// If missing → falls back to 'default' (Ellen Glover).
+// NB: LaNeé's slugs deliberately resolve to Ellen too (8/28, Liz: no outgoing
+// email should sign as LaNeé). Restore per-organizer entries if that changes.
 const ORGANIZER_PROFILE = {
-  'lanee':     { name: 'LaNeé Bridewell',    group: 'Parents for Missouri Public Schools', reply_to: 'lanee4kckids@gmail.com' },
-  'laneé':     { name: 'LaNeé Bridewell',    group: 'Parents for Missouri Public Schools', reply_to: 'lanee4kckids@gmail.com' },
+  'default':   { name: 'Ellen Glover',       group: 'Parents for Missouri Public Schools', reply_to: 'ellenginkc@gmail.com' },
+  'lanee':     { name: 'Ellen Glover',       group: 'Parents for Missouri Public Schools', reply_to: 'ellenginkc@gmail.com' },
+  'laneé':     { name: 'Ellen Glover',       group: 'Parents for Missouri Public Schools', reply_to: 'ellenginkc@gmail.com' },
   'stephanie': { name: 'Stephanie Rittgers', group: 'Parents for Missouri Public Schools', reply_to: 'srttgrs+civicwork@gmail.com' },
   'kathryn':   { name: 'Kathryn',            group: 'Parents for Missouri Public Schools', reply_to: 'kathryn@rootedstrategy.com' },
 };
@@ -2111,8 +2114,8 @@ export default {
         const L = (ics || '').split('\r\n');
         return json({ event: evKey, zoomlink_resolved: link, button_would_render: !!link,
           email_subject: evObj.subject || '',
-          email_signoff_name: evObj.signoff_name || 'LaNeé Bridewell (default)',
-          email_reply_to: evObj.signoff_reply_to || 'lanee4kckids@gmail.com (default)',
+          email_signoff_name: evObj.signoff_name || 'Ellen Glover (default)',
+          email_reply_to: evObj.signoff_reply_to || 'ellenginkc@gmail.com (default)',
           email_body_date: evObj.big_date_html || '',
           ics_location: L.find(l => l.startsWith('LOCATION')) || '(no ics)',
           ics_method: L.find(l => l.startsWith('METHOD')) || '',
@@ -6471,7 +6474,7 @@ async function sendConfirmationEmail(env, toEmail, firstName, contactId, organiz
   const date = todayCT();
   const safeName = firstName ? firstName : '';
   const greetingComma = safeName ? `, ${escapeHtml(safeName)}` : '';
-  const profile = ORGANIZER_PROFILE[String(organizer || '').toLowerCase()] || ORGANIZER_PROFILE['lanee'];
+  const profile = ORGANIZER_PROFILE[String(organizer || '').toLowerCase()] || ORGANIZER_PROFILE['default'];
   let replyTo = profile.reply_to;
   let signoffName = profile.name;
   const signoffGroup = profile.group;
