@@ -665,6 +665,7 @@ export default {
       // Typeahead + write path for the tracker "Add commitment" dialog.
       if (url.pathname === '/contact-search' && request.method === 'GET') return await contactSearch(env, url);
       if (url.pathname === '/reflect' && request.method === 'POST') return await reflectSubmit(request, env);
+      if (url.pathname === '/pof-apply' && request.method === 'POST') return await pofApply(request, env);
       if (url.pathname === '/export/reflections.csv' && request.method === 'GET') return await reflectionsExportCsv(env, url);
       if (url.pathname === '/commit-add' && request.method === 'POST') return await commitAdd(request, env);
       if (url.pathname === '/export/all.csv' && request.method === 'GET') return await allContactsExportCsv(env, url);
@@ -823,6 +824,55 @@ export default {
           } catch (e) { failed.push(`${f.name}: ${String(e.message || e).slice(0, 120)}`); }
         }
         return json({ created, skipped, failed });
+      }
+      // One-shot: create the pof_applications table (Parent Organizing
+      // Fellowship Cohort 2, Sept 2026 — fed by /fellowship/ on the website).
+      // Idempotent — no-op if the table already exists.
+      if (url.pathname === '/admin/create-pof-table' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const meta = await at(env, `/meta/bases/${BASE}/tables`);
+        const existing = (meta.tables || []).find(t => t.name === 'pof_applications');
+        if (existing) return json({ ok: true, existed: true, id: existing.id });
+        const YN = { choices: [{ name: 'Yes', color: 'greenLight2' }, { name: 'No', color: 'redLight2' }] };
+        const fields = [
+          { name: 'Name', type: 'singleLineText' },
+          { name: 'status', type: 'singleSelect', options: { choices: [
+            { name: 'New', color: 'blueLight2' }, { name: 'Reviewing', color: 'yellowLight2' },
+            { name: 'Interview', color: 'purpleLight2' }, { name: 'Accepted', color: 'greenLight2' },
+            { name: 'Waitlist', color: 'grayLight2' }, { name: 'Declined', color: 'redLight2' } ] } },
+          { name: 'submitted', type: 'date', options: { dateFormat: { name: 'iso' } } },
+          { name: 'first', type: 'singleLineText' }, { name: 'last', type: 'singleLineText' },
+          { name: 'phone', type: 'phoneNumber' }, { name: 'email', type: 'email' },
+          { name: 'street_address', type: 'singleLineText' }, { name: 'city', type: 'singleLineText' },
+          { name: 'zip', type: 'singleLineText' },
+          { name: 'school', type: 'singleLineText' }, { name: 'district', type: 'singleLineText' },
+          { name: 'current_role', type: 'multilineText' }, { name: 'kids', type: 'multilineText' },
+          { name: 'organizing_excites', type: 'multilineText' }, { name: 'leadership_meaning', type: 'multilineText' },
+          { name: 'why_organize', type: 'multilineText' }, { name: 'hope', type: 'multilineText' },
+          { name: 'dropoff_pickup', type: 'singleSelect', options: YN },
+          { name: 'team_type', type: 'singleSelect', options: { choices: [
+            { name: 'School-based' }, { name: 'District-based' }, { name: 'Not sure yet' } ] } },
+          { name: 'team_why', type: 'multilineText' },
+          { name: 'magic_wand', type: 'multilineText' },
+          { name: 'core_team_size', type: 'number', options: { precision: 0 } },
+          { name: 'supporter_base_size', type: 'number', options: { precision: 0 } },
+          { name: 'questions_for_us', type: 'multilineText' }, { name: 'how_heard', type: 'singleLineText' },
+          { name: 'commit_hours_weekly', type: 'singleSelect', options: YN },
+          { name: 'commit_onboarding_9_29', type: 'singleSelect', options: YN },
+          { name: 'commit_biweekly_checkins', type: 'singleSelect', options: YN },
+          { name: 'commit_power_camp', type: 'singleSelect', options: YN },
+          { name: 'commit_retreat_11_14', type: 'singleSelect', options: YN },
+          { name: 'commit_lobby_day_jan', type: 'singleSelect', options: YN },
+          { name: 'commit_offboarding_1_25', type: 'singleSelect', options: YN },
+          { name: 'commitment_notes', type: 'multilineText' },
+          { name: 'contact', type: 'multipleRecordLinks', options: { linkedTableId: CONTACTS_TBL } },
+          { name: 'source', type: 'singleLineText' },
+        ];
+        const created = await at(env, `/meta/bases/${BASE}/tables`, { method: 'POST', body: JSON.stringify({
+          name: 'pof_applications',
+          description: 'Parent Organizing Fellowship Cohort 2 applications (Sept 29 2026 – Jan 26 2027). Fed by /fellowship/ on the website. Review workflow lives in the status field.',
+          fields }) });
+        return json({ ok: true, existed: false, id: created.id });
       }
       // One-shot: contact fields backing the post-election reflection form
       // (/reflect). Idempotent — skips fields that already exist.
@@ -4307,6 +4357,106 @@ async function reflectionsExportCsv(env, urlObj) {
     out.push(cols.map(c => csvEsc(f[c[1]])).join(','));
   }
   return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// =========================================================================
+// /pof-apply — Parent Organizing Fellowship Cohort 2 application (public
+// page at /fellowship/). Writes one row to the pof_applications table
+// (created via /admin/create-pof-table), dedupes/creates the contact like
+// every intake, links the row to the contact, and logs the application on
+// their record. Per Ellen G: each key-date expectation is its own Yes/No,
+// with a notes field carrying any "if no" explanations.
+// =========================================================================
+async function pofApply(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:pofapply:${ip}`;
+  let count = 0;
+  try { count = parseInt(await env.KV_BINDING.get(rlKey) || '0'); } catch {}
+  if (count >= 10) return json({ error: 'too many requests, try again later' }, 429, { 'Retry-After': '300' });
+  try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
+  const body = await request.json().catch(() => null);
+  if (!body) return json({ error: 'bad json' }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
+  const clean = (s) => String(s == null ? '' : s).trim();
+  const long = (s) => clean(s).slice(0, 10000);
+  const first = clean(body.first), last = clean(body.last);
+  const email = clean(body.email).toLowerCase();
+  const phone = clean(body.phone);
+  if (!first || !last) return json({ error: 'first and last name are required' }, 400);
+  if (!email && !phone) return json({ error: 'please give an email or a phone number' }, 400);
+  const YN = (v) => { const s = clean(v); return s === 'Yes' || s === 'No' ? s : ''; };
+  const zip = clean(body.zip).slice(0, 5), city = clean(body.city);
+  const date = todayCT();
+  // Dedupe/create the contact so the applicant exists in the main database too.
+  let cid = null;
+  try {
+    if (email) {
+      const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+      if (r.records.length) cid = r.records[0].id;
+    }
+    if (!cid && phone) {
+      const digits = phone.replace(/\D/g, '').slice(-10);
+      if (digits.length === 10) {
+        const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`REGEX_REPLACE({phone},'\\\\D','')='${digits}'`)}&maxRecords=1`);
+        if (r.records.length) cid = r.records[0].id;
+      }
+    }
+    if (!cid) {
+      const cf = { first, last, leader_ladder: 'Prospect', source: 'POF fellowship application' };
+      if (email) cf.email = email;
+      if (phone) cf.phone = phone;
+      if (city) cf.city = city;
+      if (clean(body.street_address)) cf.street_address = clean(body.street_address);
+      if (clean(body.school)) cf.school = clean(body.school);
+      if (clean(body.district)) cf.district = clean(body.district);
+      if (zip) { cf.zip = zip; const county = zipToCounty(zip); if (county) cf.county = county; }
+      const orgId = deriveOrganizerId({ county: cf.county, city, zip, district: cf.district });
+      if (orgId) cf.assigned_organizer = [orgId];
+      const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: cf }], typecast: true }) });
+      cid = c.records[0].id;
+    }
+  } catch (e) { /* never lose an application over contact plumbing */ }
+  const fields = {
+    Name: `${first} ${last}`, status: 'New', submitted: date,
+    first, last, email, phone,
+    street_address: clean(body.street_address), city, zip,
+    school: clean(body.school), district: clean(body.district),
+    current_role: long(body.current_role), kids: long(body.kids),
+    organizing_excites: long(body.organizing_excites), leadership_meaning: long(body.leadership_meaning),
+    why_organize: long(body.why_organize), hope: long(body.hope),
+    dropoff_pickup: YN(body.dropoff_pickup),
+    team_type: ['School-based', 'District-based', 'Not sure yet'].includes(clean(body.team_type)) ? clean(body.team_type) : '',
+    team_why: long(body.team_why), magic_wand: long(body.magic_wand),
+    questions_for_us: long(body.questions_for_us), how_heard: clean(body.how_heard).slice(0, 500),
+    commit_hours_weekly: YN(body.commit_hours_weekly),
+    commit_onboarding_9_29: YN(body.commit_onboarding_9_29),
+    commit_biweekly_checkins: YN(body.commit_biweekly_checkins),
+    commit_power_camp: YN(body.commit_power_camp),
+    commit_retreat_11_14: YN(body.commit_retreat_11_14),
+    commit_lobby_day_jan: YN(body.commit_lobby_day_jan),
+    commit_offboarding_1_25: YN(body.commit_offboarding_1_25),
+    commitment_notes: long(body.commitment_notes),
+    source: clean(body.source) || 'website /fellowship/',
+  };
+  const coreN = parseInt(clean(body.core_team_size), 10);
+  const suppN = parseInt(clean(body.supporter_base_size), 10);
+  if (!isNaN(coreN)) fields.core_team_size = coreN;
+  if (!isNaN(suppN)) fields.supporter_base_size = suppN;
+  for (const k of Object.keys(fields)) if (fields[k] === '') delete fields[k];
+  if (cid) fields.contact = [cid];
+  await at(env, `/${BASE}/${encodeURIComponent('pof_applications')}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+  if (cid) {
+    try {
+      await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
+        Summary: `${date} — Applied to Parent Organizing Fellowship (Cohort 2)`,
+        date, method: 'Other', result: 'Application submitted',
+        notes: 'POF Cohort 2 application via /fellowship/ — full answers in the pof_applications table.',
+        contact: [cid],
+      } }], typecast: true }) });
+    } catch (e) {}
+  }
+  await invalidateReadCaches(env);
+  return json({ ok: true });
 }
 
 async function launchRsvp(request, env) {
