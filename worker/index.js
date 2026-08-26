@@ -828,6 +828,20 @@ export default {
         }
         return json({ created, skipped, failed });
       }
+      // Quick read: who has applied to the POF fellowship (name, date, status).
+      if (url.pathname === '/admin/pof-list' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const rows = [];
+        let off = null;
+        do {
+          let q = `?pageSize=100&fields%5B%5D=Name&fields%5B%5D=submitted&fields%5B%5D=status&fields%5B%5D=email&fields%5B%5D=district`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const d = await at(env, `/${BASE}/${encodeURIComponent('pof_applications')}${q}`);
+          for (const r of d.records) rows.push({ id: r.id, ...r.fields });
+          off = d.offset;
+        } while (off);
+        return json({ count: rows.length, applications: rows });
+      }
       // One-shot: create the pof_applications table (Parent Organizing
       // Fellowship Cohort 2, Sept 2026 — fed by /fellowship/ on the website).
       // Idempotent — no-op if the table already exists.
