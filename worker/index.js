@@ -828,6 +828,15 @@ export default {
         }
         return json({ created, skipped, failed });
       }
+      // Delete specific pof_applications rows by record id (test-row cleanup).
+      if (url.pathname === '/admin/pof-delete' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const ids = String(url.searchParams.get('ids') || '').split(',').map(s => s.trim()).filter(s => /^rec[A-Za-z0-9]{14}$/.test(s));
+        if (!ids.length) return json({ error: 'ids required' }, 400);
+        const q = ids.map(id => `records[]=${id}`).join('&');
+        const d = await at(env, `/${BASE}/${encodeURIComponent('pof_applications')}?${q}`, { method: 'DELETE' });
+        return json({ deleted: (d.records || []).map(r => r.id) });
+      }
       // Quick read: who has applied to the POF fellowship (name, date, status).
       if (url.pathname === '/admin/pof-list' && request.method === 'GET') {
         if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
