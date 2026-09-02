@@ -3795,6 +3795,17 @@ async function trainingSignup(request, env) {
 
   // One contact_log row per training selected. Recruiter name lives here (not in
   // the linked recruited_by field) so a free-text name can't fail the signup.
+  // Parent Power Camp asks reflection + logistics questions on the form; those
+  // answers ride in the notes of the camp rows only, so they show in the camp's
+  // grid view without noising up other trainings' rows.
+  const campBits = [];
+  if (body.reflect_issues) campBits.push(`Wants to work on: ${String(body.reflect_issues).trim()}`);
+  if (body.reflect_hopes) campBits.push(`Hopes to get out of it: ${String(body.reflect_hopes).trim()}`);
+  if (body.reflect_questions) campBits.push(`Questions for organizers: ${String(body.reflect_questions).trim()}`);
+  if (body.dietary) campBits.push(`Dietary: ${String(body.dietary).trim()}`);
+  if (body.spanish) campBits.push('Needs Spanish translation');
+  if (body.accessibility) campBits.push(`Accessibility: ${String(body.accessibility).trim()}`);
+  if (body.childcare) campBits.push(`Childcare needed${body.childcare_kids ? ' — kids: ' + String(body.childcare_kids).trim() : ''}`);
   const logRecords = events.map(evName => ({
     fields: {
       Summary: `${today} — training signup: ${evName}`,
@@ -3803,7 +3814,11 @@ async function trainingSignup(request, env) {
       result: 'Signed up',
       event: evName,
       contact: [contactId],
-      notes: [source ? `Source: ${source}` : 'Training signup form', cRecruiter ? `Recruited by: ${cRecruiter}` : ''].filter(Boolean).join(' | '),
+      notes: [
+        source ? `Source: ${source}` : 'Training signup form',
+        cRecruiter ? `Recruited by: ${cRecruiter}` : '',
+        ...(/parent power camp/i.test(String(evName)) ? campBits : []),
+      ].filter(Boolean).join(' | '),
     }
   }));
 
