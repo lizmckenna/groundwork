@@ -114,6 +114,11 @@ const EVENT_META = {
   'ppc_stl_10_3': { type: 'makeup', inPerson: true, date: '2026-10-03', time: '10:00am CT', label: 'STL Parent Power Camp 10/3', emailTitle: 'St. Louis Area Parent Power Camp', confirmEvent: 'Confirm STL PPC 10/3', attendEvent: 'STL Parent Power Camp 10/3', confirmField: null, attendField: null, signupField: null, confirmTag: 'stl ppc confirm', attendTag: 'stl ppc 10/3', icsTitle: 'St. Louis Area Parent Power Camp (Parents for Missouri Public Schools)' },
   // KC-area camp per the Fall2026 Training Calendar sheet (10am–3pm confirmed 8/25).
   'ppc_kc_10_10': { type: 'makeup', inPerson: true, date: '2026-10-10', time: '10:00am CT', label: 'KC Parent Power Camp 10/10', emailTitle: 'KC Area Parent Power Camp', confirmEvent: 'Confirm KC PPC 10/10', attendEvent: 'KC Parent Power Camp 10/10', confirmField: null, attendField: null, signupField: null, confirmTag: 'kc ppc confirm', attendTag: 'kc ppc 10/10', icsTitle: 'KC Area Parent Power Camp (Parents for Missouri Public Schools)' },
+  // Parents for KC Kids Back to School Organizing Meeting (Molly, 9/2). In-person at
+  // Central Presbyterian Church; KV zoomlink:bts_10_6 carries the address (in-person
+  // events use that slot as the location in the email + ICS). durationMin covers
+  // dinner 6:00 + program 6:30–7:30. Signup page: /back-to-school/ on the site.
+  'bts_10_6': { type: 'makeup', inPerson: true, date: '2026-10-06', time: '6:00pm CT', durationMin: 90, label: 'Back to School Organizing 10/6', emailTitle: 'Back to School Organizing Meeting (Parents for KC Kids)', confirmEvent: 'Confirm BTS 10/6', attendEvent: 'KC Back to School Organizing Meeting 10/6', confirmField: null, attendField: null, signupField: null, confirmTag: 'bts 10/6 confirm', attendTag: 'back to school 10/6', icsTitle: 'Back to School Organizing Meeting (Parents for KC Kids)' },
 };
 function eventMeta(key){ return EVENT_META[key] || EVENT_META['5_26']; }
 // The soonest upcoming onboarding key (so nothing is ever hardcoded to a past date).
@@ -3805,6 +3810,7 @@ async function trainingSignup(request, env) {
   if (body.dietary) campBits.push(`Dietary: ${String(body.dietary).trim()}`);
   if (body.spanish) campBits.push('Needs Spanish translation');
   if (body.accessibility) campBits.push(`Accessibility: ${String(body.accessibility).trim()}`);
+  if (body.dinner) campBits.push(`Dinner: ${String(body.dinner).trim()}${body.dinner_count ? ` — ${String(body.dinner_count).trim()} eating` : ''}`);
   if (body.childcare) campBits.push(`Childcare needed${body.childcare_kids ? ' — kids: ' + String(body.childcare_kids).trim() : ''}`);
   const logRecords = events.map(evName => ({
     fields: {
@@ -3817,7 +3823,7 @@ async function trainingSignup(request, env) {
       notes: [
         source ? `Source: ${source}` : 'Training signup form',
         cRecruiter ? `Recruited by: ${cRecruiter}` : '',
-        ...(/parent power camp/i.test(String(evName)) ? campBits : []),
+        ...(/parent power camp|back to school organizing/i.test(String(evName)) ? campBits : []),
       ].filter(Boolean).join(' | '),
     }
   }));
@@ -6245,7 +6251,7 @@ function buildEventIcs(eventKey, ev, attendeeEmail, attendeeName, method) {
   const [Y, Mo, D] = meta.date.split('-').map(n => parseInt(n, 10));
   if (!Y || !Mo || !D) return null;
   const { h, m } = parseEventTime(meta.time);
-  const dur = ICS_TYPE_DURATION[meta.type] || 60;
+  const dur = meta.durationMin || ICS_TYPE_DURATION[meta.type] || 60;
   const pad = n => String(n).padStart(2, '0');
   let eh = h, em = m + dur; eh += Math.floor(em / 60); em = em % 60;
   const start = `${Y}${pad(Mo)}${pad(D)}T${pad(h)}${pad(m)}00`;
@@ -6258,7 +6264,7 @@ function buildEventIcs(eventKey, ev, attendeeEmail, attendeeName, method) {
     : `${meta.label} (Parents for Missouri Public Schools)`;
   const loc = meta.inPerson ? (link || 'In person (details by email)') : (link ? 'Zoom' : 'Zoom (link by email)');
   const desc = (meta.inPerson ? '' : (link ? `Join on Zoom: ${link}\n\n` : 'Your Zoom link arrives by email before the event.\n\n'))
-    + 'Parents for Missouri Public Schools. Vote NO on Amendment 5 to protect Missouri public school funding. Aug 4.';
+    + 'Parents for Missouri Public Schools · parents4mopublicschools.org';
   let stamp = '20260101T000000Z';
   try { stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z'); } catch (e) {}
   // Stable UID per person+event so a re-send UPDATES the same calendar entry (no duplicates).
@@ -6300,7 +6306,7 @@ function calendarLinks(eventKey, ev) {
   const [Y, Mo, D] = meta.date.split('-').map(n => parseInt(n, 10));
   if (!Y || !Mo || !D) return null;
   const { h, m } = parseEventTime(meta.time);
-  const dur = ICS_TYPE_DURATION[meta.type] || 60;
+  const dur = meta.durationMin || ICS_TYPE_DURATION[meta.type] || 60;
   const pad = n => String(n).padStart(2, '0');
   let eh = h, em = m + dur; eh += Math.floor(em / 60); em = em % 60;
   const localStart = `${Y}${pad(Mo)}${pad(D)}T${pad(h)}${pad(m)}00`;
@@ -6592,7 +6598,9 @@ ${ev.preview}
               </div>
               <div style="margin:18px 0 0">
                 ${isInPerson
-                  ? `<div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#1A2418">You're confirmed. Location details arrive by email before the event.</div>`
+                  ? (ev.zoom_link
+                    ? `<div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:15px;color:#1A2418">${ev.zoom_link}</div><div style="margin:8px 0 0"><a href="https://maps.google.com/?q=${encodeURIComponent(ev.zoom_link)}" style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:13px;color:#3e4f6e;text-decoration:underline">Open in Maps →</a></div>`
+                    : `<div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#1A2418">You're confirmed. Location details arrive by email before the event.</div>`)
                   : (ev.zoom_link
                     ? `<a href="${ev.zoom_link}" style="display:inline-block;background:#1A2418;color:#E9E5CE;text-decoration:none;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.06em;padding:14px 26px;border-radius:8px">Join the Zoom →</a>`
                     : `<div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#1A2418">You're confirmed. The Zoom link arrives by email before the event.</div>`)}
@@ -9806,7 +9814,7 @@ async function trainingRosterCsv(env, urlObj) {
   if (!ok && t) { const scoped = await env.KV_BINDING.get(`roster-token:${event}`); ok = scoped && t === scoped; }
   if (!ok) return new Response('forbidden', { status: 403 });
   const evEsc = event.replace(/'/g, "\\'");
-  const order = []; const seen = new Set(); const rdate = {}; const recruited = {};
+  const order = []; const seen = new Set(); const rdate = {}; const recruited = {}; const details = {};
   let off = null;
   do {
     let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{result}='Signed up',{event}='${evEsc}')`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=date&fields%5B%5D=notes`;
@@ -9818,6 +9826,11 @@ async function trainingRosterCsv(env, urlObj) {
       seen.add(cid); order.push(cid); rdate[cid] = r.fields.date || '';
       const m = String(r.fields.notes || '').match(/Recruited by:\s*([^|]+)/);   // self-reported "who told you" — stored in the signup log notes
       recruited[cid] = m ? m[1].trim() : '';
+      // Everything else the form asked (dinner, childcare, reflections, dietary…)
+      // rides in the same notes — surface it minus the Source/Recruited plumbing.
+      details[cid] = String(r.fields.notes || '').split(' | ')
+        .filter(p => !/^Source:/i.test(p) && !/^Recruited by:/i.test(p) && !/^Training signup form$/i.test(p))
+        .join(' | ');
     }
     off = d.offset;
   } while (off);
@@ -9831,12 +9844,12 @@ async function trainingRosterCsv(env, urlObj) {
     for (const r of d.records) det[r.id] = r.fields;
   }
   const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [['First', 'Last', 'Email', 'Phone', 'District', 'School', 'Registered', 'Who told you about this training?'].join(',')];
+  const lines = [['First', 'Last', 'Email', 'Phone', 'District', 'School', 'Registered', 'Who told you about this training?', 'Details'].join(',')];
   for (const cid of order) {
     const f = det[cid] || {};
     const fn = String(f.first || ''), ln = String(f.last || '');
     if (/^(test|smoke|sample|audit|final|demo|pipeline|canary)\b/i.test(fn) || /test|smoke|example|gwcanary/i.test(String(f.email || ''))) continue;   // hide QA rows from the organizer's Sheet
-    lines.push([f.first, f.last, f.email, f.phone, f.district, f.school, rdate[cid], recruited[cid]].map(esc).join(','));
+    lines.push([f.first, f.last, f.email, f.phone, f.district, f.school, rdate[cid], recruited[cid], details[cid]].map(esc).join(','));
   }
   return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
 }
