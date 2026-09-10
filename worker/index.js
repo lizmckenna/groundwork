@@ -134,10 +134,15 @@ function eventMeta(key){ return EVENT_META[key] || EVENT_META['5_26']; }
 function nextOnboardingKey(today){
   const obs = Object.entries(EVENT_META).filter(([k,m]) => m.type === 'onboarding').sort((a,b) => a[1].date.localeCompare(b[1].date));
   const up = obs.find(([k,m]) => m.date > today);   // strictly future: today's event has already happened
-  // After the FINAL onboarding (7/21), the default event rolls to the 7/29
-  // Final Push All-In Strategy Call instead of pointing at a past onboarding.
-  if (!up && today > '2026-07-21') return 'hm_7_29';
-  return (up || obs[obs.length-1] || ['6_9'])[0];
+  if (up) return up[0];
+  // Fall 2026: "onboarding" rolls to the next Threats to Public Ed Onboarding
+  // call (the classic type:'onboarding' series ended 7/21).
+  const threats = Object.entries(EVENT_META).filter(([k]) => k.startsWith('threats_')).sort((a,b) => a[1].date.localeCompare(b[1].date));
+  const t = threats.find(([k,m]) => m.date > today);
+  if (t) return t[0];
+  // Legacy fallback kept for date-frozen tests/replays of the summer window.
+  if (today > '2026-07-21') return 'hm_7_29';
+  return (obs[obs.length-1] || ['6_9'])[0];
 }
 // Outcome key (dashboard) → event meta key, generated for every event with a
 // signup field ('signed-up-hm-6-16' → 'hm_6_16'). Makeup-style events (no
@@ -679,6 +684,10 @@ export default {
       // Statewide commitments follow-up feed: everyone who committed to anything
       // at any stage, with commitment + attendance columns and their routed region.
       if (url.pathname === '/export/commitments.csv' && request.method === 'GET') return await commitmentsExportCsv(env, url);
+      // Fall texting-campaign follow-up lists (Stephanie's working sheet).
+      // ?list=regional-team | one-on-one | all. Auth: EXPORT_KEY or a scoped
+      // token (t=) so she can hold a live IMPORTDATA link without the master key.
+      if (url.pathname === '/export/follow-up.csv' && request.method === 'GET') return await followUpExportCsv(env, url);
       // Typeahead + write path for the tracker "Add commitment" dialog.
       if (url.pathname === '/contact-search' && request.method === 'GET') return await contactSearch(env, url);
       if (url.pathname === '/reflect' && request.method === 'POST') return await reflectSubmit(request, env);
@@ -831,6 +840,29 @@ export default {
             { name: 'Vote early', color: 'blueLight2' },
             { name: 'Election Day', color: 'yellowLight2' },
           ] } },
+        ];
+        const created = [], skipped = [], failed = [];
+        for (const f of wanted) {
+          if (have.has(f.name)) { skipped.push(f.name); continue; }
+          try {
+            await at(env, `/meta/bases/${BASE}/tables/${CONTACTS_TBL}/fields`, { method: 'POST', body: JSON.stringify(f) });
+            created.push(f.name);
+          } catch (e) { failed.push(`${f.name}: ${String(e.message || e).slice(0, 120)}`); }
+        }
+        return json({ created, skipped, failed });
+      }
+      // One-shot: create the contact fields backing the fall texting-campaign tags
+      // (regional-team interest + 1:1 target, both routed to Stephanie). Dates, not
+      // checkboxes, so her list sorts by "who came in most recently".
+      // Idempotent — skips fields that already exist.
+      if (url.pathname === '/admin/create-texting-tag-fields' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const meta = await at(env, `/meta/bases/${BASE}/tables`);
+        const tbl = (meta.tables || []).find(t => t.id === CONTACTS_TBL);
+        const have = new Set((tbl?.fields || []).map(f => f.name));
+        const wanted = [
+          { name: 'regional_team_flag', type: 'date', options: { dateFormat: { name: 'iso' } } },
+          { name: 'one_on_one_flag', type: 'date', options: { dateFormat: { name: 'iso' } } },
         ];
         const created = [], skipped = [], failed = [];
         for (const f of wanted) {
@@ -4253,6 +4285,29 @@ async function ingestS2W(request, env) {
         'wants-onboarding': () => nextOnboardingKey(todayCT()),
         '7/29 all in call': () => 'hm_7_29',
         '8/6 election meaning making': () => 'debrief_8_6',
+        // Fall 2026 texting campaign (Ellen/Molly, 9/9). One alias per Threats
+        // call so a text can register someone for a SPECIFIC date; spelling
+        // variants included because tag text is typed by hand in STW.
+        '9/15 onboarding': () => 'threats_9_15',
+        '9/15 threats onboarding': () => 'threats_9_15',
+        'onboarding 9/15': () => 'threats_9_15',
+        '9/30 onboarding': () => 'threats_9_30',
+        '10/12 onboarding': () => 'threats_10_12',
+        '10/29 onboarding': () => 'threats_10_29',
+        '11/12 onboarding': () => 'threats_11_12',
+        '12/2 onboarding': () => 'threats_12_2',
+      };
+      // ── Follow-up flag tags (fall texting campaign) ──────────────────────
+      // These do not register anyone for anything. They stamp a dated flag on
+      // the contact and route them to Stephanie so she has a working list.
+      // Live feeds: /export/follow-up.csv?list=regional-team|one-on-one|all
+      const S2W_FLAG_TAGS = {
+        'want to build or join regional team': { field: 'regional_team_flag', label: 'Wants to build or join a regional team' },
+        'wants regional team':                 { field: 'regional_team_flag', label: 'Wants to build or join a regional team' },
+        'regional team':                       { field: 'regional_team_flag', label: 'Wants to build or join a regional team' },
+        '1-1 target':                          { field: 'one_on_one_flag',    label: '1:1 target' },
+        '1:1 target':                          { field: 'one_on_one_flag',    label: '1:1 target' },
+        'one on one target':                   { field: 'one_on_one_flag',    label: '1:1 target' },
       };
       const S2W_VOTE_PLAN_TAGS = {
         'already voted': 'Already voted',
@@ -4272,6 +4327,28 @@ async function ingestS2W(request, env) {
               notes: `vote_plan set via S2W tag "${tag}"`, contact: [cid],
             } }], typecast: true }) });
           } catch (e) { errors.push('vote-plan tag: ' + String(e.message || e).slice(0, 100)); }
+          continue;
+        }
+        // ── follow-up flag tags (route to Stephanie) ──
+        if (S2W_FLAG_TAGS[tagLc]) {
+          try {
+            const flag = S2W_FLAG_TAGS[tagLc];
+            const cur = await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`);
+            // First flag wins the date, so "how long has this person been waiting"
+            // stays honest across repeat texts.
+            if (!cur.fields[flag.field]) {
+              const patch = { [flag.field]: todayCT() };
+              // Route to Stephanie for follow-up. Never steal someone who already
+              // has an organizer — that would scramble existing regional turf.
+              if (!(cur.fields.assigned_organizer || []).length) patch.assigned_organizer = [STEPHANIE_ID];
+              await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields: patch, typecast: true }) });
+              await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
+                Summary: `${todayCT()} — ${flag.label} (${first} ${last})`,
+                date: todayCT(), method: 'Text', result: 'Conversation',
+                notes: `flagged via S2W tag "${tag}" · for Stephanie follow-up`, contact: [cid],
+              } }], typecast: true }) });
+            }
+          } catch (e) { errors.push('flag tag: ' + String(e.message || e).slice(0, 100)); }
           continue;
         }
         // ── event-registration tags ──
@@ -9369,6 +9446,60 @@ async function sheetAddContact(request, env) {
 // search-first add flow in the region trackers (match an existing contact,
 // tick commitments; only net-new people need info typed).
 // =========================================================================
+// =========================================================================
+// /export/follow-up.csv — the fall texting campaign's follow-up lists.
+// Everyone a text tagged as wanting a regional team, or as a 1:1 target.
+// Oldest flag first, so the person who has been waiting longest is row 1.
+// =========================================================================
+async function followUpExportCsv(env, urlObj) {
+  const t = urlObj.searchParams.get('t') || '';
+  const key = urlObj.searchParams.get('key') || '';
+  let ok = env.EXPORT_KEY && key === env.EXPORT_KEY;
+  if (!ok && t) { const scoped = await env.KV_BINDING.get('follow-up-token'); ok = scoped && t === scoped; }
+  if (!ok) return new Response('forbidden', { status: 403 });
+  const list = (urlObj.searchParams.get('list') || 'all').toLowerCase();
+  const FIELD = { 'regional-team': 'regional_team_flag', 'one-on-one': 'one_on_one_flag' };
+  const wanted = FIELD[list] ? [FIELD[list]] : ['regional_team_flag', 'one_on_one_flag'];
+  const clause = wanted.map(f => `{${f}}!=''`).join(',');
+  const formula = wanted.length > 1 ? `OR(${clause})` : clause;
+  const recs = [];
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
+    for (const fl of ['first', 'last', 'email', 'phone', 'city', 'zip', 'county', 'district', 'school',
+                      'regional_team_flag', 'one_on_one_flag', 'leader_ladder', 'assigned_organizer', 's2w_outcome']) {
+      q += `&fields%5B%5D=${encodeURIComponent(fl)}`;
+    }
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    recs.push(...d.records);
+    off = d.offset;
+  } while (off);
+  const orgMap = await orgNameById(env);
+  const esc = s => { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const rows = recs.map(r => {
+    const f = r.fields;
+    const flagged = [f.regional_team_flag, f.one_on_one_flag].filter(Boolean).sort()[0] || '';
+    return {
+      sort: flagged,
+      cells: [
+        `${f.first || ''} ${f.last || ''}`.trim(), f.phone || '', f.email || '',
+        f.regional_team_flag ? 'Yes' : '', f.one_on_one_flag ? 'Yes' : '', flagged,
+        f.city || '', f.zip || '', f.county || '', f.district || '', f.school || '',
+        f.leader_ladder || '', f.s2w_outcome || '',
+        (f.assigned_organizer || []).map(id => orgMap[id] || ORGANIZER_NAME_BY_ID[id] || id).join('; '),
+      ],
+      test: /^(test|smoke|sample|audit|final|demo|pipeline|canary)\b/i.test(String(f.first || ''))
+        || /test|smoke|example|gwcanary/i.test(String(f.email || '')),
+    };
+  }).filter(r => !r.test).sort((a, b) => String(a.sort).localeCompare(String(b.sort)));
+  const lines = [['Name', 'Phone', 'Email', 'Wants regional team', '1:1 target', 'Flagged on',
+                  'City', 'Zip', 'County', 'District', 'School', 'Leader ladder',
+                  'Last text outcome', 'Assigned organizer'].join(',')];
+  for (const r of rows) lines.push(r.cells.map(esc).join(','));
+  return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
+}
+
 async function commitmentsExportCsv(env, urlObj) {
   if (!env.EXPORT_KEY || urlObj.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
   // ?bucket=commits (default): people with at least one REAL commitment —
