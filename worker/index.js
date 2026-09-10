@@ -885,7 +885,11 @@ export default {
         const tables = meta.tables || [];
         const contacts = tables.find(t => t.id === CONTACTS_TBL);
         const report = [];
-        for (const tid of [ATTENDANCE_MIRROR_TBL, EVENT_ATTENDANCE_TBL]) {
+        // Live grid only. The pre-2026 archive stays untouched unless asked for.
+        const targets = url.searchParams.get('include_archived') === '1'
+          ? [ATTENDANCE_MIRROR_TBL, EVENT_ATTENDANCE_TBL]
+          : [ATTENDANCE_MIRROR_TBL];
+        for (const tid of targets) {
           const tbl = tables.find(t => t.id === tid);
           if (!tbl) { report.push({ table: tid, error: 'table not found' }); continue; }
           // The link field back to contacts — the spine every lookup rides on.
