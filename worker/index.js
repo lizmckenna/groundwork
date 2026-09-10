@@ -9455,7 +9455,7 @@ async function followUpExportCsv(env, urlObj) {
   const t = urlObj.searchParams.get('t') || '';
   const key = urlObj.searchParams.get('key') || '';
   let ok = env.EXPORT_KEY && key === env.EXPORT_KEY;
-  if (!ok && t) { const scoped = await env.KV_BINDING.get('follow-up-token'); ok = scoped && t === scoped; }
+  if (!ok && t) { const scoped = await env.KV_BINDING.get('roster-token:follow-up'); ok = scoped && t === scoped; }   // minted via /admin/kv-set-roster-token?event=follow-up
   if (!ok) return new Response('forbidden', { status: 403 });
   const list = (urlObj.searchParams.get('list') || 'all').toLowerCase();
   const FIELD = { 'regional-team': 'regional_team_flag', 'one-on-one': 'one_on_one_flag' };
