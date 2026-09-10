@@ -912,6 +912,17 @@ export default {
               out.created.push(newName);
             } catch (e) { out.failed.push(`${newName}: ${String(e.message || e).slice(0, 140)}`); }
           }
+          // Creating a lookup is not the same as it resolving — rows whose link
+          // is empty stay blank. Sample real rows so we can see coverage.
+          if (url.searchParams.get('sample') === '1') {
+            try {
+              const s = await at(env, `/${BASE}/${tbl.id}?pageSize=50&fields%5B%5D=phone&fields%5B%5D=event&fields%5B%5D=${encodeURIComponent(link.name)}`);
+              const recs = s.records || [];
+              const withPhone = recs.filter(r => (r.fields.phone || []).length).length;
+              out.sample = { rows_checked: recs.length, with_phone: withPhone,
+                example: (recs.find(r => (r.fields.phone || []).length) || {}).fields || null };
+            } catch (e) { out.sample = { error: String(e.message || e).slice(0, 140) }; }
+          }
           report.push(out);
         }
         return json({ apply, report });
