@@ -874,6 +874,44 @@ export default {
         }
         return json({ created, skipped, failed });
       }
+      // Add phone (and email) to the attendance grids as LOOKUPS through the
+      // contact link — those tables have no phone of their own, which is why the
+      // field picker never offered it (Ellen, 9/9: reminder calls were tedious).
+      // ?apply=1 to write; default is a dry run that reports what it would do.
+      if (url.pathname === '/admin/add-attendance-contact-lookups' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const apply = url.searchParams.get('apply') === '1';
+        const meta = await at(env, `/meta/bases/${BASE}/tables`);
+        const tables = meta.tables || [];
+        const contacts = tables.find(t => t.id === CONTACTS_TBL);
+        const report = [];
+        for (const tid of [ATTENDANCE_MIRROR_TBL, EVENT_ATTENDANCE_TBL]) {
+          const tbl = tables.find(t => t.id === tid);
+          if (!tbl) { report.push({ table: tid, error: 'table not found' }); continue; }
+          // The link field back to contacts — the spine every lookup rides on.
+          const link = (tbl.fields || []).find(f => f.type === 'multipleRecordLinks'
+            && f.options && f.options.linkedTableId === CONTACTS_TBL);
+          if (!link) { report.push({ table: tbl.name, error: 'no link field to contacts' }); continue; }
+          const have = new Set((tbl.fields || []).map(f => f.name));
+          const out = { table: tbl.name, id: tbl.id, via: link.name, created: [], skipped: [], failed: [] };
+          for (const srcName of ['phone', 'email']) {
+            const src = (contacts.fields || []).find(f => f.name === srcName);
+            if (!src) { out.failed.push(`${srcName}: not on contacts`); continue; }
+            const newName = srcName;                       // plain "phone"/"email" reads best in the grid
+            if (have.has(newName)) { out.skipped.push(newName); continue; }
+            if (!apply) { out.created.push(`${newName} (dry run)`); continue; }
+            try {
+              await at(env, `/meta/bases/${BASE}/tables/${tbl.id}/fields`, { method: 'POST', body: JSON.stringify({
+                name: newName, type: 'multipleLookupValues',
+                options: { recordLinkFieldId: link.id, fieldIdInLinkedTable: src.id },
+              }) });
+              out.created.push(newName);
+            } catch (e) { out.failed.push(`${newName}: ${String(e.message || e).slice(0, 140)}`); }
+          }
+          report.push(out);
+        }
+        return json({ apply, report });
+      }
       // Delete specific pof_applications rows by record id (test-row cleanup).
       if (url.pathname === '/admin/pof-delete' && request.method === 'GET') {
         if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
