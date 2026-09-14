@@ -691,6 +691,7 @@ export default {
       // Typeahead + write path for the tracker "Add commitment" dialog.
       if (url.pathname === '/contact-search' && request.method === 'GET') return await contactSearch(env, url);
       if (url.pathname === '/reflect' && request.method === 'POST') return await reflectSubmit(request, env);
+      if (url.pathname === '/update-school' && request.method === 'POST') return await updateSchool(request, env);
       if (url.pathname === '/pof-apply' && request.method === 'POST') return await pofApply(request, env);
       if (url.pathname === '/export/reflections.csv' && request.method === 'GET') return await reflectionsExportCsv(env, url);
       if (url.pathname === '/commit-add' && request.method === 'POST') return await commitAdd(request, env);
@@ -4643,6 +4644,61 @@ async function pofApply(request, env) {
   }
   await invalidateReadCaches(env);
   return json({ ok: true });
+}
+
+// =========================================================================
+// /update-school — "who are you fighting for" form (public page at
+// /my-school/, Ellen S's Sept 2026 ask). Matches by email and fills in
+// school/district on the existing contact; unknown people get created like
+// any intake. Never reassigns the organizer on an existing contact (the
+// LaNeé over-assignment lesson) — only new contacts get geo-routed.
+// =========================================================================
+async function updateSchool(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:updschool:${ip}`;
+  let count = 0;
+  try { count = parseInt(await env.KV_BINDING.get(rlKey) || '0'); } catch {}
+  if (count >= 20) return json({ error: 'too many requests, try again later' }, 429, { 'Retry-After': '300' });
+  try { await env.KV_BINDING.put(rlKey, String(count + 1), { expirationTtl: 300 }); } catch {}
+  const body = await request.json().catch(() => null);
+  if (!body) return json({ error: 'bad json' }, 400);
+  if (honeypotBot(body)) return json({ error: 'bot detected' }, 400);
+  const clean = (s) => String(s == null ? '' : s).trim();
+  const first = clean(body.first), last = clean(body.last);
+  const email = clean(body.email).toLowerCase();
+  const school = clean(body.school).slice(0, 300);
+  const district = clean(body.district).slice(0, 200);
+  if (!first || !last) return json({ error: 'first and last name are required' }, 400);
+  if (!email) return json({ error: 'email is required so we can find your record' }, 400);
+  if (!school && !district) return json({ error: 'please give a school or a district' }, 400);
+  const date = todayCT();
+  let cid = null, matched = false;
+  try {
+    const r = await at(env, `/${BASE}/${CONTACTS_TBL}?filterByFormula=${encodeURIComponent(`LOWER({email})='${email.replace(/'/g, "\\'")}'`)}&maxRecords=1`);
+    if (r.records.length) { cid = r.records[0].id; matched = true; }
+  } catch (e) {}
+  const fields = {};
+  if (school) fields.school = school;
+  if (district) fields.district = district;
+  if (cid) {
+    await at(env, `/${BASE}/${CONTACTS_TBL}/${cid}`, { method: 'PATCH', body: JSON.stringify({ fields, typecast: true }) });
+  } else {
+    Object.assign(fields, { first, last, email, leader_ladder: 'Prospect', source: 'school-district update form' });
+    const orgId = deriveOrganizerId({ district });
+    if (orgId) fields.assigned_organizer = [orgId];
+    const c = await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+    cid = c.records[0].id;
+  }
+  try {
+    await at(env, `/${BASE}/${CONTACT_LOG_TBL}`, { method: 'POST', body: JSON.stringify({ records: [{ fields: {
+      Summary: `${date} — School/district update via website: ${first} ${last}`,
+      date, method: 'Other', result: 'Info updated',
+      notes: `my-school form${school ? ` | school: ${school}` : ''}${district ? ` | district: ${district}` : ''}`,
+      contact: [cid],
+    } }], typecast: true }) });
+  } catch (e) {}
+  await invalidateReadCaches(env);
+  return json({ ok: true, matched });
 }
 
 async function launchRsvp(request, env) {
