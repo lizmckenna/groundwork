@@ -2115,7 +2115,15 @@ export default {
       // ignore_names: [...] }. Matches by email, then by normalized name. Returns
       // a full analysis: flake rate, walk-ins, and show-rate by confirmation status.
       if (url.pathname === '/admin/mark-attendance-from-list' && request.method === 'POST') {
-        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        // EXPORT_KEY (scripts) OR a signed-in organizer session (the /pilot/attendance
+        // uploader). The page never sees the master key.
+        let _attOk = !!env.EXPORT_KEY && url.searchParams.get('key') === env.EXPORT_KEY;
+        if (!_attOk) {
+          const _st = request.headers.get('X-Groundwork-Session');
+          const _em = _st ? await env.KV_BINDING.get(`session:${_st}`) : null;
+          _attOk = !!_em;
+        }
+        if (!_attOk) return json({ error: 'forbidden' }, 403);
         const body = await request.json().catch(() => ({}));
         const ev = String(body.event || '7_7');
         const apply = body.apply === true || body.apply === 1;
@@ -3228,6 +3236,15 @@ export default {
       if (url.pathname === '/today-stats') return await getTodayStats(env, url);
       if (url.pathname === '/event-stats') return await getEventStats(env, url);
       if (url.pathname === '/events-overview') return await getEventsOverview(env);
+      // Events the attendance uploader can post to: everything with an attendEvent,
+      // newest first, so the most recent meeting is the first thing they see.
+      if (url.pathname === '/attendance-events') {
+        const out = Object.entries(EVENT_META)
+          .filter(([k, m]) => m.attendEvent)
+          .map(([k, m]) => ({ key: k, label: m.label || m.attendEvent, event: m.attendEvent, date: m.date || '', inPerson: !!m.inPerson }))
+          .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        return json({ events: out });
+      }
       if (url.pathname === '/event-roster') return await getEventRoster(env, url);
       if (url.pathname === '/commitments-overview') return await getCommitmentsOverview(env);
       if (url.pathname === '/commitment-conversion') return await getCommitmentConversion(env);

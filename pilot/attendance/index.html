@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex,nofollow" />
+<title>Attendance upload · Groundwork</title>
+<style>
+:root{
+  --paper:#E9E5CE; --paper-2:#D9D5C0; --ink:#1A2418;
+  --rose:#B25048; --sun:#C99633; --teal:#2F5E3D; --plum:#3E4F6E;
+  --card:#F4F0DA; --muted:rgba(26,36,24,.62); --line:rgba(26,36,24,.2);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Inter",Helvetica,Arial,sans-serif;font-size:16px;line-height:1.5}
+.wrap{max-width:860px;margin:0 auto;padding:28px 20px 80px}
+h1{font-size:30px;line-height:1.1;margin:0 0 6px;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0 0 26px;font-size:15px}
+.card{background:var(--card);border:1.5px solid var(--ink);border-radius:14px;padding:22px;margin:0 0 18px}
+label.fl{display:block;font-weight:700;font-size:13px;letter-spacing:.04em;text-transform:uppercase;margin:0 0 7px}
+select,textarea{width:100%;font:inherit;font-size:15px;padding:11px 12px;border:1.5px solid var(--line);
+  border-radius:9px;background:#FFFCEB;color:var(--ink)}
+textarea{min-height:120px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+select:focus,textarea:focus{outline:2px solid var(--plum);outline-offset:-1px}
+.drop{border:2.5px dashed var(--line);border-radius:12px;padding:30px 20px;text-align:center;
+  background:#FFFCEB;cursor:pointer;transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--teal);background:#eef6ee}
+.drop .big{font-weight:700;font-size:16px;margin-bottom:4px}
+.drop .small{color:var(--muted);font-size:13.5px}
+button{font:inherit;font-weight:700;cursor:pointer;border-radius:999px;border:2px solid var(--ink);padding:12px 24px}
+.btn-primary{background:var(--plum);color:#fff}
+.btn-primary:hover{background:#334361}
+.btn-go{background:var(--teal);color:#fff}
+.btn-go:hover{filter:brightness(1.1)}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.msg{margin-top:12px;font-size:14.5px;font-weight:600;min-height:20px}
+.msg.err{color:var(--rose)}
+.msg.ok{color:var(--teal)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin:4px 0 18px}
+.stat{background:var(--paper-2);border:1.5px solid var(--ink);border-radius:11px;padding:14px}
+.stat .n{font-size:30px;font-weight:800;line-height:1}
+.stat .l{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-top:4px;font-weight:700}
+.namelist{font-size:14px;line-height:1.7;margin:0;padding-left:18px;max-height:220px;overflow:auto}
+details{margin:12px 0 0}
+summary{cursor:pointer;font-weight:700;font-size:14px}
+.hide{display:none}
+.warn{background:#fdf3e3;border:1.5px solid var(--sun);border-radius:10px;padding:13px 15px;font-size:14px;margin:14px 0 0}
+.login-card{max-width:420px;margin:60px auto}
+input[type=email]{width:100%;font:inherit;padding:11px 12px;border:1.5px solid var(--line);border-radius:9px;background:#FFFCEB}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- LOGIN -->
+  <div id="login" class="card login-card hide">
+    <h1 style="font-size:22px">Sign in</h1>
+    <p class="sub" id="login-msg">We'll email you a sign-in link.</p>
+    <label class="fl" for="em">Email</label>
+    <input type="email" id="em" autocomplete="email" placeholder="you@email.com" />
+    <div class="row"><button class="btn-primary" id="send-link">Send sign-in link</button></div>
+    <div class="msg" id="login-status"></div>
+  </div>
+
+  <!-- APP -->
+  <div id="app" class="hide">
+    <h1>Attendance upload</h1>
+    <p class="sub">Drop the CSV Zoom gives you after a meeting. Everyone who signed up is marked attended or no-show, and anyone who showed up without signing up is added as a walk-in.</p>
+
+    <div class="card">
+      <label class="fl" for="ev">Which meeting?</label>
+      <select id="ev"><option>Loading…</option></select>
+
+      <div style="margin-top:18px">
+        <label class="fl">Zoom CSV</label>
+        <div class="drop" id="drop">
+          <div class="big">Drop the CSV here</div>
+          <div class="small">or click to choose a file</div>
+          <input type="file" id="file" accept=".csv,text/csv" class="hide" />
+        </div>
+        <details>
+          <summary>Paste it instead</summary>
+          <textarea id="paste" placeholder="Paste the CSV contents here"></textarea>
+        </details>
+      </div>
+
+      <div class="row">
+        <button class="btn-primary" id="preview-btn" disabled>Preview</button>
+        <span class="msg" id="parse-msg"></span>
+      </div>
+    </div>
+
+    <!-- PREVIEW -->
+    <div id="preview" class="card hide">
+      <h2 style="margin:0 0 14px;font-size:20px">Preview</h2>
+      <div class="stats" id="stats"></div>
+      <div id="lists"></div>
+      <div class="warn" id="walkin-warn"></div>
+      <div class="row">
+        <button class="btn-go" id="apply-btn">Save this to the database</button>
+        <span class="msg" id="apply-msg"></span>
+      </div>
+    </div>
+
+    <div id="done" class="card hide">
+      <h2 style="margin:0 0 8px;font-size:20px">Saved.</h2>
+      <p id="done-detail" style="margin:0"></p>
+      <div class="row"><button class="btn-primary" id="again">Upload another</button></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const WORKER = 'https://groundwork-pilot.elizabethmck.workers.dev';
+const $ = id => document.getElementById(id);
+const sess = () => localStorage.getItem('gw-session') || '';
+const H = () => ({ 'Content-Type': 'application/json', 'X-Groundwork-Session': sess() });
+
+let ATTENDEES = [];   // [{name,email}]
+let LAST = null;      // dry-run result
+
+/* ---------- CSV parsing ---------------------------------------------------
+   Zoom gives two shapes and organizers never know which one they grabbed:
+     · Registration report — preamble rows, then "Attendee Details", then
+       First Name,Last Name,Email,...
+     · Participants report — Name (original name),User email,...
+   Both are handled by finding the header row that carries a name-ish and an
+   email-ish column, wherever it sits in the file.
+-------------------------------------------------------------------------- */
+function splitCsvLine(line){
+  const out=[]; let cur='', q=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(q){ if(c==='"'){ if(line[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else if(c==='"') q=true;
+    else if(c===','){ out.push(cur); cur=''; }
+    else cur+=c;
+  }
+  out.push(cur);
+  return out.map(s=>s.trim());
+}
+function parseZoomCsv(text){
+  const lines = text.replace(/^﻿/,'').split(/\r?\n/).filter(l=>l.trim()!=='');
+  const norm = s => String(s||'').toLowerCase().replace(/[^a-z]/g,'');
+  let hdrIdx=-1, cols=null;
+  for(let i=0;i<lines.length;i++){
+    const c = splitCsvLine(lines[i]).map(norm);
+    const hasEmail = c.some(x=>x.includes('email'));
+    const hasName  = c.some(x=>x==='firstname'||x==='lastname'||x==='name'||x.includes('name'));
+    if(hasEmail && hasName){ hdrIdx=i; cols=c; break; }
+  }
+  if(hdrIdx<0) throw new Error('Could not find the header row. Is this the CSV Zoom exported?');
+  const iFirst = cols.findIndex(c=>c==='firstname');
+  const iLast  = cols.findIndex(c=>c==='lastname');
+  const iName  = cols.findIndex(c=>c==='name'||c==='nameoriginalname'||c==='displayname'||(c.includes('name')&&c!=='firstname'&&c!=='lastname'));
+  const iEmail = cols.findIndex(c=>c.includes('email'));
+  const seen=new Set(), rows=[];
+  for(let i=hdrIdx+1;i<lines.length;i++){
+    const r = splitCsvLine(lines[i]);
+    if(r.length<2) continue;
+    let name='';
+    if(iFirst>=0){ name = [r[iFirst]||'', iLast>=0?(r[iLast]||''):''].join(' ').trim(); }
+    if(!name && iName>=0) name = (r[iName]||'').trim();
+    const email = iEmail>=0 ? (r[iEmail]||'').trim().toLowerCase() : '';
+    if(!name && !email) continue;
+    // Zoom logs a row per join, so someone who drops and rejoins appears twice.
+    const k = email || name.toLowerCase();
+    if(seen.has(k)) continue;
+    seen.add(k);
+    rows.push({ name, email });
+  }
+  if(!rows.length) throw new Error('Found the header but no people under it.');
+  return rows;
+}
+
+/* ---------- file intake ---------- */
+function ingest(text){
+  try{
+    ATTENDEES = parseZoomCsv(text);
+    $('parse-msg').className='msg ok';
+    $('parse-msg').textContent = `${ATTENDEES.length} people found.`;
+    $('preview-btn').disabled = false;
+  }catch(e){
+    ATTENDEES=[];
+    $('parse-msg').className='msg err';
+    $('parse-msg').textContent = e.message;
+    $('preview-btn').disabled = true;
+  }
+}
+$('drop').addEventListener('click',()=>$('file').click());
+$('file').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader(); rd.onload=()=>ingest(rd.result); rd.readAsText(f);
+});
+['dragenter','dragover'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.add('over');}));
+['dragleave','drop'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.remove('over');}));
+$('drop').addEventListener('drop',e=>{
+  const f=e.dataTransfer.files[0]; if(!f) return;
+  const rd=new FileReader(); rd.onload=()=>ingest(rd.result); rd.readAsText(f);
+});
+$('paste').addEventListener('input',e=>{ if(e.target.value.trim().length>20) ingest(e.target.value); });
+
+/* ---------- preview / apply ---------- */
+async function call(apply){
+  const r = await fetch(`${WORKER}/admin/mark-attendance-from-list`,{
+    method:'POST', headers:H(),
+    body: JSON.stringify({ event: $('ev').value, apply, attendees: ATTENDEES }),
+  });
+  const d = await r.json();
+  if(!r.ok) throw new Error(d.error || 'request failed');
+  return d;
+}
+function renderPreview(d){
+  LAST = d;
+  $('stats').innerHTML = `
+    <div class="stat"><div class="n">${d.total_attended}</div><div class="l">Attended</div></div>
+    <div class="stat"><div class="n">${d.total_no_show}</div><div class="l">No-show</div></div>
+    <div class="stat"><div class="n">${(d.walk_ins||[]).length}</div><div class="l">Walk-ins</div></div>
+    <div class="stat"><div class="n">${d.show_rate_pct}%</div><div class="l">Show rate</div></div>`;
+  const list = (t,arr)=> arr && arr.length
+    ? `<details><summary>${t} (${arr.length})</summary><ul class="namelist">${arr.map(x=>`<li>${x}</li>`).join('')}</ul></details>` : '';
+  $('lists').innerHTML =
+    list('Marked attended', d.matched_attendee_names) +
+    list('Marked no-show', d.no_show_names) +
+    list('New walk-ins', (d.walk_ins||[]).map(w=>`${w.name}${w.email?' · '+w.email:''}`));
+  const w = (d.walk_ins||[]).length;
+  $('walkin-warn').innerHTML = w
+    ? `<b>${w} walk-in${w===1?'':'s'}</b> will be added as new people. Check the names above for staff, guests, or anyone joining on someone else's account before you save.`
+    : 'No walk-ins. Everyone on the list had already signed up.';
+  $('preview').classList.remove('hide');
+  $('preview').scrollIntoView({behavior:'smooth',block:'start'});
+}
+$('preview-btn').addEventListener('click',async()=>{
+  const b=$('preview-btn'); b.disabled=true; b.textContent='Checking…';
+  $('apply-msg').textContent='';
+  try{ renderPreview(await call(false)); }
+  catch(e){ $('parse-msg').className='msg err'; $('parse-msg').textContent=e.message; }
+  b.disabled=false; b.textContent='Preview';
+});
+$('apply-btn').addEventListener('click',async()=>{
+  const b=$('apply-btn'); b.disabled=true; b.textContent='Saving…';
+  try{
+    const d = await call(true);
+    $('preview').classList.add('hide');
+    $('done-detail').textContent =
+      `${d.total_attended} marked attended, ${d.total_no_show} marked no-show, ${(d.walk_ins||[]).length} walk-ins added for ${$('ev').selectedOptions[0].textContent.trim()}.`;
+    $('done').classList.remove('hide');
+    $('done').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){
+    $('apply-msg').className='msg err'; $('apply-msg').textContent=e.message;
+    b.disabled=false; b.textContent='Save this to the database';
+  }
+});
+$('again').addEventListener('click',()=>{
+  ATTENDEES=[]; LAST=null;
+  $('file').value=''; $('paste').value='';
+  $('parse-msg').textContent=''; $('apply-msg').textContent='';
+  $('preview-btn').disabled=true;
+  $('done').classList.add('hide'); $('preview').classList.add('hide');
+  $('apply-btn').disabled=false; $('apply-btn').textContent='Save this to the database';
+  window.scrollTo({top:0,behavior:'smooth'});
+});
+
+/* ---------- auth ---------- */
+function showLogin(m){
+  $('app').classList.add('hide'); $('login').classList.remove('hide');
+  if(m) $('login-msg').textContent=m;
+}
+$('send-link').addEventListener('click',async()=>{
+  const email=$('em').value.trim(); const st=$('login-status');
+  if(!email){ st.className='msg err'; st.textContent='Enter your email.'; return; }
+  const b=$('send-link'); b.disabled=true; b.textContent='Sending…';
+  try{
+    await fetch(`${WORKER}/auth/start`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,redirect_url:location.origin+location.pathname})});
+    st.className='msg ok'; st.textContent='Check your email for the sign-in link.';
+  }catch(e){ st.className='msg err'; st.textContent=`Couldn't send: ${e.message}`; }
+  b.disabled=false; b.textContent='Send sign-in link';
+});
+async function loadEvents(){
+  const r = await fetch(`${WORKER}/attendance-events`,{headers:H()});
+  if(!r.ok) throw new Error('unauthorized');
+  const d = await r.json();
+  $('ev').innerHTML = d.events.map(e=>{
+    const when = e.date ? new Date(e.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+    return `<option value="${e.key}">${e.label}${when?' — '+when:''}</option>`;
+  }).join('');
+}
+async function boot(){
+  const params=new URLSearchParams(location.search);
+  const t=params.get('token');
+  if(t){
+    try{
+      const r=await fetch(`${WORKER}/auth/verify`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:t})});
+      const d=await r.json();
+      if(r.ok && d.session_token){
+        localStorage.setItem('gw-session',d.session_token);
+        history.replaceState({},'',location.pathname);
+      } else { showLogin('That link expired. Enter your email for a new one.'); return; }
+    }catch(e){ showLogin('Sign-in failed. Try again.'); return; }
+  }
+  if(!sess()){ showLogin(); return; }
+  try{
+    await loadEvents();
+    $('login').classList.add('hide'); $('app').classList.remove('hide');
+  }catch(e){ showLogin('Your session expired. Enter your email for a new link.'); }
+}
+boot();
+</script>
+</body>
+</html>
