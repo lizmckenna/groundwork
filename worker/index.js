@@ -937,6 +937,109 @@ export default {
         const d = await at(env, `/${BASE}/${encodeURIComponent('pof_applications')}?${q}`, { method: 'DELETE' });
         return json({ deleted: (d.records || []).map(r => r.id) });
       }
+      // District cleanup batch (Ellen S, Sept 2026). Mapping copied verbatim from
+      // her sheet "PMOPS Database District Clean-Up" (1iCjy2KZ...). Dry-run by
+      // default: reports how many contacts each correction would touch.
+      // &confirm=1 applies the PATCHes.
+      if (url.pathname === '/admin/district-cleanup' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
+        const MAP = {
+          'Blue Springs R-IV': 'Blue Springs School District', 'Brentwood': 'Brentwood School District',
+          'Cameron': 'Cameron R-I', 'Columbia Public': 'Columbia Public Schools',
+          'Crossroads Charter Dchools': 'KC Charter', 'FOSD': 'Fort Osage R-1',
+          'Fort Zumwalt': 'Fort Zumwalt School District', 'Fox': 'Fox C-6',
+          'Francis Howell': 'Francis Howell School District (FHSD)', 'Hazelwood': 'Hazelwood School District',
+          'Hickman mills': 'Hickman Mills School District', 'Jackson': 'Jackson R-2',
+          'Kanas City Public Schools': 'Kansas City Public Schools (KCPS)', 'Kansas City 33': 'Kansas City Public Schools (KCPS)',
+          'Kansas City Public Schools': 'Kansas City Public Schools (KCPS)', 'KCMO 33': 'Kansas City Public Schools (KCPS)',
+          'KCPS': 'Kansas City Public Schools (KCPS)', 'Kcps': 'Kansas City Public Schools (KCPS)',
+          'kcps': 'Kansas City Public Schools (KCPS)', 'Ladue': 'Ladue School District',
+          'USD 469': 'Lansing USD 469', 'USD 497': 'Lawrence USD 497',
+          'Lindbergh': 'Lindbergh Schools', 'Maplewood Richmond Heights': 'Maplewood Richmond Heights School District',
+          'maplewood richmond heights': 'Maplewood Richmond Heights School District', 'MRH': 'Maplewood Richmond Heights School District',
+          'Mehlville R-9 School District': 'Mehlville R-IX', 'Mid Buchanan School District': 'Mid-Buchanan County R-V',
+          'Mid-Buchanan R-V': 'Mid-Buchanan County R-V', 'Nkc': 'North Kansas City Schools',
+          'North Kansas City 74': 'North Kansas City Schools', 'Parkway': 'Parkway School District',
+          'Parkway school district': 'Parkway School District', 'Raymore-Peculiar': 'Raymore-Peculiar R-II',
+          'Republic': 'Republic R-III', 'Ritenour': 'Ritenour School District',
+          'Ritenour schools': 'Ritenour School District', 'Rockwood': 'Rockwood School District',
+          'Sedalia #200': 'Sedalia 200 School District', 'Sedalia 200': 'Sedalia 200 School District',
+          'Shawnee mission': 'Shawnee Mission School District', 'Shawnee Mission': 'Shawnee Mission School District',
+          'SMSD': 'Shawnee Mission School District', 'special school district': 'SLPS Special School District',
+          'springfield public schools': 'Springfield Public Schools', 'Springfield R-12 School District': 'Springfield Public Schools',
+          'Saint Charles': 'St. Charles City', 'Saint Charles City': 'St. Charles City',
+          'SCSD R-VI': 'St. Charles City', 'St. Charles': 'St. Charles City',
+          'St. Charles R-VI': 'St. Charles City', 'SLPS': 'St. Louis Public Schools (SLPS)',
+          'Troy': 'Troy R-III', 'Ztroy R III': 'Troy R-III',
+          'University City': 'University City School District', 'Webster Groves': 'Webster Groves School District',
+          'Wentzville': 'Wentzville R-IV', 'Wheaton': 'Wheaton R-III', 'Willard': 'Willard R-II',
+        };
+        const confirm = url.searchParams.get('confirm') === '1';
+        const hits = [];   // {id, from, to}
+        let off = null;
+        do {
+          let q = `?filterByFormula=${encodeURIComponent(`{district}!=''`)}&pageSize=100&fields%5B%5D=district`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          for (const r of d.records) {
+            const cur = String(r.fields.district || '').trim();
+            if (MAP[cur] && MAP[cur] !== cur) hits.push({ id: r.id, from: cur, to: MAP[cur] });
+          }
+          off = d.offset;
+        } while (off);
+        const byMapping = {};
+        for (const h of hits) { const k = `${h.from} -> ${h.to}`; byMapping[k] = (byMapping[k] || 0) + 1; }
+        if (!confirm) return json({ dry_run: true, contacts_to_correct: hits.length, by_mapping: byMapping });
+        let patched = 0;
+        for (let i = 0; i < hits.length; i += 10) {
+          const batch = hits.slice(i, i + 10).map(h => ({ id: h.id, fields: { district: h.to } }));
+          await at(env, `/${BASE}/${CONTACTS_TBL}`, { method: 'PATCH', body: JSON.stringify({ records: batch, typecast: true }) });
+          patched += batch.length;
+        }
+        await invalidateReadCaches(env);
+        return json({ dry_run: false, patched, by_mapping: byMapping });
+      }
+      // No-name contact report (Ellen S dedupe ask): every contact with no
+      // first+last name, classified — merge candidate (email/phone matches a
+      // named record), keep (email-only, no match), or delete candidate
+      // (phone-only, no match). CSV; read-only.
+      if (url.pathname === '/admin/no-name-report' && request.method === 'GET') {
+        if (url.searchParams.get('key') !== env.EXPORT_KEY) return new Response('forbidden', { status: 403 });
+        const all = [];
+        let off = null;
+        do {
+          let q = `?pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=Name&fields%5B%5D=email&fields%5B%5D=phone&fields%5B%5D=source&fields%5B%5D=events_signed_up`;
+          if (off) q += `&offset=${encodeURIComponent(off)}`;
+          const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+          for (const r of d.records) all.push({ id: r.id, created: (r.createdTime || '').slice(0, 10), f: r.fields });
+          off = d.offset;
+        } while (off);
+        const nameOf = (c) => `${String(c.f.first || '').trim()} ${String(c.f.last || '').trim()}`.trim() || String(c.f.Name || '').trim();
+        const digits = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+        const byEmail = {}, byPhone = {};
+        for (const c of all) {
+          if (!nameOf(c)) continue;   // index NAMED records only
+          const e = String(c.f.email || '').toLowerCase().trim();
+          const p = digits(c.f.phone);
+          if (e) (byEmail[e] = byEmail[e] || []).push(c);
+          if (p.length === 10) (byPhone[p] = byPhone[p] || []).push(c);
+        }
+        const rows = [];
+        for (const c of all) {
+          if (nameOf(c)) continue;   // only no-name records
+          const e = String(c.f.email || '').toLowerCase().trim();
+          const p = digits(c.f.phone);
+          const match = (e && byEmail[e] && byEmail[e][0]) || (p.length === 10 && byPhone[p] && byPhone[p][0]) || null;
+          const action = match ? 'MERGE into match' : (e ? 'KEEP (email-only, no match)' : 'DELETE candidate (no email, no match)');
+          rows.push([c.id, e, String(c.f.phone || ''), c.created, String(c.f.source || ''),
+            Array.isArray(c.f.events_signed_up) ? c.f.events_signed_up.join('; ') : '',
+            match ? match.id : '', match ? nameOf(match) : '', action]);
+        }
+        rows.sort((a, b) => a[8].localeCompare(b[8]));
+        const header = ['record_id', 'email', 'phone', 'created', 'source', 'events_signed_up', 'match_id', 'match_name', 'proposed_action'];
+        const out = [header.join(',')].concat(rows.map(r => r.map(csvEsc).join(',')));
+        return new Response(out.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store' } });
+      }
       // Quick read: who has applied to the POF fellowship (name, date, status).
       if (url.pathname === '/admin/pof-list' && request.method === 'GET') {
         if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
