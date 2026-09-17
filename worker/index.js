@@ -708,6 +708,10 @@ export default {
       // Auth: master EXPORT_KEY, OR a per-event scoped token (t=) so an organizer can
       // hold the feed link without the master key — leaking t exposes only this roster.
       if (url.pathname === '/export/training-roster.csv' && request.method === 'GET') return await trainingRosterCsv(env, url);
+      // Parent Power Camp (and other in-person) rosters with the form's logistics
+      // answers split into their own columns — childcare, translation, dietary —
+      // so turnout trackers can filter on them. Same auth + token as training-roster.
+      if (url.pathname === '/export/camp-roster.csv' && request.method === 'GET') return await campRosterCsv(env, url);
       // Sheet → Airtable write-back for HM follow-up columns (status, 1-1, notes), by contact id.
       if (url.pathname === '/sheet-hm-followup' && request.method === 'POST') return await sheetHmFollowup(request, env);
       // Sheet → Airtable attendance write-back for launches (gated by EXPORT_KEY,
@@ -10174,6 +10178,86 @@ async function activeSinceCsv(env, urlObj) {
 // RSVPs land at the bottom. Training signups log method='Event attendance',
 // result='Signed up' (not 'Event RSVP'), so this matches that shape. Auth is
 // the master EXPORT_KEY or a per-event scoped token (KV roster-token:<event>).
+// =========================================================================
+// /export/camp-roster.csv — camp signups with logistics as real columns.
+// The signup form stores its answers as " | "-joined text in the log row's
+// notes (see trainingSignup), which is invisible in Airtable unless you open
+// the right row. This unpacks them so a tracker can sort by "needs childcare".
+// =========================================================================
+function parseSignupNotes(notes) {
+  const out = { recruited: '', childcare: '', kids: '', spanish: '', dietary: '', accessibility: '',
+                dinner: '', issues: '', hopes: '', questions: '' };
+  for (const raw of String(notes || '').split(' | ')) {
+    const p = raw.trim();
+    let m;
+    if ((m = p.match(/^Recruited by:\s*(.*)$/i))) out.recruited = m[1].trim();
+    else if (/^Childcare needed/i.test(p)) {
+      out.childcare = 'Yes';
+      const k = p.match(/kids:\s*(.*)$/i);
+      if (k) out.kids = k[1].trim();
+    }
+    else if (/^Needs Spanish translation/i.test(p)) out.spanish = 'Yes';
+    else if ((m = p.match(/^Dietary:\s*(.*)$/i))) out.dietary = m[1].trim();
+    else if ((m = p.match(/^Accessibility:\s*(.*)$/i))) out.accessibility = m[1].trim();
+    else if ((m = p.match(/^Dinner:\s*(.*)$/i))) out.dinner = m[1].trim();
+    else if ((m = p.match(/^Wants to work on:\s*(.*)$/i))) out.issues = m[1].trim();
+    else if ((m = p.match(/^Hopes to get out of it:\s*(.*)$/i))) out.hopes = m[1].trim();
+    else if ((m = p.match(/^Questions for organizers:\s*(.*)$/i))) out.questions = m[1].trim();
+  }
+  return out;
+}
+async function campRosterCsv(env, urlObj) {
+  const event = (urlObj.searchParams.get('event') || '').trim();
+  if (!event) return new Response('event required', { status: 400 });
+  const t = urlObj.searchParams.get('t') || '';
+  const key = urlObj.searchParams.get('key') || '';
+  let ok = env.EXPORT_KEY && key === env.EXPORT_KEY;
+  if (!ok && t) { const scoped = await env.KV_BINDING.get(`roster-token:${event}`); ok = scoped && t === scoped; }
+  if (!ok) return new Response('forbidden', { status: 403 });
+  const evEsc = event.replace(/'/g, "\\'");
+  const order = []; const seen = new Set(); const rdate = {}; const ans = {};
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{result}='Signed up',{event}='${evEsc}')`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=date&fields%5B%5D=notes`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      const cid = (r.fields.contact || [])[0];
+      if (!cid) continue;
+      const parsed = parseSignupNotes(r.fields.notes);
+      if (seen.has(cid)) {
+        // Someone who signs up twice keeps whichever answers they gave; later
+        // non-empty answers fill gaps rather than wiping earlier ones.
+        for (const k of Object.keys(parsed)) if (parsed[k] && !ans[cid][k]) ans[cid][k] = parsed[k];
+        continue;
+      }
+      seen.add(cid); order.push(cid); rdate[cid] = r.fields.date || ''; ans[cid] = parsed;
+    }
+    off = d.offset;
+  } while (off);
+  order.sort((a, b) => String(rdate[a]).localeCompare(String(rdate[b])));   // append-only: new signups land at the bottom
+  const det = {};
+  for (let i = 0; i < order.length; i += 40) {
+    const chunk = order.slice(i, i + 40);
+    const formula = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+    const q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone&fields%5B%5D=zip&fields%5B%5D=district&fields%5B%5D=school`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) det[r.id] = r.fields;
+  }
+  const esc = x => { x = String(x == null ? '' : x); return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
+  const lines = [['First', 'Last', 'Email', 'Phone', 'Zip', 'District', 'School', 'Registered', 'Who told you',
+                  'Needs childcare', 'Kids ages / allergies', 'Needs Spanish translation', 'Dietary needs',
+                  'Accessibility needs', 'Wants to work on', 'Hopes to get out of it', 'Questions for organizers'].join(',')];
+  for (const cid of order) {
+    const f = det[cid] || {};
+    if (/^(test|smoke|sample|audit|final|demo|pipeline|canary)\b/i.test(String(f.first || '')) || /test|smoke|example|gwcanary/i.test(String(f.email || ''))) continue;
+    const a = ans[cid];
+    lines.push([f.first, f.last, f.email, f.phone, f.zip, f.district, f.school, rdate[cid], a.recruited,
+                a.childcare, a.kids, a.spanish, a.dietary, a.accessibility, a.issues, a.hopes, a.questions].map(esc).join(','));
+  }
+  return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
+}
+
 async function trainingRosterCsv(env, urlObj) {
   const event = (urlObj.searchParams.get('event') || '').trim();
   if (!event) return new Response('event required', { status: 400 });
