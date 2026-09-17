@@ -945,10 +945,18 @@ export default {
       // her sheet "PMOPS Database District Clean-Up" (1iCjy2KZ...). Dry-run by
       // default: reports how many contacts each correction would touch.
       // &confirm=1 applies the PATCHes.
-      if (url.pathname === '/admin/district-cleanup' && request.method === 'GET') {
+      if (url.pathname === '/admin/district-cleanup' && (request.method === 'GET' || request.method === 'POST')) {
         if (url.searchParams.get('key') !== env.EXPORT_KEY) return json({ error: 'forbidden' }, 403);
-        const MAP = {
-          'Blue Springs R-IV': 'Blue Springs School District', 'Brentwood': 'Brentwood School District',
+        // POST {map:{from:to,...}} runs an ad-hoc mapping (her follow-up picks)
+        // without a redeploy; GET runs the original sheet mapping below.
+        let postedMap = null;
+        if (request.method === 'POST') {
+          const b = await request.json().catch(() => null);
+          if (!b || !b.map || typeof b.map !== 'object') return json({ error: 'POST body needs {map:{from:to}}' }, 400);
+          postedMap = b.map;
+        }
+        const SHEET_MAP = {
+          'Blue Springs School District': 'Blue Springs R-IV', 'Blue Springs': 'Blue Springs R-IV', 'Brentwood': 'Brentwood School District',   // Ellen S reversed Blue Springs 9/17: official name wins
           'Cameron': 'Cameron R-I', 'Columbia Public': 'Columbia Public Schools',
           'Crossroads Charter Dchools': 'KC Charter', 'FOSD': 'Fort Osage R-1',
           'Fort Zumwalt': 'Fort Zumwalt School District', 'Fox': 'Fox C-6',
@@ -978,6 +986,7 @@ export default {
           'University City': 'University City School District', 'Webster Groves': 'Webster Groves School District',
           'Wentzville': 'Wentzville R-IV', 'Wheaton': 'Wheaton R-III', 'Willard': 'Willard R-II',
         };
+        const MAP = postedMap || SHEET_MAP;
         const confirm = url.searchParams.get('confirm') === '1';
         const hits = [];   // {id, from, to}
         let off = null;
