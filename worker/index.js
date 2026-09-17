@@ -10184,6 +10184,11 @@ async function activeSinceCsv(env, urlObj) {
 // notes (see trainingSignup), which is invisible in Airtable unless you open
 // the right row. This unpacks them so a tracker can sort by "needs childcare".
 // =========================================================================
+// People answer optional boxes with "No" or "n/a" when they have nothing to
+// report. Counted as answers, those inflate the catering and accessibility
+// numbers, so they collapse to blank.
+const NOTHING_TO_REPORT = /^(no|none|nope|nothing|n\/?a|na|not applicable|no thanks|nah|-+|\.+)\.?$/i;
+const realAnswer = v => { const t = String(v || '').trim(); return NOTHING_TO_REPORT.test(t) ? '' : t; };
 function parseSignupNotes(notes) {
   const out = { recruited: '', childcare: '', kids: '', spanish: '', dietary: '', accessibility: '',
                 dinner: '', issues: '', hopes: '', questions: '' };
@@ -10194,11 +10199,11 @@ function parseSignupNotes(notes) {
     else if (/^Childcare needed/i.test(p)) {
       out.childcare = 'Yes';
       const k = p.match(/kids:\s*(.*)$/i);
-      if (k) out.kids = k[1].trim();
+      if (k) out.kids = realAnswer(k[1]);
     }
     else if (/^Needs Spanish translation/i.test(p)) out.spanish = 'Yes';
-    else if ((m = p.match(/^Dietary:\s*(.*)$/i))) out.dietary = m[1].trim();
-    else if ((m = p.match(/^Accessibility:\s*(.*)$/i))) out.accessibility = m[1].trim();
+    else if ((m = p.match(/^Dietary:\s*(.*)$/i))) out.dietary = realAnswer(m[1]);
+    else if ((m = p.match(/^Accessibility:\s*(.*)$/i))) out.accessibility = realAnswer(m[1]);
     else if ((m = p.match(/^Dinner:\s*(.*)$/i))) out.dinner = m[1].trim();
     else if ((m = p.match(/^Wants to work on:\s*(.*)$/i))) out.issues = m[1].trim();
     else if ((m = p.match(/^Hopes to get out of it:\s*(.*)$/i))) out.hopes = m[1].trim();
