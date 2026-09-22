@@ -130,7 +130,7 @@ const EVENT_META = {
   'bts_10_6': { type: 'makeup', inPerson: true, date: '2026-10-06', time: '6:00pm CT', durationMin: 90, label: 'Back to School Organizing 10/6', emailTitle: 'Back to School Organizing Meeting (Parents for KC Kids)', confirmEvent: 'Confirm BTS 10/6', attendEvent: 'KC Back to School Organizing Meeting 10/6', confirmField: null, attendField: null, signupField: null, confirmTag: 'bts 10/6 confirm', attendTag: 'back to school 10/6', icsTitle: 'Back to School Organizing Meeting (Parents for KC Kids)' },
   // Advocacy Day at the Capitol. 10am-3pm is 300 minutes, well past the 60-minute
   // default, so durationMin has to be explicit or the calendar invite lies.
-  'advocacy_1_14': { type: 'makeup', inPerson: true, date: '2027-01-14', time: '10:00am CT', durationMin: 300, label: 'Advocacy Day 1/14', emailTitle: 'Parents for Missouri Public Schools Advocacy Day', confirmEvent: 'Confirm Advocacy Day 1/14', attendEvent: 'PMOPS Advocacy Day 1/14', confirmField: null, attendField: null, signupField: null, confirmTag: 'advocacy day confirm', attendTag: 'advocacy day 1/14', icsTitle: 'Advocacy Day at the Capitol (Parents for Missouri Public Schools)' },
+  'advocacy_1_14': { type: 'makeup', inPerson: true, date: '2027-01-14', time: '10:00am CT', durationMin: 300, label: 'Advocacy Day 1/14', emailTitle: 'Parents for Missouri Public Schools Advocacy Day', confirmEvent: 'Confirm Advocacy Day 1/14', attendEvent: 'PMOPS Advocacy Day 1/14', confirmField: null, attendField: null, signupField: null, confirmTag: 'advocacy day confirm', attendTag: 'advocacy day 1/14', icsTitle: 'Advocacy Day at the Capitol (Parents for Missouri Public Schools)', location: 'Missouri State Capitol, 201 W Capitol Ave, Jefferson City, MO 65101' },
 };
 function eventMeta(key){ return EVENT_META[key] || EVENT_META['5_26']; }
 // The soonest upcoming onboarding key (so nothing is ever hardcoded to a past date).
@@ -6562,7 +6562,10 @@ function autoEmailEvent(key) {
     intro_event: `<strong>${fullTitle}</strong>`,
     big_date_html: `${dayName}, ${monthName} ${d.getDate()}<br/>${time}`,
     sign_off_date: `${monthName} ${d.getDate()}`,
-    zoom_link: null, // trainings: link set via /admin/set-zoom-link per event
+    // In-person events carry their address here, in the same slot a Zoom link
+    // would use, so the .ics LOCATION and the email's Maps button both find it.
+    // A KV zoomlink: entry still overrides this if one is set.
+    zoom_link: (meta.inPerson && meta.location) ? meta.location : null,
   };
 }
 
