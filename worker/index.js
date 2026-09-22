@@ -128,6 +128,9 @@ const EVENT_META = {
   // events use that slot as the location in the email + ICS). durationMin covers
   // dinner 6:00 + program 6:30–7:30. Signup page: /back-to-school/ on the site.
   'bts_10_6': { type: 'makeup', inPerson: true, date: '2026-10-06', time: '6:00pm CT', durationMin: 90, label: 'Back to School Organizing 10/6', emailTitle: 'Back to School Organizing Meeting (Parents for KC Kids)', confirmEvent: 'Confirm BTS 10/6', attendEvent: 'KC Back to School Organizing Meeting 10/6', confirmField: null, attendField: null, signupField: null, confirmTag: 'bts 10/6 confirm', attendTag: 'back to school 10/6', icsTitle: 'Back to School Organizing Meeting (Parents for KC Kids)' },
+  // Advocacy Day at the Capitol. 10am-3pm is 300 minutes, well past the 60-minute
+  // default, so durationMin has to be explicit or the calendar invite lies.
+  'advocacy_1_14': { type: 'makeup', inPerson: true, date: '2027-01-14', time: '10:00am CT', durationMin: 300, label: 'Advocacy Day 1/14', emailTitle: 'Parents for Missouri Public Schools Advocacy Day', confirmEvent: 'Confirm Advocacy Day 1/14', attendEvent: 'PMOPS Advocacy Day 1/14', confirmField: null, attendField: null, signupField: null, confirmTag: 'advocacy day confirm', attendTag: 'advocacy day 1/14', icsTitle: 'Advocacy Day at the Capitol (Parents for Missouri Public Schools)' },
 };
 function eventMeta(key){ return EVENT_META[key] || EVENT_META['5_26']; }
 // The soonest upcoming onboarding key (so nothing is ever hardcoded to a past date).
@@ -712,6 +715,7 @@ export default {
       // answers split into their own columns — childcare, translation, dietary —
       // so turnout trackers can filter on them. Same auth + token as training-roster.
       if (url.pathname === '/export/camp-roster.csv' && request.method === 'GET') return await campRosterCsv(env, url);
+      if (url.pathname === '/export/advocacy-roster.csv' && request.method === 'GET') return await advocacyRosterCsv(env, url);
       // Sheet → Airtable write-back for HM follow-up columns (status, 1-1, notes), by contact id.
       if (url.pathname === '/sheet-hm-followup' && request.method === 'POST') return await sheetHmFollowup(request, env);
       // Sheet → Airtable attendance write-back for launches (gated by EXPORT_KEY,
@@ -3974,6 +3978,10 @@ async function trainingSignup(request, env) {
   if (!baseFields.county) { const _dc = districtToCounty(body.district); if (_dc) baseFields.county = _dc; }   // no zip? district still places them in a county
   if (body.district) baseFields.district = String(body.district).trim();   // persist the district/town the form collected (was only used for routing) so per-event rosters show it
   if (body.school) baseFields.school = String(body.school).trim();   // per-event roster shows school alongside district
+  // Advocacy Day needs a street address: a Missouri zip straddles several state
+  // house districts, so zip alone cannot name anyone's representative.
+  if (body.street_address) baseFields.street_address = String(body.street_address).trim();
+  if (body.city) baseFields.city = String(body.city).trim();
   // NB: recruited_by is a linked-record field on contacts (the recruitment-substrate
   // graph). Writing a plain name string makes the create 422 and loses the whole
   // signup, so we keep "Recruited by: …" in the log notes only (same as /launch-rsvp).
@@ -4040,6 +4048,11 @@ async function trainingSignup(request, env) {
   if (body.accessibility) campBits.push(`Accessibility: ${String(body.accessibility).trim()}`);
   if (body.dinner) campBits.push(`Dinner: ${String(body.dinner).trim()}${body.dinner_count ? ` — ${String(body.dinner_count).trim()} eating` : ''}`);
   if (body.childcare) campBits.push(`Childcare needed${body.childcare_kids ? ' — kids: ' + String(body.childcare_kids).trim() : ''}`);
+  if (body.advocacy_lead) campBits.push('Advocacy day lead');
+  if (body.ride) campBits.push(`Ride: ${String(body.ride).trim()}`);
+  if (body.can_drive) campBits.push(`Can drive others${body.drive_seats ? ' — ' + String(body.drive_seats).trim() + ' seats' : ''}`);
+  if (body.students) campBits.push(`Bringing students: ${String(body.students).trim()}`);
+  if (body.training) campBits.push(`Training: ${String(body.training).trim()}`);
   const logRecords = events.map(evName => ({
     fields: {
       Summary: `${today} — training signup: ${evName}`,
@@ -4051,7 +4064,7 @@ async function trainingSignup(request, env) {
       notes: [
         source ? `Source: ${source}` : 'Training signup form',
         cRecruiter ? `Recruited by: ${cRecruiter}` : '',
-        ...(/parent power camp|back to school organizing/i.test(String(evName)) ? campBits : []),
+        ...(/parent power camp|back to school organizing|advocacy day/i.test(String(evName)) ? campBits : []),
       ].filter(Boolean).join(' | '),
     }
   }));
@@ -10200,7 +10213,8 @@ const NOTHING_TO_REPORT = /^(no|none|nope|nothing|n\/?a|na|not applicable|no tha
 const realAnswer = v => { const t = String(v || '').trim(); return NOTHING_TO_REPORT.test(t) ? '' : t; };
 function parseSignupNotes(notes) {
   const out = { recruited: '', childcare: '', kids: '', spanish: '', dietary: '', accessibility: '',
-                dinner: '', issues: '', hopes: '', questions: '' };
+                dinner: '', issues: '', hopes: '', questions: '',
+                lead: '', ride: '', drives: '', seats: '', students: '', training: '' };
   for (const raw of String(notes || '').split(' | ')) {
     const p = raw.trim();
     let m;
@@ -10217,6 +10231,15 @@ function parseSignupNotes(notes) {
     else if ((m = p.match(/^Wants to work on:\s*(.*)$/i))) out.issues = m[1].trim();
     else if ((m = p.match(/^Hopes to get out of it:\s*(.*)$/i))) out.hopes = m[1].trim();
     else if ((m = p.match(/^Questions for organizers:\s*(.*)$/i))) out.questions = m[1].trim();
+    else if (/^Advocacy day lead/i.test(p)) out.lead = 'Yes';
+    else if ((m = p.match(/^Ride:\s*(.*)$/i))) out.ride = m[1].trim();
+    else if (/^Can drive others/i.test(p)) {
+      out.drives = 'Yes';
+      const sm = p.match(/—\s*(.*?)\s*seats/i);
+      if (sm) out.seats = sm[1].trim();
+    }
+    else if ((m = p.match(/^Bringing students:\s*(.*)$/i))) out.students = m[1].trim();
+    else if ((m = p.match(/^Training:\s*(.*)$/i))) out.training = m[1].trim();
   }
   return out;
 }
@@ -10268,6 +10291,61 @@ async function campRosterCsv(env, urlObj) {
     const a = ans[cid];
     lines.push([f.first, f.last, f.email, f.phone, f.zip, f.district, f.school, rdate[cid], a.recruited,
                 a.childcare, a.kids, a.spanish, a.dietary, a.accessibility, a.issues, a.hopes, a.questions].map(esc).join(','));
+  }
+  return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// Advocacy Day roster. Same shape as the camp roster, different columns: the
+// turnout question here is who needs a seat on a bus, who can drive, and who
+// still owes us a training. Kept separate from campRosterCsv on purpose --
+// adding columns there would shift the caller columns in the live PPC
+// turnout sheets, which are already in use.
+async function advocacyRosterCsv(env, urlObj) {
+  const event = (urlObj.searchParams.get('event') || '').trim();
+  if (!event) return new Response('event required', { status: 400 });
+  const t = urlObj.searchParams.get('t') || '';
+  const key = urlObj.searchParams.get('key') || '';
+  let ok = env.EXPORT_KEY && key === env.EXPORT_KEY;
+  if (!ok && t) { const scoped = await env.KV_BINDING.get(`roster-token:${event}`); ok = scoped && t === scoped; }
+  if (!ok) return new Response('forbidden', { status: 403 });
+  const evEsc = event.replace(/'/g, "\\'");
+  const order = []; const seen = new Set(); const rdate = {}; const ans = {};
+  let off = null;
+  do {
+    let q = `?filterByFormula=${encodeURIComponent(`AND({method}='Event attendance',{result}='Signed up',{event}='${evEsc}')`)}&pageSize=100&fields%5B%5D=contact&fields%5B%5D=date&fields%5B%5D=notes`;
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      const cid = (r.fields.contact || [])[0];
+      if (!cid) continue;
+      const parsed = parseSignupNotes(r.fields.notes);
+      if (seen.has(cid)) {
+        for (const k of Object.keys(parsed)) if (parsed[k] && !ans[cid][k]) ans[cid][k] = parsed[k];
+        continue;
+      }
+      seen.add(cid); order.push(cid); rdate[cid] = r.fields.date || ''; ans[cid] = parsed;
+    }
+    off = d.offset;
+  } while (off);
+  order.sort((a, b) => String(rdate[a]).localeCompare(String(rdate[b])));
+  const det = {};
+  for (let i = 0; i < order.length; i += 40) {
+    const chunk = order.slice(i, i + 40);
+    const formula = `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`;
+    const q = `?filterByFormula=${encodeURIComponent(formula)}&pageSize=100&fields%5B%5D=first&fields%5B%5D=last&fields%5B%5D=email&fields%5B%5D=phone&fields%5B%5D=zip&fields%5B%5D=street_address&fields%5B%5D=city&fields%5B%5D=district&fields%5B%5D=school`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) det[r.id] = r.fields;
+  }
+  const esc = x => { x = String(x == null ? '' : x); return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
+  const lines = [['First', 'Last', 'Email', 'Phone', 'Street address', 'City', 'Zip', 'District', 'School',
+                  'Registered', 'Who invited them', 'Team lead', 'Ride needed', 'Can drive', 'Seats offered',
+                  'Students coming', 'Dietary needs', 'Training signed up for'].join(',')];
+  for (const cid of order) {
+    const f = det[cid] || {};
+    if (/^(test|smoke|sample|audit|final|demo|pipeline|canary)\b/i.test(String(f.first || '')) || /test|smoke|example|gwcanary/i.test(String(f.email || ''))) continue;
+    const a = ans[cid];
+    lines.push([f.first, f.last, f.email, f.phone, f.street_address, f.city, f.zip, f.district, f.school,
+                rdate[cid], a.recruited, a.lead, a.ride, a.drives, a.seats, a.students, a.dietary, a.training].map(esc).join(','));
   }
   return new Response(lines.join('\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'max-age=120', 'Access-Control-Allow-Origin': '*' } });
 }
