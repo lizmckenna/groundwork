@@ -727,6 +727,11 @@ export default {
       // answers split into their own columns — childcare, translation, dietary —
       // so turnout trackers can filter on them. Same auth + token as training-roster.
       if (url.pathname === '/export/camp-roster.csv' && request.method === 'GET') return await campRosterCsv(env, url);
+      if (url.pathname === '/export/research/people.csv' && request.method === 'GET') return await researchPeopleCsv(env, url);
+      if (url.pathname === '/export/research/edges.csv' && request.method === 'GET') return await researchEdgesCsv(env, url);
+      if (url.pathname === '/export/research/participation.csv' && request.method === 'GET') return await researchParticipationCsv(env, url);
+      if (url.pathname === '/export/research/events.csv' && request.method === 'GET') return await researchEventsCsv(env, url);
+      if (url.pathname === '/export/research/dictionary.md' && request.method === 'GET') return await researchDictionary(env, url);
       if (url.pathname === '/export/advocacy-roster.csv' && request.method === 'GET') return await advocacyRosterCsv(env, url);
       // Sheet → Airtable write-back for HM follow-up columns (status, 1-1, notes), by contact id.
       if (url.pathname === '/sheet-hm-followup' && request.method === 'POST') return await sheetHmFollowup(request, env);
@@ -10258,6 +10263,257 @@ function parseSignupNotes(notes) {
   }
   return out;
 }
+// ============================================================================
+// Deidentified research extract (PAE / student analysis).
+//
+// Four flat files that keep the structure the analysis needs and drop the
+// things that identify a person. No names, emails, phones, street addresses,
+// ZIPs, schools, or free-text notes leave through here: the notes field alone
+// carries recruiter names, children's ages and dietary detail in prose, which
+// is why a "delete the name column" export is not deidentification.
+//
+// person_id is HMAC-SHA256(RESEARCH_SALT, airtable record id), first 6 bytes.
+// Stable across refreshes so analysis code keeps working, and not reversible
+// without the salt, which is a worker secret and never ships with the data.
+//
+// Geography is coarsened to county and district, and any county or district
+// with fewer than SUPPRESS_MIN people collapses to a placeholder, so a district
+// with three parents in it cannot be read as those three parents.
+//
+// Each endpoint pages exactly one table, keeping every request well under the
+// subrequest ceiling.
+// ============================================================================
+
+const SUPPRESS_MIN = 5;
+
+let _researchKey = null;
+async function researchKey(env) {
+  if (_researchKey) return _researchKey;
+  if (!env.RESEARCH_SALT) throw new Error('RESEARCH_SALT is not set');
+  _researchKey = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(env.RESEARCH_SALT),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return _researchKey;
+}
+
+// Memoised per request: the same record id always yields the same pseudonym.
+function pseudonymiser(key) {
+  const enc = new TextEncoder();
+  const seen = new Map();
+  return async (recId) => {
+    if (!recId) return '';
+    if (seen.has(recId)) return seen.get(recId);
+    const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(recId)));
+    let hex = '';
+    for (let i = 0; i < 6; i++) hex += sig[i].toString(16).padStart(2, '0');
+    const out = 'p_' + hex;
+    seen.set(recId, out);
+    return out;
+  };
+}
+
+async function researchContacts(env, fields) {
+  const out = [];
+  let off = null;
+  do {
+    let q = `?pageSize=100` + fields.map(f => `&fields%5B%5D=${encodeURIComponent(f)}`).join('');
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACTS_TBL}${q}`);
+    for (const r of d.records) out.push(r);
+    off = d.offset;
+  } while (off);
+  return out;
+}
+
+const researchGuard = (env, u) =>
+  !(env.EXPORT_KEY && u.searchParams.get('key') === env.EXPORT_KEY);
+
+const rcsv = (rows) => rows.map(r => r.map(x => {
+  x = String(x == null ? '' : x);
+  return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x;
+}).join(',')).join('\n');
+
+const rres = (body, type, unresolved) => new Response(body, {
+  headers: {
+    'Content-Type': (type || 'text/csv') + '; charset=utf-8',
+    'Cache-Control': 'no-store',
+    ...(unresolved == null ? {} : { 'X-Unresolved-Recruiter-Names': String(unresolved) }),
+  },
+});
+
+// Collapse any value held by fewer than SUPPRESS_MIN people.
+function suppressor(values) {
+  const n = {};
+  for (const v of values) { const k = String(v || '').trim(); if (k) n[k] = (n[k] || 0) + 1; }
+  return (v) => {
+    const k = String(v || '').trim();
+    if (!k) return '';
+    return n[k] >= SUPPRESS_MIN ? k : 'suppressed (<' + SUPPRESS_MIN + ')';
+  };
+}
+
+async function researchPeopleCsv(env, u) {
+  if (researchGuard(env, u)) return new Response('forbidden', { status: 403 });
+  const recs = await researchContacts(env, ['county', 'district', 'leader_ladder', 'assigned_organizer', 'organized_by']);
+  const pid = pseudonymiser(await researchKey(env));
+  const supD = suppressor(recs.map(r => r.fields.district));
+  const supC = suppressor(recs.map(r => r.fields.county));
+  const rows = [['person_id', 'county', 'district', 'ladder_stage', 'organizer_id', 'n_recruiters_credited']];
+  for (const r of recs) {
+    const f = r.fields;
+    const org = (f.assigned_organizer || [])[0];
+    rows.push([
+      await pid(r.id),
+      supC(f.county),
+      supD(f.district),
+      f.leader_ladder || '',
+      org ? await pid(org) : '',
+      (f.organized_by || []).length,
+    ]);
+  }
+  return rres(rcsv(rows));
+}
+
+// The recruitment substrate: organized_by links a person to whoever brought
+// them in. This is the independent variable for the depth-as-scale question.
+async function researchEdgesCsv(env, u) {
+  if (researchGuard(env, u)) return new Response('forbidden', { status: 403 });
+  const pid = pseudonymiser(await researchKey(env));
+  const rows = [['recruiter_id', 'recruit_id', 'edge_source']];
+
+  // 1. The structured link. Only a few per cent of records carry it.
+  const recs = await researchContacts(env, ['first', 'last', 'organized_by']);
+  const byName = new Map();   // "first last" -> record id, for resolving the free text below
+  for (const r of recs) {
+    const nm = ((r.fields.first || '') + ' ' + (r.fields.last || '')).trim().toLowerCase().replace(/\s+/g, ' ');
+    if (nm && !byName.has(nm)) byName.set(nm, r.id);
+  }
+  for (const r of recs) {
+    for (const parent of (r.fields.organized_by || [])) rows.push([await pid(parent), await pid(r.id), 'link']);
+  }
+
+  // 2. Most recruitment is recorded as "Recruited by: <name>" in a log note. The
+  //    name is resolved to a record here and never leaves: only the pseudonym does.
+  //    An unresolved name is dropped rather than guessed at, so this undercounts.
+  let off = null, unresolved = 0;
+  do {
+    let q = `?pageSize=100&filterByFormula=${encodeURIComponent("FIND('Recruited by', {notes})>0")}`
+          + '&fields%5B%5D=contact&fields%5B%5D=notes';
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      const cid = (r.fields.contact || [])[0];
+      if (!cid) continue;
+      for (const part of String(r.fields.notes || '').split(' | ')) {
+        const m = part.trim().match(/^Recruited by:\s*(.+)$/i);
+        if (!m) continue;
+        const nm = m[1].trim().toLowerCase().replace(/[!.,]+$/, '').replace(/\s+/g, ' ');
+        const rid = byName.get(nm);
+        if (!rid) { unresolved++; continue; }
+        if (rid === cid) continue;   // self-credit
+        rows.push([await pid(rid), await pid(cid), 'note']);
+      }
+    }
+    off = d.offset;
+  } while (off);
+
+  // Dedupe: the same pair can appear from both sources and from repeat signups.
+  const seen = new Set(); const out = [rows[0]];
+  for (const r of rows.slice(1)) {
+    const k = r[0] + '>' + r[1];
+    if (seen.has(k)) continue;
+    seen.add(k); out.push(r);
+  }
+  return rres(rcsv(out), 'text/csv', unresolved);
+}
+
+async function researchParticipationCsv(env, u) {
+  if (researchGuard(env, u)) return new Response('forbidden', { status: 403 });
+  const pid = pseudonymiser(await researchKey(env));
+  const rows = [['person_id', 'event', 'event_date', 'status']];
+  let off = null;
+  do {
+    let q = `?pageSize=100&filterByFormula=${encodeURIComponent("{method}='Event attendance'")}`
+          + '&fields%5B%5D=contact&fields%5B%5D=date&fields%5B%5D=event&fields%5B%5D=result';
+    if (off) q += `&offset=${encodeURIComponent(off)}`;
+    const d = await at(env, `/${BASE}/${CONTACT_LOG_TBL}${q}`);
+    for (const r of d.records) {
+      const cid = (r.fields.contact || [])[0];
+      if (!cid) continue;
+      rows.push([await pid(cid), r.fields.event || '', r.fields.date || '', r.fields.result || '']);
+    }
+    off = d.offset;
+  } while (off);
+  return rres(rcsv(rows));
+}
+
+// Event attributes come from the code's own calendar, so this costs no reads
+// and carries nothing personal.
+async function researchEventsCsv(env, u) {
+  if (researchGuard(env, u)) return new Response('forbidden', { status: 403 });
+  const rows = [['event', 'event_key', 'type', 'date', 'format', 'duration_min']];
+  for (const [k, m] of Object.entries(EVENT_META)) {
+    if (!m || !m.attendEvent) continue;
+    rows.push([m.attendEvent, k, m.type || '', m.date || '',
+               m.inPerson ? 'in person' : 'zoom',
+               m.durationMin || ICS_TYPE_DURATION[m.type] || 60]);
+  }
+  return rres(rcsv(rows));
+}
+
+async function researchDictionary(env, u) {
+  if (researchGuard(env, u)) return new Response('forbidden', { status: 403 });
+  const md = [
+    '# Parents for Missouri Public Schools: deidentified research extract',
+    '',
+    'Four files. Join them on `person_id` and `event`.',
+    '',
+    '## people.csv',
+    'One row per person known to the organization.',
+    '',
+    '- `person_id` pseudonym, stable across refreshes',
+    '- `county`, `district` geography, coarsened (see suppression)',
+    '- `ladder_stage` leadership ladder stage at time of export',
+    '- `organizer_id` the staff organizer assigned, pseudonymised the same way',
+    '- `n_recruiters_credited` how many people are recorded as having brought this person in',
+    '',
+    '## edges.csv',
+    'The recruitment network. One row per recorded recruiter-to-recruit relationship.',
+    '',
+    '- `recruiter_id`, `recruit_id` both join to `people.person_id`',
+    '',
+    '## participation.csv',
+    'One row per person per event interaction.',
+    '',
+    '- `person_id`, `event`, `event_date`',
+    '- `status` "Signed up" or "Attended"',
+    '',
+    '## events.csv',
+    'One row per event on the calendar: `event`, `event_key`, `type`, `date`, `format`, `duration_min`.',
+    '',
+    '## How this was deidentified',
+    '',
+    'Removed entirely: names, emails, phone numbers, street addresses, cities, ZIP codes,',
+    'school names, and all free-text fields. The free text matters most. Log notes carry',
+    'strings such as "Recruited by: <name>" and childcare details including children\'s ages,',
+    'so dropping a name column alone would not deidentify these records.',
+    '',
+    '`person_id` is HMAC-SHA256 of the underlying record id under a secret salt, truncated to',
+    'six bytes. The salt is held separately from the data and is not recoverable from it.',
+    'Ids are stable across refreshes, so a refreshed extract drops into existing analysis code.',
+    '',
+    'Any county or district with fewer than ' + SUPPRESS_MIN + ' people in it is replaced with',
+    '"suppressed (<' + SUPPRESS_MIN + ')". Small districts are otherwise close to identifying.',
+    '',
+    'Known limitation: the recruitment network records who is credited with bringing someone in,',
+    'and that credit is entered by organizers. It undercounts, and the undercount is not random.',
+    '',
+    '_Generated ' + new Date().toISOString().slice(0, 10) + '._',
+    '',
+  ].join('\n');
+  return rres(md, 'text/markdown');
+}
+
 async function campRosterCsv(env, urlObj) {
   const event = (urlObj.searchParams.get('event') || '').trim();
   if (!event) return new Response('event required', { status: 400 });
